@@ -547,7 +547,7 @@
 .we-header-info { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
 .we-header-top { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
 .we-header-round {
-  font-family: "Songti SC", "SimSun", "STSong", serif;
+  font-family: "Noto Serif", "Times New Roman", Georgia, serif;
   font-size: 15px;
   letter-spacing: 0.5px;
   color: var(--we-gold);
@@ -561,10 +561,10 @@
   transform: translateY(3px);
 }
 .we-header-mood-text {
-  font-family: "Songti SC", "SimSun", "STSong", serif;
+  font-family: "Noto Serif", "Times New Roman", Georgia, serif;
   font-size: 14px;
   font-weight: 700;
-  letter-spacing: 3px;
+  letter-spacing: 0.3px;
   color: var(--we-text2);
   transform: translateY(3px);
 }
@@ -584,7 +584,7 @@
 }
 
 .we-panel-title {
-  font-family: "Songti SC", "SimSun", "STSong", serif;
+  font-family: "Noto Serif", "Times New Roman", Georgia, serif;
   font-weight: 700;
   color: var(--we-beige);
   font-size: 25px;
@@ -627,7 +627,7 @@
   align-items: flex-start;
   justify-content: flex-start;
   color: var(--we-text3);
-  font-family: "Songti SC", "SimSun", "STSong", serif;
+  font-family: "Noto Serif", "Times New Roman", Georgia, serif;
   font-size: 15px;
   letter-spacing: 2px;
 }
@@ -644,7 +644,7 @@
 
 /* [FIX] Số phiên bản cạnh tiêu đề: chữ nhỏ kín đáo */
 .we-panel-version {
-  font-family: "Songti SC", "SimSun", "STSong", serif;
+  font-family: "Noto Serif", "Times New Roman", Georgia, serif;
   font-size: 12px;
   letter-spacing: 0.5px;
   color: var(--we-text3);
@@ -809,7 +809,7 @@
 
 /* Câu văn cổ đi kèm tiêu đề nhỏ của từng trang: font Songti, theo màu gốc của tiêu đề (giảm một bậc bằng opacity), kích thước co giãn theo tỉ lệ tiêu đề */
 .we-section-motto {
-  font-family: "SimSun", "宋体", "Songti SC", "STSong", serif;
+  font-family: "Noto Serif", "Times New Roman", Georgia, serif;
   font-size: 0.72em;
   font-weight: 400;
   letter-spacing: 0.04em;
@@ -955,7 +955,7 @@
   pointer-events: none;
 }
 .we-core-title {
-  font-family: "SimSun", "宋体", "Songti SC", "STSong", serif;
+  font-family: "Noto Serif", "Times New Roman", Georgia, serif;
   font-size: 17px;
   font-weight: 700;
   letter-spacing: 1px;
@@ -964,7 +964,7 @@
 }
 
 .we-core-sub {
-  font-family: "SimSun", "宋体", "Songti SC", "STSong", serif;
+  font-family: "Noto Serif", "Times New Roman", Georgia, serif;
   font-size: 12px;
   font-weight: 400;
   color: var(--we-text3);
@@ -973,7 +973,7 @@
 }
 
 .we-core-pct {
-  font-family: "Times New Roman", Times, Georgia, serif;
+  font-family: "Noto Serif", "Times New Roman", Times, Georgia, serif;
   font-size: 36px;
   font-weight: 400;
   line-height: 1.05;
@@ -982,14 +982,14 @@
 }
 
 .we-core-pct span {
-  font-family: "Times New Roman", Times, Georgia, serif;
+  font-family: "Noto Serif", "Times New Roman", Times, Georgia, serif;
   font-size: 15px;
   font-weight: 400;
   margin-left: 2px;
 }
 
 .we-core-tier {
-  font-family: "SimSun", "宋体", "Songti SC", "STSong", serif;
+  font-family: "Noto Serif", "Times New Roman", Georgia, serif;
   font-size: 12px;
   font-weight: 400;
   letter-spacing: 1px;
@@ -1017,7 +1017,7 @@
 }
 
 .we-core-stat-k {
-  font-family: "SimSun", "宋体", "Songti SC", "STSong", serif;
+  font-family: "Noto Serif", "Times New Roman", Georgia, serif;
   font-size: 12px;
   font-weight: 400;
   color: var(--we-text3);
@@ -1025,7 +1025,7 @@
 }
 
 .we-core-stat-v {
-  font-family: "Times New Roman", Times, Georgia, serif;
+  font-family: "Noto Serif", "Times New Roman", Times, Georgia, serif;
   font-size: 23px;
   font-weight: 400;
   color: var(--we-text);
@@ -1066,7 +1066,7 @@
   white-space: nowrap;
 }
 .we-memory-core-value span {
-  font-family: "SimSun", "宋体", "Songti SC", "STSong", serif;
+  font-family: "Noto Serif", "Times New Roman", Georgia, serif;
   font-size: 15px;
   margin-left: 3px;
 }
@@ -1093,7 +1093,7 @@
 }
 .we-memory-summary-label {
   color: var(--we-gold);
-  font-family: "SimSun", "宋体", "Songti SC", "STSong", serif;
+  font-family: "Noto Serif", "Times New Roman", Georgia, serif;
   font-size: 12px;
   letter-spacing: 1px;
   margin-bottom: 6px;
@@ -1124,7 +1124,7 @@
   margin-left: auto;
   padding-left: 12px;
   color: var(--we-accent);
-  font-family: "SimSun", "宋体", "Songti SC", "STSong", serif;
+  font-family: "Noto Serif", "Times New Roman", Georgia, serif;
   font-size: 11px;
   letter-spacing: 0.08em;
   white-space: nowrap;
@@ -1183,7 +1183,7 @@
 }
 .we-memory-record-title {
   color: var(--we-text);
-  font-family: "SimSun", "宋体", "Songti SC", "STSong", serif;
+  font-family: "Noto Serif", "Times New Roman", Georgia, serif;
   font-size: 15px;
   line-height: 1.35;
 }
@@ -1428,9 +1428,9 @@
   border: 2px solid;
   border-radius: 5px;
   padding: 1px 7px;
-  font-size: 15px;
+  font-size: 13px;
   font-weight: 800;
-  letter-spacing: 2px;
+  letter-spacing: 0.5px;
   opacity: 0.78;
   pointer-events: none;
   color: var(--event-stamp);
@@ -2311,7 +2311,7 @@
 .we-rep-quote {
   flex: 1;
   text-align: right;
-  font-family: "SimSun", "宋体", "Songti SC", "STSong", serif;
+  font-family: "Noto Serif", "Times New Roman", Georgia, serif;
   font-size: 12.5px;
   letter-spacing: 0.04em;
   opacity: 0.92;
@@ -2711,7 +2711,7 @@
 .we-stage-fade .we-event-meta { opacity: 0.72; }
 .we-stage-fade .we-event-stamp {
   animation: we-fade-drift 5s ease-in-out infinite;
-  letter-spacing: 4px;
+  letter-spacing: 1px;
 }
 @keyframes we-fade-drift {
   0%,100% { opacity: 0.32; transform: rotate(14deg) translateY(0); }
@@ -2754,7 +2754,7 @@
   content: "Thông Báo";
   position: absolute; top: 50%; left: 50%;
   transform: translate(-50%, -50%) rotate(-21deg);
-  font-size: 34px; font-weight: 900; letter-spacing: 8px; padding: 5px 16px 7px;
+  font-size: 22px; font-weight: 900; letter-spacing: 1px; padding: 5px 16px 7px;
   color: color-mix(in srgb, var(--wind-accent) 90%, #fff);
   border: 4px double color-mix(in srgb, var(--wind-accent) 60%, transparent);
   border-radius: 9px; pointer-events: none; white-space: nowrap; z-index: 0;
@@ -2768,7 +2768,7 @@
   background: linear-gradient(180deg, color-mix(in srgb, var(--wind-accent) 12%, var(--we-bg)), var(--we-bg) 46%);
 }
 .we-wind-announcement.we-wind-lv4 .we-wind-topic {
-  font-family: Georgia, "Songti SC", "SimSun", serif;
+  font-family: "Noto Serif", Georgia, serif;
   font-weight: 900; letter-spacing: 1px;
   color: color-mix(in srgb, var(--wind-accent) 86%, #fff);
   transform-origin: left center;
@@ -2777,7 +2777,7 @@
 .we-wind-announcement.we-wind-lv4::after {
   content: "Thông Báo";
   position: absolute; top: 50%; left: 50%;
-  font-size: 36px; font-weight: 900; letter-spacing: 9px; padding: 5px 16px 7px;
+  font-size: 23px; font-weight: 900; letter-spacing: 1px; padding: 5px 16px 7px;
   color: color-mix(in srgb, var(--wind-accent) 92%, #fff);
   border: 4px double color-mix(in srgb, var(--wind-accent) 75%, transparent);
   border-radius: 9px; pointer-events: none; white-space: nowrap; z-index: 0;
@@ -3246,16 +3246,18 @@
   background: rgba(255,255,255,0.025);
 }
 .we-nav-label {
-  font-family: "SimSun", "宋体", "Songti SC", "STSong", serif;
-  width: 48px;
+  font-family: "Noto Serif", "Times New Roman", Georgia, serif;
+  width: 92px;
   flex-shrink: 0;
   display: flex;
   align-items: center;
   justify-content: flex-end;
-  font-size: 20px;
-  font-weight: 500;
+  text-align: right;
+  font-size: 15px;
+  line-height: 1.25;
+  font-weight: 600;
   color: var(--we-beige);
-  letter-spacing: 0.04em;
+  letter-spacing: 0.02em;
   transition: color 0.18s;
 }
 .we-nav-row--selected .we-nav-label {
@@ -3292,7 +3294,7 @@
   box-shadow: 0 0 8px var(--we-tier-color, var(--we-accent)), 0 0 3px var(--we-tier-color, var(--we-accent));
 }
 .we-nav-content {
-  font-family: "SimSun", "宋体", "Songti SC", "STSong", serif;
+  font-family: "Noto Serif", "Times New Roman", Georgia, serif;
   flex: 1;
   display: flex;
   align-items: center;
@@ -3327,7 +3329,7 @@
 
 /* Đề ngạch — cảm giác biển ngạch: chữ to, vàng kim, font Songti, giãn cách rộng, phía dưới ép một đường kim tuyến mảnh */
 #we-sec-trends > .we-section-title {
-  font-family: "SimSun", "宋体", "Songti SC", "STSong", serif;
+  font-family: "Noto Serif", "Times New Roman", Georgia, serif;
   font-size: 20px;
   font-weight: 600;
   letter-spacing: 0.04em;
@@ -3365,14 +3367,14 @@
 }
 /* Tên đổi sang font Songti, tăng thêm khí thế */
 #we-sec-trends .we-trend-name {
-  font-family: "SimSun", "宋体", "Songti SC", "STSong", serif;
+  font-family: "Noto Serif", "Times New Roman", Georgia, serif;
   font-size: 15px;
   letter-spacing: 0.06em;
 }
 
 /* ===== Tiêu Đề Từng Trang (Cục Diện / Sự Kiện / Quan Hệ / Tài Nguyên) Chữ To Font Songti Kiểu Hồi Chương ===== */
 .we-sub-title {
-  font-family: "SimSun", "宋体", "Songti SC", "STSong", serif;
+  font-family: "Noto Serif", "Times New Roman", Georgia, serif;
   font-size: 20px;
   font-weight: 400;
   color: var(--we-beige);
@@ -3385,7 +3387,7 @@
 /* Tiêu đề section: màu đỏ gạch cảnh báo, thấp hơn Đại Cục Thiên Hạ một bậc, có sắc bén nhưng không tranh vị trí chủ đạo */
 #we-sec-regional > .we-section-title,
 #we-sec-cp-regional > .we-section-title {
-  font-family: "SimSun", "宋体", "Songti SC", "STSong", serif;
+  font-family: "Noto Serif", "Times New Roman", Georgia, serif;
   font-size: 17px;
   font-weight: 400;
   letter-spacing: 0.08em;
@@ -3454,7 +3456,7 @@
 
 /* ===== Tóm Tắt Thế Giới: Bản Thảo Học Giả ===== */
 #we-sec-digest > .we-section-title {
-  font-family: "SimSun", "宋体", "Songti SC", "STSong", serif;
+  font-family: "Noto Serif", "Times New Roman", Georgia, serif;
   font-size: 17px;
   font-weight: 400;
   letter-spacing: 0.14em;
@@ -3471,7 +3473,7 @@
   border: none;
   border-left: 2px solid rgba(88, 184, 169, 0.18);
   padding: 10px 12px 11px 14px;
-  font-family: "SimSun", "宋体", "Songti SC", "STSong", serif;
+  font-family: "Noto Serif", "Times New Roman", Georgia, serif;
   font-size: 12px;
   line-height: 1.95;
   color: var(--we-text2);
@@ -3495,7 +3497,7 @@
 
 /* Cột lượt: font Songti, căn phải, dùng đường dọc để phân cách với nội dung chính, như cột năm trong sử sách */
 .we-ledger-round {
-  font-family: "SimSun", "宋体", "Songti SC", "STSong", serif;
+  font-family: "Noto Serif", "Times New Roman", Georgia, serif;
   font-size: 11px;
   font-weight: 400;
   color: var(--we-text3);
@@ -3520,7 +3522,7 @@
 /* ===== Tiêu Đề Section Sổ Cái Sự Kiện ===== */
 #we-sec-ledger > .we-section-title,
 #we-sec-cp-ledger > .we-section-title {
-  font-family: "SimSun", "宋体", "Songti SC", "STSong", serif;
+  font-family: "Noto Serif", "Times New Roman", Georgia, serif;
   font-size: 17px;
   font-weight: 400;
   letter-spacing: 0.16em;
@@ -3544,7 +3546,7 @@
 /* Chuỗi Sự Kiện: chuỗi suy diễn của định mệnh, khói lửa dần dấy lên —— đồng cổ ánh kim đỏ, trọng lượng nặng nhất */
 #we-sec-events > .we-section-title,
 #we-sec-cp-events > .we-section-title {
-  font-family: "SimSun", "宋体", "Songti SC", "STSong", serif;
+  font-family: "Noto Serif", "Times New Roman", Georgia, serif;
   font-size: 17px;
   font-weight: 600;
   letter-spacing: 0.08em;
@@ -3560,7 +3562,7 @@
 /* Tin Đồn: lời đồn theo gió, thật giả khó phân —— tím sương mù, thì thầm thưa nhẹ */
 #we-sec-winds > .we-section-title,
 #we-sec-cp-winds > .we-section-title {
-  font-family: "SimSun", "宋体", "Songti SC", "STSong", serif;
+  font-family: "Noto Serif", "Times New Roman", Georgia, serif;
   font-size: 17px;
   font-weight: 400;
   letter-spacing: 0.16em;
@@ -3575,7 +3577,7 @@
 /* Chuỗi Ảnh Hưởng: động vào một sợi tơ, cả thân đều rung chuyển —— xanh thép, mạch lạc liên kết */
 #we-sec-influence > .we-section-title,
 #we-sec-cp-influence > .we-section-title {
-  font-family: "SimSun", "宋体", "Songti SC", "STSong", serif;
+  font-family: "Noto Serif", "Times New Roman", Georgia, serif;
   font-size: 17px;
   font-weight: 400;
   letter-spacing: 0.10em;
@@ -3590,7 +3592,7 @@
 /* Danh Tiếng: tiếng tăm vang xa —— hổ phách ấm áp */
 #we-sec-reputation > .we-section-title,
 #we-sec-cp-reputation > .we-section-title {
-  font-family: "SimSun", "宋体", "Songti SC", "STSong", serif;
+  font-family: "Noto Serif", "Times New Roman", Georgia, serif;
   font-size: 17px;
   font-weight: 500;
   letter-spacing: 0.12em;
@@ -3605,7 +3607,7 @@
 /* Thế Lực: quần hùng tranh bá —— tím đế vương, khí độ uy nghiêm */
 #we-sec-factions > .we-section-title,
 #we-sec-cp-factions > .we-section-title {
-  font-family: "SimSun", "宋体", "Songti SC", "STSong", serif;
+  font-family: "Noto Serif", "Times New Roman", Georgia, serif;
   font-size: 17px;
   font-weight: 600;
   letter-spacing: 0.08em;
@@ -3620,7 +3622,7 @@
 /* Sổ Thù Địch: thù máu khó giải —— đỏ máu trầm, giãn chữ như khắc bia */
 #we-sec-enemies > .we-section-title,
 #we-sec-cp-enemies > .we-section-title {
-  font-family: "SimSun", "宋体", "Songti SC", "STSong", serif;
+  font-family: "Noto Serif", "Times New Roman", Georgia, serif;
   font-size: 17px;
   font-weight: 600;
   letter-spacing: 0.18em;
@@ -3636,7 +3638,7 @@
 /* Kinh Tế: tiền của lưu chuyển —— vàng đồng tiền */
 #we-sec-economy > .we-section-title,
 #we-sec-cp-economy > .we-section-title {
-  font-family: "SimSun", "宋体", "Songti SC", "STSong", serif;
+  font-family: "Noto Serif", "Times New Roman", Georgia, serif;
   font-size: 17px;
   font-weight: 500;
   letter-spacing: 0.12em;
@@ -3651,7 +3653,7 @@
 /* Bí Mật: ẩn giấu huyền cơ —— tím u ám, giãn chữ thưa nhất, thu liễm nhất */
 #we-sec-blackbox > .we-section-title,
 #we-sec-cp-blackbox > .we-section-title {
-  font-family: "SimSun", "宋体", "Songti SC", "STSong", serif;
+  font-family: "Noto Serif", "Times New Roman", Georgia, serif;
   font-size: 17px;
   font-weight: 400;
   letter-spacing: 0.24em;
@@ -3672,7 +3674,7 @@
 
 /* Tiêu đề Đại Cục Thiên Hạ bên trong điểm lưu dùng kiểu tiêu đề của từng trang */
 #we-sec-cp-trends > .we-section-title {
-  font-family: "SimSun", "宋体", "Songti SC", "STSong", serif;
+  font-family: "Noto Serif", "Times New Roman", Georgia, serif;
   font-size: 20px;
   font-weight: 400;
   color: var(--we-beige);
