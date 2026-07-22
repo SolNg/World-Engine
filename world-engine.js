@@ -225,6 +225,22 @@
       let lastProcessedMessageKey = '';
       const AUTO_EVOLVE_DELAY = 1500;
 
+      // ========== Chú Thích Thế Giới ==========
+      const MAX_WORLD_NOTES = 5;
+
+      function parseAndStoreTips(tipsArray, round) {
+        if (!Array.isArray(tipsArray) || tipsArray.length === 0) return;
+        const raw = tipsArray.map(t => '[' + t.type + '|' + t.content + ']').join('\n');
+        const state = core.loadState();
+        if (!state) return;
+        state.worldNotes = state.worldNotes || [];
+        state.worldNotes.unshift({ round, raw });
+        if (state.worldNotes.length > MAX_WORLD_NOTES) {
+          state.worldNotes.length = MAX_WORLD_NOTES;
+        }
+        core.saveState(state);
+      }
+
       // ========== Quản Lý Tiêm ==========
       const INJECTION_NAME = 'world-engine-world';
 
@@ -561,6 +577,11 @@
           if (success) {
             ledger.recordChanges(state);
             if (storyDay != null) { state.time = Number(storyDay); core.saveState(state); }
+            // Lưu tips từ kết quả diễn biến vào Chú Thích Thế Giới
+            const evolveResult = state.lastEvolveResult;
+            if (evolveResult && Array.isArray(evolveResult.tips) && evolveResult.tips.length > 0) {
+              parseAndStoreTips(evolveResult.tips, state.round);
+            }
             // API Thế Giới đã hoàn tất: lưu xuống DB, cập nhật tiêm và làm mới giao diện Thế Giới trước, rồi mới bắt đầu liên kết ký ức.
             // isEvolving tiếp tục đóng vai trò khóa loại trừ nội bộ, giữ giá trị true để ngăn suy diễn thế giới khởi động lại trong lúc liên kết đang chạy;
             // trạng thái chạy của UI thì kết thúc ở đây, để hoạt ảnh của hai công cụ hiển thị đúng theo trình tự trước sau.

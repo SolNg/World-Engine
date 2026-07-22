@@ -30,6 +30,7 @@ window.WORLD_ENGINE_UI = (function() {
   let editingEnemy = null;
   let editingInfluence = null;
   let editingRI = null;
+  let editingNote = null;
   // Trạng thái thống nhất của trình soạn bí mật: { scope, list:'action'|'asset', index, view:'action'|'asset' }
   //   list  = nhóm hiện tại chứa mục này; index = chỉ số trong nhóm đó
   //   view  = loại biểu mẫu đang hiển thị (đổi dropdown chỉ thay view, không đụng dữ liệu; việc chuyển đổi hoãn đến lúc lưu)
@@ -1814,7 +1815,7 @@ window.WORLD_ENGINE_UI = (function() {
   }
 
   const VIEW_TITLES = {
-    situation: 'Tình Hình', events: 'Sự Kiện', relations: 'Quan Hệ', resources: 'Tài Nguyên', settings: 'Cài Đặt'
+    situation: 'Tình Hình', events: 'Sự Kiện', relations: 'Quan Hệ', resources: 'Tài Nguyên', worldNotes: 'Chú Thích TG', settings: 'Cài Đặt'
   };
 
   function renderSection(title, id, content) {
@@ -1848,6 +1849,7 @@ window.WORLD_ENGINE_UI = (function() {
       { view: 'events',    label: 'Sự Kiện', sub: 'Chuỗi sự kiện · Tin Đồn · Chuỗi ảnh hưởng',     poem: 'Việc đến ắt có ứng' },
       { view: 'relations', label: 'Quan Hệ', sub: 'Danh tiếng · Thế lực · Sổ ân oán',       poem: 'Đồng thanh tương ứng, đồng khí tương cầu' },
       { view: 'resources', label: 'Tài Nguyên', sub: 'Kinh tế · Bí mật',               poem: 'Đất chứa kho vô tận' },
+      { view: 'worldNotes', label: 'Chú Thích TG', sub: 'Bách khoa thế giới · Ghi chú lượt gần nhất', poem: 'Biết người biết ta, trăm trận trăm thắng' },
     ];
 
     const navRows = rows.map((r, i) => {
@@ -1881,7 +1883,8 @@ window.WORLD_ENGINE_UI = (function() {
       + renderSection('Sổ Ân Oán', 'enemies', renderEnemies(s.enemies, scope))
       + renderSection('Kinh Tế', 'economy', renderEconomy(s.economy, scope))
       + renderSection('Bí Mật', 'blackbox', renderBlackbox(s.blackbox, scope))
-      + renderSection('Sổ Sách Sự Kiện', 'ledger', renderLedger(s.memories));
+      + renderSection('Sổ Sách Sự Kiện', 'ledger', renderLedger(s.memories))
+      + renderSection('Chú Thích Thế Giới', 'worldnotes', renderWorldNotes(s.worldNotes));
   }
 
   function renderSubView(viewKey, s, layer, scope) {
@@ -1901,6 +1904,8 @@ window.WORLD_ENGINE_UI = (function() {
     } else if (viewKey === 'resources') {
       content = renderSection('Kinh Tế', 'economy', renderEconomy(s.economy, scope))
         + renderSection('Bí Mật', 'blackbox', renderBlackbox(s.blackbox, scope));
+    } else if (viewKey === 'worldNotes') {
+      content = renderSection('Chú Thích Thế Giới', 'worldnotes', renderWorldNotes(s.worldNotes));
     }
     return '<div class="we-sub-topbar">'
       + '<button class="we-icon-btn" id="we-btn-back" title="Quay Lại"><i class="fa-solid fa-arrow-left"></i></button>'
@@ -2885,6 +2890,75 @@ window.WORLD_ENGINE_UI = (function() {
         <div class="we-ledger-changes">${lines.map(l => `<div class="we-ledger-line">${l}</div>`).join('')}</div>
       </div>`;
     });
+  }
+
+  const NOTE_TYPE_COLORS = {
+    'Nhắc Nhở Nhập Vai': '#9b59b6',
+    'Nhân Vật':          '#e67e22',
+    'Phong Tục':         '#e91e63',
+    'Nghề Nghiệp':       '#3498db',
+    'Kinh Tế':           '#f39c12',
+    'Địa Lý':            '#27ae60',
+    'Lịch Sử':           '#795548',
+    'Chế Độ':            '#e74c3c',
+    'Công Nghệ':         '#00bcd4',
+    'Ngôn Ngữ':          '#9c27b0',
+  };
+
+  function parseTipEntries(raw) {
+    const entries = [];
+    const re = /\[([^\|\]]+)\|([^\]]+)\]/g;
+    let m;
+    while ((m = re.exec(raw)) !== null) {
+      entries.push({ type: m[1].trim(), content: m[2].trim() });
+    }
+    return entries;
+  }
+
+  function serializeTipEntries(entries) {
+    return entries.map(e => '[' + e.type + '|' + e.content + ']').join('\n');
+  }
+
+  function renderWorldNotes(worldNotes) {
+    if (!worldNotes || !worldNotes.length) {
+      return '<div class="we-empty">Chưa có chú thích thế giới. AI sẽ tạo <code>&lt;tips&gt;</code> sau mỗi lượt phản hồi.</div>';
+    }
+    let html = '';
+    worldNotes.forEach((note, noteIndex) => {
+      const entries = parseTipEntries(note.raw || '');
+      entries.forEach((entry, entryIdx) => {
+        const color = NOTE_TYPE_COLORS[entry.type] || '#58b8a9';
+        const isEditing = editingNote?.noteIndex === noteIndex && editingNote?.entryIndex === entryIdx;
+        const typeOptions = Object.keys(NOTE_TYPE_COLORS).map(t =>
+          `<option value="${t}" ${t === entry.type ? 'selected' : ''}>${t}</option>`
+        ).join('');
+        const editHtml = isEditing ? `
+          <div class="we-event-editor we-note-editor" data-note-index="${noteIndex}" data-entry-index="${entryIdx}">
+            <button class="we-event-editor-close we-note-editor-close" title="Hủy"><i class="fa-solid fa-xmark"></i></button>
+            <div class="we-event-editor-grid">
+              <label>Loại<select class="we-note-edit-type">${typeOptions}</select></label>
+              <label class="we-event-editor-wide">Nội Dung<textarea class="we-note-edit-content" rows="4">${u(entry.content)}</textarea></label>
+            </div>
+            <div class="we-event-editor-footer">
+              <button class="we-btn we-btn-primary we-note-editor-save"><i class="fa-solid fa-floppy-disk"></i> Lưu</button>
+            </div>
+          </div>` : '';
+        html += `<div class="we-note-item" style="--note-color:${color};">
+          <div class="we-note-header">
+            <span class="we-badge" style="background:${color}22;color:${color};border:1px solid ${color}44;">${u(entry.type)}</span>
+            <span class="we-note-round">Vòng ${note.round}</span>
+          </div>
+          <div class="we-note-content">${u(entry.content)}</div>
+          ${editHtml}
+          <div class="we-event-actions">
+            <button class="we-icon-btn we-note-delete" data-note-index="${noteIndex}" data-entry-index="${entryIdx}" title="Xóa Chú Thích"><i class="fa-solid fa-trash-can"></i></button>
+            <button class="we-icon-btn we-note-copy" data-note-index="${noteIndex}" data-entry-index="${entryIdx}" title="Sao Chép Nội Dung"><i class="fa-solid fa-copy"></i></button>
+            <button class="we-icon-btn we-note-edit" data-note-index="${noteIndex}" data-entry-index="${entryIdx}" title="Sửa Chú Thích"><i class="fa-solid fa-pen"></i></button>
+          </div>
+        </div>`;
+      });
+    });
+    return html || '<div class="we-empty">Không có chú thích hợp lệ.</div>';
   }
 
   // [FIX] Gắn sự kiện thu gọn cho thẻ phân đoạn prompt diễn biến (cấp module, dùng chung cho dựng trang + làm mới cục bộ). Ủy quyền sự kiện.
@@ -5859,6 +5933,81 @@ window.WORLD_ENGINE_UI = (function() {
 
     // [MAP] Quản lý preset engine: gắn sự kiện lần đầu sau khi dựng toàn trang (ủy quyền sự kiện nằm trong bindPresetEvents).
     bindPresetEvents(document.getElementById('we-preset-manage'));
+
+    // ===== Thao tác Chú Thích Thế Giới =====
+    document.querySelectorAll('.we-note-delete').forEach(button => {
+      button.onclick = () => {
+        const noteIndex = Number(button.dataset.noteIndex);
+        const entryIndex = Number(button.dataset.entryIndex);
+        const state = core.loadState();
+        if (!state?.worldNotes?.[noteIndex]) return;
+        const entries = parseTipEntries(state.worldNotes[noteIndex].raw || '');
+        if (!confirm('Xóa chú thích này?')) return;
+        entries.splice(entryIndex, 1);
+        if (entries.length === 0) {
+          state.worldNotes.splice(noteIndex, 1);
+        } else {
+          state.worldNotes[noteIndex].raw = serializeTipEntries(entries);
+        }
+        editingNote = null;
+        core.saveState(state);
+        showToast('Đã xóa chú thích');
+        refresh();
+      };
+    });
+
+    document.querySelectorAll('.we-note-copy').forEach(button => {
+      button.onclick = () => {
+        const noteIndex = Number(button.dataset.noteIndex);
+        const entryIndex = Number(button.dataset.entryIndex);
+        const state = core.loadState();
+        const entries = parseTipEntries(state?.worldNotes?.[noteIndex]?.raw || '');
+        const entry = entries[entryIndex];
+        if (!entry) return;
+        navigator.clipboard.writeText(entry.content).then(() => {
+          showToast('Đã sao chép nội dung');
+        }).catch(() => {
+          showToast('Sao chép thất bại', true);
+        });
+      };
+    });
+
+    document.querySelectorAll('.we-note-edit').forEach(button => {
+      button.onclick = () => {
+        editingNote = {
+          noteIndex: Number(button.dataset.noteIndex),
+          entryIndex: Number(button.dataset.entryIndex)
+        };
+        refresh();
+      };
+    });
+
+    document.querySelectorAll('.we-note-editor-close').forEach(button => {
+      button.onclick = () => { editingNote = null; refresh(); };
+    });
+
+    document.querySelectorAll('.we-note-editor-save').forEach(button => {
+      button.onclick = () => {
+        const editor = button.closest('.we-note-editor');
+        const noteIndex = Number(editor.dataset.noteIndex);
+        const entryIndex = Number(editor.dataset.entryIndex);
+        const state = core.loadState();
+        if (!state?.worldNotes?.[noteIndex]) return;
+        const entries = parseTipEntries(state.worldNotes[noteIndex].raw || '');
+        if (!entries[entryIndex]) return;
+        const newContent = editor.querySelector('.we-note-edit-content').value.trim();
+        if (!newContent) { showToast('Nội dung không được để trống', true); return; }
+        entries[entryIndex] = {
+          type: editor.querySelector('.we-note-edit-type').value,
+          content: newContent
+        };
+        state.worldNotes[noteIndex].raw = serializeTipEntries(entries);
+        core.saveState(state);
+        editingNote = null;
+        showToast('Đã lưu chú thích');
+        refresh();
+      };
+    });
   }
 
   function showPanel() {

@@ -873,6 +873,19 @@ Chỉ những hành vi bí mật và tài sản cần bảo vệ ranh giới nh�
 - secretAssets: mảng tài sản bí mật, mỗi mục { name: "tên tài sản", exposure: 0-100, status: "Còn Hiệu Lực/Đã Hết Hạn/Đã Bị Lộ/Mất Hiệu Lực" }
   exposure biểu thị mức độ rủi ro tài sản này bị bên ngoài phát hiện: 0 = tuyệt mật, 100 = đã hoàn toàn công khai.
   status biểu thị tài sản này hiện có còn dùng được hay không: Còn Hiệu Lực = vẫn có thể sử dụng, Đã Hết Hạn = tình báo đã lỗi thời, Đã Bị Lộ = đã bị phát hiện, Mất Hiệu Lực = đã không thể sử dụng.
+
+### tips (chú thích bách khoa · tùy chọn, nhưng khuyến khích mỗi lượt)
+Sau khi hoàn tất toàn bộ cập nhật trạng thái, tạo 3-5 chú thích bách khoa ngắn về bối cảnh thế giới.
+Mỗi mục: { "type": "<loại>", "content": "<nội dung 50-200 chữ>" }
+Loại hợp lệ (viết đúng tên): "Nhắc Nhở Nhập Vai" | "Nhân Vật" | "Phong Tục" | "Nghề Nghiệp" | "Kinh Tế" | "Địa Lý" | "Lịch Sử" | "Chế Độ" | "Công Nghệ" | "Ngôn Ngữ"
+
+Quy tắc chú thích:
+- Là "từ điển wiki khách quan", không phải lời giải thích của đạo diễn. Tuyệt đối cấm giải thích quan hệ nhân quả cốt truyện hiện tại hoặc báo trước phục bút.
+- Khi cốt truyện có sự kiện cụ thể, "phát tán ra ngoài": phổ cập kiến thức thiết lập ngoại vi liên quan (luật trị an, sinh thái khu vực lân cận, phong tục...), không giải thích bản thân sự kiện.
+- Bắt buộc có ít nhất 1 mục "Nhắc Nhở Nhập Vai" bù đắp chênh lệch thông tin {{user}} đáng lẽ phải biết.
+- Tối đa 2 mục cùng loại mỗi lượt; ưu tiên đa dạng lát cắt thế giới quan.
+- Nội dung chỉ dành cho người đọc, không thêm sự thật cốt truyện mới, không chỉ đạo diễn biến tiếp theo.
+- Cấm "Bạn nên / Bạn có thể / Bước tiếp theo / Điều này sẽ dẫn đến".
 `;
 
   const JSON_EXAMPLE = `{
@@ -898,7 +911,12 @@ Chỉ những hành vi bí mật và tài sản cần bảo vệ ranh giới nh�
   "influenceChain": [
     { "trigger": "Huyết Đao Môn phát treo thưởng lệnh", "impact": "Người trong giang hồ thảo mãng bắt đầu chủ động để ý hành tung của {{user}}", "fallout": "Khách điếm và bến đò xuất hiện kẻ dò xét và người báo tin bí mật" }
   ],
-  "blackbox": { "secretActions": [], "secretAssets": [] }
+  "blackbox": { "secretActions": [], "secretAssets": [] },
+  "tips": [
+    { "type": "Địa Lý", "content": "Phố Nước Đen sở dĩ ẩm ướt vì bên dưới từng là kênh thoát nước bỏ hoang. Rêu xanh quanh năm không phai." },
+    { "type": "Nhắc Nhở Nhập Vai", "content": "Người dân bản địa biết rằng các đội tuần tra đêm thường nghỉ giải lao tại góc phố Đông sau giờ thứ ba." },
+    { "type": "Chế Độ", "content": "Ở thành bang tự do, đánh nhau không dùng vũ khí chết người thông thường chỉ bị phạt tiền; nhưng nếu liên lụy tài sản bang hội thì bị đánh roi." }
+  ]
 }`;
 
   // [MAP] Preset của engine: tách chỉ thị vai trò engine, 10 bước kiểm tra nhân quả thành const cấp module (nội dung khớp từng chữ với hằng số trong hàm gốc),
@@ -931,6 +949,11 @@ Chỉ những hành vi bí mật và tài sản cần bảo vệ ranh giới nh�
     const tonePrompt = ((api.getSettings ? api.getSettings() : {}).tonePrompt || '').trim();
     const toneSection = tonePrompt
       ? `\n\n========== Prompt bổ sung (do người dùng tùy chỉnh · ưu tiên tuân thủ · nhưng không được vi phạm định dạng xuất JSON ở trên) ==========\n${tonePrompt}`
+      : '';
+    const prevNotes = (state.worldNotes || []).slice(0, 3);
+    const prevNotesSection = prevNotes.length > 0
+      ? `\n\n## Chú thích các lượt trước (tham khảo để duy trì nhất quán khi tạo tips mới)\n`
+        + prevNotes.map(n => `Lượt ${n.round}:\n${n.raw}`).join('\n\n')
       : '';
 
     // [MAP] Lớp ghi đè preset của engine: giá trị mặc định dùng DEFAULT_SEG_* cấp module (nguồn chân lý duy nhất, khớp từng chữ với template gốc),
@@ -974,6 +997,7 @@ Chỉ những hành vi bí mật và tài sản cần bảo vệ ranh giới nh�
       + '\n\n' + segDialogue
       + '\n\n' + segOutputInstructions
       + '\n' + segJsonExample
+      + prevNotesSection
       + '\n' + (extraInstruction ? '\n' + extraInstruction : '') + toneSection;
 
     // [MAP] Bản sao các đoạn (dùng để hiển thị minh bạch toàn bộ, chỉ đọc). content của mỗi đoạn tham chiếu cùng biến với prompt ở trên.
@@ -989,6 +1013,7 @@ Chỉ những hành vi bí mật và tài sản cần bảo vệ ranh giới nh�
       { key: 'dialogue',       label: '⑦ Hội Thoại Gần Đây',                   content: segDialogue },
       { key: 'output-format',  label: '⑧ Giải Thích Trường Xuất JSON',        content: segOutputInstructions },
       { key: 'json-example',   label: '⑨ Ví Dụ JSON',                         content: segJsonExample },
+      { key: 'prev-notes',     label: '⑨b Chú Thích Các Lượt Trước',          content: prevNotesSection },
       { key: 'extra-instr',    label: '⑩ Chỉ Thị Bổ Sung',                     content: segExtraInstruction },
       { key: 'tone',           label: '⑪ Prompt Bổ Sung (Người Dùng Tùy Chỉnh)', content: segToneSection }
     ];
@@ -997,7 +1022,7 @@ Chỉ những hành vi bí mật và tài sản cần bảo vệ ranh giới nh�
     _lastRawResult = '';
     const knownFields = [
       'events', 'factions', 'worldTrends', 'winds', 'economy', 'reputation',
-      'world_digest', 'enemies', 'influenceChain', 'regionalIncident', 'blackbox'
+      'world_digest', 'enemies', 'influenceChain', 'regionalIncident', 'blackbox', 'tips'
     ];
     const retrySettings = api.getSettings ? api.getSettings() : {};
     const maxRetries = Math.max(0, parseInt(retrySettings.apiAutoRetries) || 0);
@@ -1040,6 +1065,7 @@ Chỉ những hành vi bí mật và tài sản cần bảo vệ ranh giới nh�
     // regionalIncident do xúc xắc cục bộ kiểm soát, không tự động bổ sung trong callEvolutionAPI
     // regionalIncident do API trả về được kiểm định trong mergeRegionalIncident
     if (!update.blackbox) update.blackbox = { secretActions: [], secretAssets: [] };
+    update.tips = Array.isArray(update.tips) ? update.tips.filter(t => t && t.type && t.content) : [];
 
     return update;
   }

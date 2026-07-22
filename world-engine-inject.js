@@ -192,6 +192,19 @@ window.WORLD_ENGINE_INJECT = (function() {
     }
     const blackboxText = boxParts.length ? boxParts.join(' | ') : 'Không có thông tin chưa công khai';
 
+    // Chú Thích Thế Giới: 2 lượt gần nhất, danh sách phẳng, tối đa 8 mục
+    const recentNotes = (worldState.worldNotes || []).slice(0, 2);
+    const tipsEntries = [];
+    const tipRe = /\[([^\|\]]+)\|([^\]]+)\]/g;
+    for (const note of recentNotes) {
+      tipRe.lastIndex = 0;
+      let m;
+      while ((m = tipRe.exec(note.raw || '')) !== null) {
+        tipsEntries.push(`[${m[1].trim()}] ${m[2].trim()}`);
+      }
+    }
+    const tipsText = tipsEntries.slice(0, 8).join('; ') || 'Không có';
+
     const context = `
 【世界信息】
 Vòng cập nhật: ${worldState.round}
@@ -205,6 +218,7 @@ Quan hệ đối địch: ${enemiesText}
 Kinh tế: ${econText}
 Diễn biến khu vực: ${riText}
 Thông tin chưa công khai: ${blackboxText}
+Chú thích thế giới gần đây: ${tipsText}
 
 ${rulesSummary}
     `.trim();

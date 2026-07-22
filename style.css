@@ -4048,4 +4048,41 @@
 :root[data-we-theme] #we-sec-blackbox > .we-section-title .we-section-arrow,
 :root[data-we-theme] #we-sec-cp-blackbox > .we-section-title .we-section-arrow { color: var(--we-section-blackbox); }
 
+/* ===== Chú Thích Thế Giới ===== */
+.we-note-item {
+  background: #1a1a22;
+  border: 1px solid color-mix(in srgb, var(--note-color) 30%, transparent);
+  border-radius: 8px;
+  padding: 10px 12px;
+  margin-bottom: 8px;
+  position: relative;
+}
+.we-note-item::before {
+  content: '';
+  position: absolute;
+  left: 0; top: 0; bottom: 0;
+  width: 3px;
+  background: var(--note-color);
+  border-radius: 8px 0 0 8px;
+  opacity: 0.7;
+}
+.we-note-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+.we-note-round {
+  margin-left: auto;
+  font-size: 11px;
+  color: var(--we-text2, #6c7b8a);
+  opacity: 0.7;
+}
+.we-note-content {
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--we-text1, #c8d0d8);
+  white-space: pre-wrap;
+}
+
 

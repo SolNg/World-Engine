@@ -77,6 +77,7 @@ window.WORLD_ENGINE_CORE = (function() {
         secretActions: [],
         secretAssets: []
       },
+      worldNotes: [],
       lastEvolveResult: null,
       lastInjection: null,
       lastUpdated: {}
@@ -329,6 +330,7 @@ window.WORLD_ENGINE_CORE = (function() {
       state.blackbox.secretActions = state.blackbox.secretActions || [];
       state.blackbox.secretAssets = state.blackbox.secretAssets || [];
     }
+    state.worldNotes = Array.isArray(state.worldNotes) ? state.worldNotes : [];
     state.lastInjection = state.lastInjection || null;
     return state;
   }
