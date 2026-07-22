@@ -618,7 +618,6 @@
   font-size: 11px;
   font-weight: 400;
   letter-spacing: 0;
-  white-space: nowrap;
 }
 
 .we-memory-settings-empty {
@@ -1127,6 +1126,11 @@
   font-family: "Noto Serif", "Times New Roman", Georgia, serif;
   font-size: 11px;
   letter-spacing: 0.08em;
+  flex-shrink: 1;
+  min-width: 0;
+  max-width: 45%;
+  overflow: hidden;
+  text-overflow: ellipsis;
   white-space: nowrap;
 }
 .we-memory-subview {
@@ -1995,7 +1999,7 @@
 
 .we-wind-field {
   display: grid;
-  grid-template-columns: 34px minmax(0, 1fr);
+  grid-template-columns: 60px minmax(0, 1fr);
   gap: 7px;
   padding: 3px 0;
   border-top: 1px solid var(--we-hairline);
@@ -2021,7 +2025,7 @@
   color: var(--we-text3);
   font-size: 10px;
   font-weight: 700;
-  letter-spacing: 1px;
+  letter-spacing: 0.3px;
 }
 
 .we-list-pager {
@@ -2095,7 +2099,7 @@
 
 .we-trend-source {
   display: grid;
-  grid-template-columns: 34px minmax(0, 1fr);
+  grid-template-columns: 60px minmax(0, 1fr);
   gap: 7px;
   margin-top: 5px;
   padding-top: 4px;
@@ -2332,7 +2336,7 @@
 /* ===== Chuỗi Ảnh Hưởng ===== */
 .we-influence-step {
   display: grid;
-  grid-template-columns: 58px minmax(0, 1fr);
+  grid-template-columns: 84px minmax(0, 1fr);
   gap: 8px;
   padding: 5px 0;
   line-height: 1.55;
@@ -2349,7 +2353,9 @@
   text-align: center;
   font-size: 10px;
   font-weight: 700;
-  white-space: nowrap;
+  white-space: normal;
+  overflow-wrap: break-word;
+  line-height: 1.3;
 }
 
 .we-influence-text {
@@ -3085,6 +3091,11 @@
   font-weight: 600;
   color: var(--we-text);
   letter-spacing: 0.03em;
+  flex-shrink: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 /* [FIX] ===== Tab Trang Cài Đặt ===== */

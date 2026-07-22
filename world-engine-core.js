@@ -266,7 +266,7 @@ window.WORLD_ENGINE_CORE = (function() {
       if (!Array.isArray(f.powerPillars)) f.powerPillars = [];
       else f.powerPillars = f.powerPillars.map(p => {
         const name = typeof p === 'string' ? p : (p.name || '');
-        return name.length > 4 ? name.slice(0, 4) : name;
+        return name.length > 24 ? name.slice(0, 24) : name;
       }).filter(Boolean);
       if (f.powerPillars.length > 3) f.powerPillars.length = 3;
     }
@@ -690,7 +690,7 @@ window.WORLD_ENGINE_CORE = (function() {
     if (!Array.isArray(faction.powerPillars)) faction.powerPillars = [];
     else faction.powerPillars = faction.powerPillars.map(p => {
       const name = typeof p === 'string' ? p : (p.name || '');
-      return name.length > 4 ? name.slice(0, 4) : name;
+      return name.length > 24 ? name.slice(0, 24) : name;
     }).filter(Boolean);
     if (faction.powerPillars.length > 3) faction.powerPillars.length = 3;
     const idx = findEntityIndex(state.factions, faction, ENTITY_ID_PREFIXES.factions, 'name');

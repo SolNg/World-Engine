@@ -2428,7 +2428,7 @@ window.WORLD_ENGINE_UI = (function() {
           <label>Phạm Vi<input class="we-faction-edit-scope" type="text" value="${u(f.scope||'')}"></label>
           <label>Mục Tiêu<input class="we-faction-edit-goal" type="text" value="${u(f.currentGoal||'')}"></label>
           <label>Nhân Vật Cốt Lõi<input class="we-faction-edit-core" type="text" value="${u(f.core_person||'')}"></label>
-          ${[0,1,2].map(i => `<label>Trụ Cột Quyền Lực ${i+1}<input class="we-faction-edit-pillar" data-pillar-idx="${i}" type="text" value="${u(pillars[i])}" maxlength="4" placeholder="Tối đa 4 chữ"></label>`).join('')}
+          ${[0,1,2].map(i => `<label>Trụ Cột Quyền Lực ${i+1}<input class="we-faction-edit-pillar" data-pillar-idx="${i}" type="text" value="${u(pillars[i])}" maxlength="24" placeholder="Tối đa 24 ký tự"></label>`).join('')}
         </div>
         <div class="we-event-editor-footer">
           <button class="we-btn we-btn-primary we-faction-editor-save"><i class="fa-solid fa-floppy-disk"></i> Lưu</button>
@@ -4136,7 +4136,7 @@ window.WORLD_ENGINE_UI = (function() {
         faction.core_person = editor.querySelector('.we-faction-edit-core').value.trim();
         const pillars = [];
         editor.querySelectorAll('.we-faction-edit-pillar').forEach(input => {
-          const v = input.value.trim().slice(0, 4);
+          const v = input.value.trim().slice(0, 24);
           if (v) pillars.push(v);
         });
         faction.powerPillars = pillars;
