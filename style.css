@@ -3858,3 +3858,14 @@
 }
 .we-npc-subview { gap: 8px; }
 .we-npc-settings { gap: 10px; }
+
+/* ---- Trang giới thiệu ---- */
+.we-npc-about {
+  font-size: 12px;
+  line-height: 1.7;
+  color: var(--we-text2);
+}
+.we-npc-about p { margin: 0 0 10px; }
+.we-npc-about p:last-child { margin-bottom: 0; }
+.we-npc-about strong { color: var(--we-text); }
+.we-npc-about em { color: var(--we-accent); font-style: normal; }

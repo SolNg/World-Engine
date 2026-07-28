@@ -53,6 +53,50 @@ for (const action of ['we-npc-pin', 'we-npc-tier', 'we-npc-archive', 'we-npc-rev
 check('sửa hồ sơ tay thì ghi lại trạng thái',
   /const mutate = [\s\S]{0,400}npcData\(\)\.saveState\(state\)/.test(ui));
 
+// ===== Mục API — engine dùng API riêng, thiếu mục này là không cấu hình được =====
+// Bản đầu tiên của trang cài đặt quên hẳn phần này: cấu hình có sẵn apiUrl/apiKey/model
+// nhưng không có ô nhập nào, nên engine nạp được mà im lặng tuyệt đối.
+{
+  const apiBindings = [
+    ['we-npc-api-url', 'apiUrl'],
+    ['we-npc-api-key', 'apiKey'],
+    ['we-npc-model', 'model'],
+    ['we-npc-connection-mode', 'connectionMode'],
+    ['we-npc-temperature', 'temperature'],
+    ['we-npc-max-tokens', 'maxTokens'],
+    ['we-npc-api-retries', 'apiAutoRetries'],
+    ['we-npc-api-timeout', 'apiTimeoutMs']
+  ];
+  for (const [id, key] of apiBindings) {
+    check(`mục API có ô nhập ${key}`, ui.includes(`'${id}'`));
+    check(`ô nhập ${key} được gắn vào đúng khoá`, new RegExp(`'${id}', '${key}'`).test(ui));
+  }
+  check('API key dùng ô nhập kiểu password', /id="we-npc-api-key"[^>]*type="password"|type="password" id="we-npc-api-key"/.test(ui));
+  check('có nút lấy danh sách mô hình', ui.includes('we-npc-fetch-models'));
+  check('lấy danh sách dùng cấu hình của chính NPC Engine',
+    /fetchModelList\?\.\(npcSettings\(\)\)/.test(ui));
+  check('mục API nằm trong tab Thường Dùng',
+    /common:\s*sec\('set-npc-api'/.test(ui));
+}
+
+// ===== Tab cài đặt =====
+{
+  for (const [key, label] of [['common', 'Thường Dùng'], ['link', 'Liên Kết'], ['advanced', 'Nâng Cao'],
+                              ['archive', 'Lưu Trữ'], ['worldbook', 'Worldbook'],
+                              ['debug', 'Gỡ Lỗi'], ['about', 'Giới Thiệu']]) {
+    check(`có tab ${label}`, new RegExp(`key: '${key}',\\s*label: '${label}'`).test(ui));
+  }
+  // Dùng lại đúng lớp của trang cài đặt thế giới thì việc chuyển tab do bindEvents lo,
+  // chỉ ẩn/hiện bằng CSS chứ không render lại — nếu đổi tên lớp, nội dung đang nhập sẽ mất khi chuyển tab.
+  check('tab dùng lại lớp we-settings-tab có sẵn', /class="we-settings-tab'/.test(ui));
+  check('panel dùng lại lớp we-settings-panel có sẵn', ui.includes('class="we-settings-panel"'));
+  check('mặt npc khai hook onSettingsTab', /onSettingsTab: key => \{ _npcSettingsTab = key; \}/.test(ui));
+  check('mặt npc khai hook refreshDebug', /refreshDebug: \(\) => refreshNpcDebugRender\(\)/.test(ui));
+  check('có hàm renderNpcDebug', ui.includes('function renderNpcDebug('));
+  check('có nút xuất gói chẩn đoán', ui.includes('we-npc-export-diag'));
+  check('gói chẩn đoán xuất đúng phạm vi npc', /WORLD_ENGINE_DIAG\?\.download\?\.\('npc'\)/.test(ui));
+}
+
 // ===== Cài đặt =====
 const settingsBindings = [
   ['we-npc-core-limit', 'npcCoreLimit'],
