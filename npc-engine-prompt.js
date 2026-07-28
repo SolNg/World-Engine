@@ -131,11 +131,19 @@ Không có nhân vật nào đáng lưu thì trả "npcs": [] — đó là kết
     ];
   }
 
+  // WORLD_ENGINE_API.callApi() nhận MỘT CHUỖI rồi tự bọc thành [{ role: 'user', content: prompt }].
+  // Truyền mảng messages vào đó sẽ tạo ra content là một mảng object, và API trả HTTP 400.
+  // Đây là dạng prompt thật sự được gửi đi; buildMessages() chỉ giữ lại cho nơi nào cần dạng hội thoại.
+  function buildPrompt(options) {
+    return SYSTEM_PROMPT + '\n\n' + buildUserPrompt(options);
+  }
+
   return {
     SYSTEM_PROMPT,
     describeKnownNpcs,
     describePath,
     buildUserPrompt,
-    buildMessages
+    buildMessages,
+    buildPrompt
   };
 })();

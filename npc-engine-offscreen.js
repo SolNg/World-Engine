@@ -154,12 +154,18 @@ Không nhân vật nào có hành động đáng kể thì trả "activities": [
     ];
   }
 
+  // Xem ghi chú ở npc-engine-prompt.js: callApi() nhận chuỗi, không nhận mảng messages.
+  function buildPrompt(options) {
+    return SYSTEM_PROMPT + '\n\n' + buildUserPrompt(options);
+  }
+
   return {
     SYSTEM_PROMPT,
     describeAggressiveness,
     describeAbsentNpcs,
     describeTravelCache,
     buildUserPrompt,
-    buildMessages
+    buildMessages,
+    buildPrompt
   };
 })();

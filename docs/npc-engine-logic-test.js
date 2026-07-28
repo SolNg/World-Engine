@@ -272,26 +272,78 @@ const baseSettings = () => config.getSettings(true);
   const state = data.defaultState();
   data.upsertNpc(state, { name: 'Lý Mộ Bạch', tier: 'core', significance: 85 });
 
-  const extract = global.NPC_ENGINE_PROMPT.buildMessages({
+  const extract = global.NPC_ENGINE_PROMPT.buildPrompt({
     npcs: state.npcs, dialogue: 'Lý Mộ Bạch rút kiếm.', storyDay: 42
   });
-  check('prompt trích xuất có hai vai', extract.length === 2 && extract[0].role === 'system');
-  check('prompt trích xuất kèm hồ sơ hiện có', extract[1].content.includes('Lý Mộ Bạch'));
-  check('prompt trích xuất nêu rõ quy tắc lọc quần chúng',
-    extract[0].content.includes('lão chủ quán'));
+  check('prompt trích xuất là chuỗi', typeof extract === 'string');
+  check('prompt trích xuất kèm hồ sơ hiện có', extract.includes('Lý Mộ Bạch'));
+  check('prompt trích xuất nêu rõ quy tắc lọc quần chúng', extract.includes('lão chủ quán'));
+  check('prompt trích xuất kèm hội thoại', extract.includes('Lý Mộ Bạch rút kiếm.'));
 
-  const offscreen = global.NPC_ENGINE_OFFSCREEN.buildMessages({
+  const offscreen = global.NPC_ENGINE_OFFSCREEN.buildPrompt({
     absentNpcs: state.npcs, aggressiveness: 0.5, worldScale: 'tu tiên'
   });
-  check('prompt hoạt động ngầm nêu thế giới quan', offscreen[1].content.includes('tu tiên'));
-  check('prompt hoạt động ngầm dịch mức chủ động thành lời',
-    offscreen[1].content.includes('Vừa phải'));
-  check('prompt hoạt động ngầm đòi ước lượng số lượt',
-    offscreen[0].content.includes('etaRounds'));
+  check('prompt hoạt động ngầm là chuỗi', typeof offscreen === 'string');
+  check('prompt hoạt động ngầm nêu thế giới quan', offscreen.includes('tu tiên'));
+  check('prompt hoạt động ngầm dịch mức chủ động thành lời', offscreen.includes('Vừa phải'));
+  check('prompt hoạt động ngầm đòi ước lượng số lượt', offscreen.includes('etaRounds'));
 }
 
-if (failures > 0) {
-  console.error(`npc-engine logic tests FAILED (${failures} lỗi)`);
+// ===== Thứ thật sự gửi cho API =====
+// Lỗi đã gặp thật khi chạy: callApi() nhận MỘT CHUỖI rồi tự bọc thành
+// [{ role: 'user', content: prompt }]. Truyền mảng messages vào khiến content thành mảng object,
+// API trả HTTP 400 "at least one contents field is required". Kiểm tra tĩnh không thấy được vì
+// mã hoàn toàn hợp lệ — phải chạy thật luồng chính với API giả mới lộ ra.
+(async () => {
+  const calls = [];
+  global.WORLD_ENGINE_API.callApi = async (prompt, maxTokens, temperature, signal, st) => {
+    calls.push({ prompt, maxTokens, temperature, st });
+    return JSON.stringify({
+      scene: { location: ['Đại Chu', 'Giang Nam', 'Dương Châu'], presentNames: ['Lý Mộ Bạch'] },
+      npcs: [{ name: 'Lý Mộ Bạch', tier: 'core', significance: 85, present: true }],
+      activities: []
+    });
+  };
+
+  storage.clear();
+  config.patchSettings({
+    engineEnabled: true, offscreenEnabled: true,
+    apiUrl: 'https://vi-du.test/v1', model: 'test-model'
+  });
+
+  const first = await engine.ingestWorldEvolution({
+    layer: 20, worldRound: 3,
+    worldDigest: 'Thành Dương Châu vừa đổi chủ',
+    dialogue: 'Lý Mộ Bạch rút kiếm.'
+  });
+
+  check('luồng chính chạy được, không bị bỏ qua', first && first.skipped !== true);
+  check('có gọi API ít nhất một lần', calls.length >= 1);
+  for (const call of calls) {
+    check('prompt gửi cho API là CHUỖI, không phải mảng messages', typeof call.prompt === 'string');
+    check('prompt gửi đi không rỗng', typeof call.prompt === 'string' && call.prompt.length > 50);
+  }
+  check('prompt kèm hội thoại của lượt này', calls[0]?.prompt.includes('Lý Mộ Bạch rút kiếm.'));
+  check('prompt kèm tóm tắt thế giới vừa sinh ra', calls[0]?.prompt.includes('Thành Dương Châu vừa đổi chủ'));
+  check('truyền đúng cấu hình riêng của NPC Engine', calls[0]?.st?.apiUrl === 'https://vi-du.test/v1');
+  check('nhân vật trích xuất được ghi vào trạng thái',
+    data.findNpc(data.loadState(), 'Lý Mộ Bạch') !== null);
+
+  // Chốt ở tầng dưới cùng: nơi gọi có sai kiểu thì phải ném lỗi rõ ràng ngay,
+  // thay vì để API trả HTTP 400 khó lần ra nguyên nhân.
+  let threw = '';
+  global.WORLD_ENGINE_API.callApi = async () => '{}';
+  try {
+    await engine.ingestWorldEvolution({ layer: 21, dialogue: 'x' });
+  } catch (error) { threw = String(error?.message || error); }
+  check('luồng chính không ném lỗi khi prompt hợp lệ', threw === '');
+
+  if (failures > 0) {
+    console.error(`npc-engine logic tests FAILED (${failures} lỗi)`);
+    process.exit(1);
+  }
+  console.log('npc-engine logic tests passed');
+})().catch(error => {
+  console.error('npc-engine logic tests FAILED:', error);
   process.exit(1);
-}
-console.log('npc-engine logic tests passed');
+});

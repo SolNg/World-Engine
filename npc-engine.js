@@ -403,14 +403,20 @@ window.NPC_ENGINE = (function() {
 
   // ================= Gọi API =================
 
-  async function callModel(messages, st) {
+  // Tham số đầu của callApi phải là CHUỖI: bên trong nó tự bọc thành [{ role: 'user', content: prompt }].
+  // Truyền mảng messages vào sẽ khiến content thành mảng object và API trả HTTP 400
+  // ("at least one contents field is required").
+  async function callModel(prompt, st) {
+    if (typeof prompt !== 'string') {
+      throw new Error('Prompt gửi cho API phải là chuỗi, nhận được: ' + typeof prompt);
+    }
     const retries = Math.max(0, Number(st.apiAutoRetries) || 0);
-    lastDebug = { prompt: messages, apiResponse: '', parsed: null, error: '' };
+    lastDebug = { prompt, apiResponse: '', parsed: null, error: '' };
 
     for (let attempt = 0; attempt <= retries; attempt++) {
       try {
         const raw = await window.WORLD_ENGINE_API.callApi(
-          messages, st.maxTokens, st.temperature, abortController?.signal, st
+          prompt, st.maxTokens, st.temperature, abortController?.signal, st
         );
         lastDebug.apiResponse = raw;
         const parsed = window.WORLD_ENGINE_API.parseJSON(raw);
@@ -457,7 +463,7 @@ window.NPC_ENGINE = (function() {
       const storyDay = core()?.getLastStoryDay?.();
 
       // --- Pha 1: trích xuất nhân vật từ hội thoại ---
-      const extraction = await callModel(window.NPC_ENGINE_PROMPT.buildMessages({
+      const extraction = await callModel(window.NPC_ENGINE_PROMPT.buildPrompt({
         npcs: state.npcs,
         knownLimit: st.npcCoreLimit * 2,
         dialogue: clean(payload?.dialogue),
@@ -479,7 +485,7 @@ window.NPC_ENGINE = (function() {
 
       if (st.offscreenEnabled !== false && absent.length) {
         runningLabel = 'Suy diễn hoạt động ngầm';
-        const activities = await callModel(window.NPC_ENGINE_OFFSCREEN.buildMessages({
+        const activities = await callModel(window.NPC_ENGINE_OFFSCREEN.buildPrompt({
           absentNpcs: absent,
           worldDigest: clean(payload?.worldDigest),
           sceneSummary: describePath(state.scene.location),
