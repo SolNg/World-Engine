@@ -3,17 +3,6 @@
   if (window.__WORLD_ENGINE_LOADED__) return;
   window.__WORLD_ENGINE_LOADED__ = true;
 
-  // ST sẽ await hàm này trước khi ráp prompt chính thức; ở đây chỉ gỡ bỏ tóm tắt đã hết hiệu lực và khôi phục văn bản gốc, tuyệt đối không gọi API.
-  // Việc sửa API cho ký ức lịch sử được dồn lại, thực hiện sau khi AI trả lời xong lượt này.
-  window.worldEngineMemoryGenerateInterceptor = async function(_chat, _contextSize, _abort, _type) {
-    try {
-      await window.MEMORY_ENGINE?.prepareHistoryForGeneration?.();
-    } catch (error) {
-      // Gỡ bỏ tóm tắt cũ ở phía client thất bại không chặn việc chat bình thường; ở đây không có yêu cầu API nào chạy nền.
-      console.error('[Công Cụ Ký Ức] Gỡ bỏ tóm tắt hết hiệu lực trước khi sinh thất bại', error);
-    }
-  };
-
   // Tất cả các công cụ dùng chung một ranh giới xử lý lỗi sự kiện: ngoại lệ đồng bộ lẫn rejection bất đồng bộ đều chỉ được ghi vào công cụ tương ứng.
   window.WORLD_ENGINE_GUARD_EVENT = function(engineLabel, eventLabel, handler) {
     return function(...args) {
@@ -67,23 +56,19 @@
       }
     },
     {
-      id: 'memory', label: 'Công Cụ Ký Ức', modules: [
-        'memory-engine-settings.js',
-        'memory-engine-data.js',
-        'memory-engine-timeline.js',
-        'memory-engine-prompt.js',
-        'memory-engine-small-summary-prompt.js',
-        'memory-engine-big-summary-prompt.js',
-        'memory-engine.js'
+      id: 'npc', label: 'Công Cụ Nhân Vật', modules: [
+        'npc-engine-settings.js',
+        'npc-engine-data.js',
+        'npc-engine-prompt.js',
+        'npc-engine-offscreen.js',
+        'npc-engine.js'
       ],
       contracts: {
-        MEMORY_ENGINE_SETTINGS: ['getSettings', 'patchSettings'],
-        MEMORY_ENGINE_DATA: ['loadState', 'saveState'],
-        MEMORY_ENGINE_TIMELINE: ['captureRange', 'auditRefs', 'syncHidden'],
-        MEMORY_ENGINE_PROMPT: ['buildUserPrompt'],
-        MEMORY_ENGINE_SMALL_SUMMARY_PROMPT: ['buildUserPrompt'],
-        MEMORY_ENGINE_BIG_SUMMARY_PROMPT: ['buildUserPrompt'],
-        MEMORY_ENGINE: ['init', 'applyInjection', 'abort', 'isRunning']
+        NPC_ENGINE_SETTINGS: ['getSettings', 'patchSettings'],
+        NPC_ENGINE_DATA: ['loadState', 'saveState'],
+        NPC_ENGINE_PROMPT: ['buildUserPrompt'],
+        NPC_ENGINE_OFFSCREEN: ['buildUserPrompt'],
+        NPC_ENGINE: ['init', 'applyInjection', 'abort', 'isRunning']
       }
     }
   ];
@@ -589,18 +574,21 @@
             setStatus('Suy diễn thế giới hoàn tất');
             if (ui) { ui.setEvolvingUI(false); ui.refresh(true); }
             worldUiPhaseFinished = true;
-            if (settings.memoryLinkEnabled === true) {
+            // Thế giới xong thì tới lượt nhân vật, trong cùng một lượt: hoạt động ngầm phản ứng được
+            // với diễn biến thế giới vừa sinh ra, không phải đợi sang lượt sau.
+            if (window.NPC_ENGINE_SETTINGS?.getSettings?.(true)?.npcLinkEnabled !== false) {
               try {
-                await window.MEMORY_ENGINE?.ingestWorldEvolution?.({
+                await window.NPC_ENGINE?.ingestWorldEvolution?.({
                   layer: core.getChatLayer(),
                   worldRound: state.round,
                   worldDigest: state.worldDigest,
                   worldUpdate: state.lastEvolveResult,
+                  dialogue: dialogueText,
                   replace: !isNewRound
                 });
               } catch (linkError) {
-                console.error('[Công Cụ Thế Giới] Liên kết Thế Giới→Ký Ức thất bại (kết quả suy diễn thế giới vẫn được giữ lại)', linkError);
-                setStatus('Suy diễn thế giới hoàn tất, nhưng liên kết ký ức thất bại: ' + (linkError?.message || linkError), true);
+                console.error('[Công Cụ Thế Giới] Liên kết Thế Giới→Nhân Vật thất bại (kết quả suy diễn thế giới vẫn được giữ lại)', linkError);
+                setStatus('Suy diễn thế giới hoàn tất, nhưng liên kết nhân vật thất bại: ' + (linkError?.message || linkError), true);
               }
             }
             console.log('[Công Cụ Thế Giới] ✅ Suy diễn hoàn tất, hiện đang ở lượt thứ', state.round);
@@ -646,34 +634,80 @@
         });
       }
 
-      async function manualMemoryLink() {
+      // Đẩy tay tóm tắt thế giới hiện có sang Công Cụ Nhân Vật, dùng khi muốn dựng lại hồ sơ NPC
+      // mà không phải chờ lượt hội thoại kế tiếp.
+      async function manualNpcLink() {
         if (isEvolving) { setStatus('Công Cụ Thế Giới hoặc tác vụ liên kết đang chạy...'); return false; }
-        if (window.MEMORY_ENGINE?.isRunning?.()) { setStatus('Công Cụ Ký Ức đã có tác vụ đang chạy...'); return false; }
+        if (window.NPC_ENGINE?.isRunning?.()) { setStatus('Công Cụ Nhân Vật đã có tác vụ đang chạy...'); return false; }
         const state = core.loadState();
         const digest = String(state?.worldDigest || '').trim();
         if (!digest) { setStatus('Hiện không có tóm tắt thế giới nào để liên kết', true); return false; }
         isEvolving = true;
         try {
-          setStatus('Đang liên kết thủ công với Công Cụ Ký Ức...');
-          const result = await window.MEMORY_ENGINE?.ingestWorldEvolution?.({
+          setStatus('Đang liên kết thủ công với Công Cụ Nhân Vật...');
+          const settings = api.getSettings(true);
+          const chat = SillyTavern.getContext()?.chat || [];
+          const result = await window.NPC_ENGINE?.ingestWorldEvolution?.({
             layer: core.getChatLayer(),
             worldRound: state.round,
             worldDigest: digest,
             worldUpdate: state.lastEvolveResult || state,
-            replace: true,
-            force: true
+            dialogue: buildDialogueText(chat, settings.manualReadRounds, settings),
+            replace: true
           });
-          if (!result || result.skipped) throw new Error('Công Cụ Ký Ức chưa thực hiện liên kết');
-          setStatus('Liên kết thủ công hoàn tất, tóm tắt thế giới đã được thêm vào ký ức dưới dạng một bản ghi mới');
+          if (!result || result.skipped) throw new Error('Công Cụ Nhân Vật chưa thực hiện liên kết');
+          setStatus('Liên kết thủ công hoàn tất, hồ sơ nhân vật đã được cập nhật');
           if (ui?.refresh) ui.refresh(true);
           return true;
         } catch (error) {
-          console.error('[Công Cụ Thế Giới] Liên kết thủ công với Công Cụ Ký Ức thất bại', error);
+          console.error('[Công Cụ Thế Giới] Liên kết thủ công với Công Cụ Nhân Vật thất bại', error);
           setStatus('Liên kết thủ công thất bại: ' + (error?.message || error), true);
           return false;
         } finally {
           isEvolving = false;
         }
+      }
+
+      // Công cụ cứu hộ: bỏ ẩn mọi tin nhắn từng bị Công Cụ Ký Ức che đi.
+      //
+      // Ký Ức che chính văn đã được tóm tắt bao phủ bằng cờ extra['world_engine_memory_hidden'] + is_system,
+      // và việc bỏ ẩn vốn do chính nó đảm nhiệm. Khi Ký Ức bị gỡ, không còn ai bỏ ẩn nữa nên các tin nhắn
+      // đó sẽ kẹt vĩnh viễn. Hàm này cố ý KHÔNG phụ thuộc vào bất kỳ module ký ức nào, để vẫn chạy được
+      // sau khi các file đó đã bị xoá.
+      async function unhideAllMessages() {
+        const HIDDEN_KEY = 'world_engine_memory_hidden';
+        const ctx = SillyTavern.getContext();
+        const chat = ctx?.chat || [];
+        const layers = [];
+
+        chat.forEach((message, layer) => {
+          if (message?.extra?.[HIDDEN_KEY] === true) layers.push(layer);
+        });
+        if (!layers.length) { setStatus('Không có tin nhắn nào đang bị ẩn'); return 0; }
+
+        for (const layer of layers) {
+          const message = chat[layer];
+          if (!message) continue;
+          delete message.extra[HIDDEN_KEY];
+          message.is_system = false;
+        }
+
+        const exec = ctx?.executeSlashCommandsWithOptions;
+        if (typeof exec === 'function') {
+          for (const layer of layers) {
+            try { await exec(`/unhide ${layer}`); }
+            catch (_) { /* cờ trong bộ nhớ đã gỡ, lệnh gạch chéo chỉ là để Tavern vẽ lại */ }
+          }
+        }
+        try {
+          if (typeof ctx?.saveChat === 'function') await ctx.saveChat();
+          if (typeof ctx?.reloadCurrentChat === 'function') await ctx.reloadCurrentChat();
+        } catch (error) {
+          console.warn('[Công Cụ Thế Giới] Lưu lại sau khi bỏ ẩn thất bại (trạng thái trong bộ nhớ đã đúng)', error);
+        }
+
+        setStatus(`Đã bỏ ẩn ${layers.length} tin nhắn`);
+        return layers.length;
       }
 
       // Sau khi lưu giá trị điền tay "Thời Gian Hội Thoại Lượt Này" ở trang cài đặt: kiểm tra đã đủ thời gian chưa, đủ thì suy diễn.
@@ -793,7 +827,10 @@
       // Khi khởi tạo, lập tức chọn trạng thái tiêm dựa theo số tầng hội thoại
       applyInjectionForCurrentRound();
       // Xuất điểm vào tiêm theo số tầng hội thoại để gọi thủ công
-      window.WORLD_ENGINE = { applyInjection: applyInjectionForCurrentRound, manualEvolve, manualTimeEvolve, manualMemoryLink };
+      window.WORLD_ENGINE = {
+        applyInjection: applyInjectionForCurrentRound,
+        manualEvolve, manualTimeEvolve, manualNpcLink, unhideAllMessages
+      };
 
       // ========== Thêm Nút Vào Bảng Điều Khiển Vào Thanh Nhập Liệu Của Tavern ==========
       // Đã chuyển sang buildInputButton() trong world-engine-ui.js
@@ -812,11 +849,11 @@
     } catch(err) {
       console.error('[Công Cụ Thế Giới] Khởi tạo thất bại', err);
     } finally {
-      // Khởi tạo Ký Ức có ranh giới kết thúc độc lập: dù phần thân chạy của Thế Giới hay nửa sau của UI dùng chung báo lỗi,
-      // cũng không được ngăn cản Công Cụ Ký Ức đã vượt qua kiểm tra hợp đồng giao diện khởi động.
-      if (sharedRuntimeReady && loadedEngines.get('memory') && window.MEMORY_ENGINE) {
-        try { window.MEMORY_ENGINE.init(); }
-        catch (e) { console.warn('[Công Cụ Ký Ức] Khởi tạo thất bại (không nghiêm trọng)', e); }
+      // Khởi tạo Nhân Vật có ranh giới kết thúc độc lập: dù phần thân chạy của Thế Giới hay nửa sau của UI dùng chung báo lỗi,
+      // cũng không được ngăn cản Công Cụ Nhân Vật đã vượt qua kiểm tra hợp đồng giao diện khởi động.
+      if (sharedRuntimeReady && loadedEngines.get('npc') && window.NPC_ENGINE) {
+        try { window.NPC_ENGINE.init(); }
+        catch (e) { console.warn('[Công Cụ Nhân Vật] Khởi tạo thất bại (không nghiêm trọng)', e); }
       }
     }
   }

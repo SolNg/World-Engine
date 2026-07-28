@@ -9,17 +9,10 @@ window.WORLD_ENGINE_UI = (function() {
   let _engineFace = 'world';
   const _engineFaceOrder = [];
   const _engineFaceRegistry = new Map();
-  let _memorySettingsOpen = false;
-  let _memoryView = 'home';
-  let _memorySelectedNavView = null;
-  let _memoryEditingPerson = null;
-  let _memoryEditingEntity = null;
-  let _memoryEditingSmall = null;
-  let _memoryEditingBig = null;
-  const _memoryCollapsedRecords = new Set();
-  const _memorySeenRecords = new Set();
-  let _memoryCollapseScope = '';
-  let _memoryRunningLabel = '';
+  let _npcSettingsOpen = false;
+  let _npcView = 'home';
+  let _npcSelectedNavView = null;
+  const _npcExpanded = new Set();
   let _panelFlipping = false;
   let isEvolving = false;
   let editingEvent = null;
@@ -106,27 +99,24 @@ window.WORLD_ENGINE_UI = (function() {
       abort: () => evolution.abort()
     });
     registerEngineFace({
-      id: 'memory', label: 'Memory Engine', ballClass: 'we-ball-memory-face', panelClass: 'we-memory-face',
-      getTheme: () => getStoredMemoryTheme(),
-      getVersion: () => window.MEMORY_ENGINE_SETTINGS?.VERSION,
-      getSettings: () => window.MEMORY_ENGINE_SETTINGS?.getSettings(true) || {},
+      id: 'npc', label: 'NPC Engine', ballClass: 'we-ball-npc-face', panelClass: 'we-npc-face',
+      getTheme: () => getStoredNpcTheme(),
+      getVersion: () => window.NPC_ENGINE_SETTINGS?.VERSION,
+      getSettings: () => window.NPC_ENGINE_SETTINGS?.getSettings(true) || {},
       setEnabled: enabled => {
-        window.MEMORY_ENGINE_SETTINGS?.patchSettings({ engineEnabled: enabled });
-        window.MEMORY_ENGINE?.applyInjection?.();
+        window.NPC_ENGINE_SETTINGS?.patchSettings({ engineEnabled: enabled });
+        window.NPC_ENGINE?.applyInjection?.();
       },
-      isRunning: () => Boolean(window.MEMORY_ENGINE?.isRunning?.()),
-      getRunningLabel: () => window.MEMORY_ENGINE?.getRunningLabel?.() || _memoryRunningLabel,
-      render: () => renderMemoryView(),
-      bind: () => bindMemoryView(),
-      openSettings: () => { _memorySettingsOpen = !_memorySettingsOpen; },
-      isSettingsOpen: () => _memorySettingsOpen,
-      onSettingsTab: key => { _memorySettingsTab = key; },
-      refreshDebug: () => refreshMemoryDebugRender(),
+      isRunning: () => Boolean(window.NPC_ENGINE?.isRunning?.()),
+      getRunningLabel: () => window.NPC_ENGINE?.getRunningLabel?.() || '',
+      render: () => renderNpcView(),
+      bind: () => bindNpcView(),
+      openSettings: () => { _npcSettingsOpen = !_npcSettingsOpen; },
+      isSettingsOpen: () => _npcSettingsOpen,
       showForward: true,
-      forwardTitle: 'Trích Xuất Ký Ức Thủ Công',
-      forward: () => runMemoryExtract(),
-      redo: () => runMemoryReextract(),
-      abort: () => window.MEMORY_ENGINE?.abort?.()
+      forwardTitle: 'Cập Nhật Hồ Sơ Nhân Vật Thủ Công',
+      forward: () => runNpcLink(),
+      abort: () => window.NPC_ENGINE?.abort?.()
     });
   }
 
@@ -143,8 +133,6 @@ window.WORLD_ENGINE_UI = (function() {
 
   // Sáu bộ theme thuần biến CSS. Gắn trên <html>, bảng điều khiển, quả cầu nổi và thanh trạng thái trên cùng đổi màu đồng bộ.
   const WE_THEME_KEY = 'we-theme';
-  const MEMORY_THEME_KEY = 'memory-engine-theme';
-  const MEMORY_THEME_NIGHT_MIGRATION_KEY = 'memory-engine-theme-night-default-v1';
   const WE_THEMES = [
     { id: 'default', name: 'Mặc Ngọc · Mặc Định' },
     { id: 'night', name: 'Đêm Tàn · Cận Đen' },
@@ -220,21 +208,6 @@ window.WORLD_ENGINE_UI = (function() {
     catch (e) { return 'default'; }
   }
 
-  function getStoredMemoryTheme() {
-    try {
-      let stored = localStorage.getItem(MEMORY_THEME_KEY);
-      if (!localStorage.getItem(MEMORY_THEME_NIGHT_MIGRATION_KEY)) {
-        if (!stored || stored === 'default') {
-          stored = 'night';
-          localStorage.setItem(MEMORY_THEME_KEY, stored);
-        }
-        localStorage.setItem(MEMORY_THEME_NIGHT_MIGRATION_KEY, '1');
-      }
-      return normalizeTheme(stored || 'night');
-    }
-    catch (e) { return 'night'; }
-  }
-
   function applyTheme(id) {
     const theme = normalizeTheme(id);
     const root = document.documentElement;
@@ -249,10 +222,10 @@ window.WORLD_ENGINE_UI = (function() {
     try { localStorage.setItem(WE_THEME_KEY, theme); } catch (e) {}
   }
 
-  function setMemoryTheme(id) {
+  function setNpcTheme(id) {
     const theme = normalizeTheme(id);
     applyTheme(theme);
-    try { localStorage.setItem(MEMORY_THEME_KEY, theme); } catch (e) {}
+    try { localStorage.setItem(NPC_THEME_KEY, theme); } catch (e) {}
   }
 
   function applyEngineFaceTheme() {
@@ -325,7 +298,7 @@ window.WORLD_ENGINE_UI = (function() {
       <div class="we-panel-header">
         <div class="we-header-info">
           <div class="we-header-top">
-            <button class="we-panel-title we-engine-face-toggle" type="button" title="Chuyển Sang Memory Engine" aria-label="Chuyển Sang Memory Engine">World Engine</button>
+            <button class="we-panel-title we-engine-face-toggle" type="button" title="Chuyển Sang Engine Kế Tiếp" aria-label="Chuyển Sang Engine Kế Tiếp">World Engine</button>
             <span class="we-panel-version" id="we-panel-version"></span><!-- [FIX] Số phiên bản -->
             <span class="we-header-round" id="we-header-round"></span>
           </div>
@@ -370,683 +343,9 @@ window.WORLD_ENGINE_UI = (function() {
   // View hiện tại: 'home' | 'situation' | 'events' | 'relations' | 'resources' | 'settings'
   let _currentView = 'home';
 
-  function renderMemoryView() {
-    if (_memorySettingsOpen) return renderMemorySettingsView();
-    if (_memoryView === 'home') return renderMemoryHomeView();
-    return renderMemorySubView(_memoryView);
-  }
-
-  function memoryProgressCircle(radius, progress, color, width, className) {
-    const circumference = 2 * Math.PI * radius;
-    const ratio = Math.max(0, Math.min(1, Number(progress) || 0));
-    const dash = (circumference * ratio).toFixed(1);
-    return `<circle class="${className}" cx="80" cy="80" r="${radius}" fill="none" stroke="${color}" stroke-width="${width}"
-      stroke-linecap="round" stroke-dasharray="${dash} ${(circumference - circumference * ratio).toFixed(1)}"
-      transform="rotate(-90 80 80)"/>`;
-  }
-
-  function renderMemoryCore(state, settings) {
-    const eventMemory = state?.event_memory || {};
-    const smallSummaries = Array.isArray(eventMemory.small_summaries) ? eventMemory.small_summaries : [];
-    const bigSummaries = Array.isArray(eventMemory.big_summaries) ? eventMemory.big_summaries : [];
-    const cursor = Math.max(0, Math.min(smallSummaries.length, parseInt(eventMemory.big_summary_cursor) || 0));
-    const bigTarget = Math.max(1, parseInt(settings.bigSummaryEveryX) || 5);
-    const pendingSmall = Math.max(0, smallSummaries.length - cursor);
-    const bigProgress = Math.min(1, pendingSmall / bigTarget);
-    const bigRemaining = Math.max(0, bigTarget - pendingSmall);
-    const entityCount = ['organization', 'object', 'ability', 'location']
-      .reduce((sum, type) => sum + (Array.isArray(state?.entity_memory?.[type]) ? state.entity_memory[type].length : 0), 0);
-    const stats = [
-      ['Nhân Vật', Array.isArray(state?.personal_memory) ? state.personal_memory.length : 0],
-      ['Thực Thể', entityCount],
-      ['Lược Ghi', smallSummaries.length],
-      ['Tổng Thuật', bigSummaries.length]
-    ].map(([label, value]) => `<div class="we-core-stat"><div class="we-core-stat-k">${label}</div><div class="we-core-stat-v">${value}</div></div>`).join('');
-    const centerMain = bigRemaining > 0 ? bigRemaining : 'Chờ Xử Lý';
-    const centerUnit = bigRemaining > 0 ? '<span>vòng</span>' : '';
-
-    return `<div class="we-section we-core-section we-memory-core-section">
-      <div class="we-core" title="${bigRemaining > 0 ? `Còn ${bigRemaining} vòng nữa đến lần tổng thuật tiếp theo` : 'Tổng thuật đang chờ xử lý'}">
-        <div class="we-core-ring we-memory-core-ring">
-          <svg viewBox="0 0 160 160" width="160" height="160" aria-hidden="true">
-            <circle cx="80" cy="80" r="64" fill="none" stroke="color-mix(in srgb, var(--we-accent) 18%, transparent)" stroke-width="6"/>
-            ${memoryProgressCircle(64, bigProgress, 'var(--we-accent)', 6, 'we-memory-big-progress')}
-          </svg>
-          <div class="we-core-center">
-            <div class="we-core-title">Mạch Ký Ức</div>
-            <div class="we-core-sub">Lần Tổng Thuật Tiếp Theo</div>
-            <div class="we-core-pct we-memory-core-value">${centerMain}${centerUnit}</div>
-          </div>
-        </div>
-        <div class="we-core-stats">${stats}</div>
-      </div>
-    </div>`;
-  }
-
-  function renderMemoryHomeView() {
-    const state = window.MEMORY_ENGINE_DATA?.loadState?.() || {};
-    const settings = window.MEMORY_ENGINE_SETTINGS?.getSettings?.(true) || {};
-    const rows = [
-      { view: 'people', label: 'Nhân Vật', sub: 'Ký ức nhân vật · Biệt danh · Thời gian', poem: 'Biết người là bậc trí' },
-      { view: 'entities', label: 'Thực Thể', sub: 'Tổ chức · Vật phẩm · Năng lực · Địa điểm', poem: 'Danh là khách của thực' },
-      { view: 'minutes', label: 'Lược Ghi', sub: 'Lược ghi giai đoạn · Phạm vi tầng', poem: 'Ghi việc ắt phải nêu trọng điểm' },
-      { view: 'overview', label: 'Tổng Thuật', sub: 'Tổng thuật giai đoạn · Mạch chuyện toàn cục', poem: 'Nắm được giềng mối, muôn việc theo đó mà tỏ tường' }
-    ];
-    const nav = rows.map((row, index) => {
-      const selected = _memorySelectedNavView === row.view ? ' we-nav-row--selected' : '';
-      const topLine = index === 0 ? '<div class="we-nav-line we-nav-line-hidden"></div>' : '<div class="we-nav-line"></div>';
-      const bottomLine = index === rows.length - 1 ? '<div class="we-nav-line we-nav-line-hidden"></div>' : '<div class="we-nav-line"></div>';
-      return `<div class="we-nav-row we-memory-nav-row${selected}" data-memory-view="${row.view}">
-        <div class="we-nav-label">${row.label}</div>
-        <div class="we-nav-track">${topLine}<div class="we-nav-dot"></div>${bottomLine}</div>
-        <div class="we-nav-content"><span class="we-nav-sub">${row.sub}</span><span class="we-nav-poem">${row.poem}</span></div>
-        <i class="fa-solid fa-chevron-right we-nav-arrow"></i>
-      </div>`;
-    }).join('');
-    return '<div class="we-memory-home">'
-      + renderMemoryCore(state, settings)
-      + '<div class="we-nav-list we-memory-nav-list">' + nav + '</div>'
-      + '</div>';
-  }
-
-  const MEMORY_VIEW_META = {
-    people: { title: 'Nhân Vật', poem: 'Biết người là bậc trí' },
-    entities: { title: 'Thực Thể', poem: 'Danh là khách của thực' },
-    minutes: { title: 'Lược Ghi', poem: 'Ghi việc ắt phải nêu trọng điểm' },
-    overview: { title: 'Tổng Thuật', poem: 'Nắm được giềng mối, muôn việc theo đó mà tỏ tường' }
-  };
-  const MEMORY_ENTITY_LABELS = { organization: 'Tổ Chức', object: 'Vật Phẩm', ability: 'Năng Lực', location: 'Địa Điểm' };
-
-  function renderMemoryEntryRow(time, content, kind, knownBy) {
-    const placeholder = kind === 'history' ? 'Nội dung sự kiện' : 'Ký ức nhân vật';
-    return `<div class="we-memory-entry-edit" data-memory-entry-row>
-      <input class="we-memory-entry-time" type="text" value="${h(time || '')}" placeholder="Thời gian (có thể để trống)">
-      <textarea class="we-memory-entry-content" rows="2" placeholder="${placeholder}">${h(content || '')}</textarea>
-      ${kind === 'memory' ? `<input class="we-memory-entry-known-by" type="text" value="${h((knownBy || []).join(' / '))}" placeholder="Người biết chuyện (phân cách bằng /; không cần điền chính chủ nhân)">` : ''}
-      <button class="we-icon-btn we-memory-remove-entry" type="button" title="Xóa mục này"><i class="fa-solid fa-xmark"></i></button>
-    </div>`;
-  }
-
-  function memoryKnownBy(state, person, time, memory) {
-    return (state?.personal_memory || []).filter(knower => knower.id !== person?.id && (knower.names || []).some(name =>
-      (state?.knowledge_index?.[String(name).trim().toLocaleLowerCase()] || []).some(record =>
-        record.ownerId === person?.id && String(record.time || '') === String(time || '') && String(record.memory || '') === String(memory || '')
-      )
-    )).map(knower => knower.names?.[0] || knower.id);
-  }
-
-  function memoryRecordToggle(key, defaultCollapsed = true) {
-    ensureMemoryRecordDefault(key, defaultCollapsed);
-    const collapsed = _memoryCollapsedRecords.has(key);
-    return `<button class="we-icon-btn we-memory-toggle-record" type="button" data-memory-collapse-key="${h(key)}" title="${collapsed ? 'Mở Rộng' : 'Thu Gọn'}" aria-expanded="${collapsed ? 'false' : 'true'}"><i class="fa-solid fa-chevron-${collapsed ? 'right' : 'down'}"></i></button>`;
-  }
-
-  function memoryRecordClass(key, extra, defaultCollapsed = true) {
-    ensureMemoryRecordDefault(key, defaultCollapsed);
-    return `we-memory-record${extra ? ` ${extra}` : ''}${_memoryCollapsedRecords.has(key) ? ' is-collapsed' : ''}`;
-  }
-
-  function memoryRecordBody(key, content, defaultCollapsed = true) {
-    ensureMemoryRecordDefault(key, defaultCollapsed);
-    return `<div class="we-memory-record-body"${_memoryCollapsedRecords.has(key) ? ' hidden' : ''}>${content}</div>`;
-  }
-
-  function ensureMemoryRecordDefault(key, defaultCollapsed = true) {
-    if (!key || _memorySeenRecords.has(key)) return;
-    _memorySeenRecords.add(key);
-    if (defaultCollapsed) _memoryCollapsedRecords.add(key);
-  }
-
-  function expandMemoryRecord(key) {
-    if (!key) return;
-    _memorySeenRecords.add(key);
-    _memoryCollapsedRecords.delete(key);
-  }
-
-  function renderMemoryPersonEditor(person, isNew, state) {
-    const entries = Object.entries(person?.memory || {}).flatMap(([time, memories]) =>
-      (Array.isArray(memories) ? memories : []).map(memory => renderMemoryEntryRow(time, memory, 'memory', memoryKnownBy(state, person, time, memory)))
-    ).join('');
-    return `<div class="we-memory-editor" data-person-editor data-person-id="${h(person?.id || '')}" data-new="${isNew ? 'true' : 'false'}">
-      <div class="we-input-group"><label>Tên Và Biệt Danh (Phân Cách Bằng /)</label><input class="we-memory-person-names" type="text" value="${h((person?.names || []).join(' / '))}" placeholder="Ví dụ: Thẩm Hạc Đình / Hạc Đình"></div>
-      <div class="we-memory-editor-label">Ký Ức Nhân Vật</div>
-      <div class="we-memory-entry-list">${entries || '<div class="we-memory-entry-empty">Chưa có ký ức nào, có thể thêm ở bên dưới</div>'}</div>
-      <button class="we-btn we-memory-add-entry" type="button" data-entry-kind="memory"><i class="fa-solid fa-plus"></i> Thêm Ký Ức</button>
-      <div class="we-memory-editor-actions"><button class="we-btn we-memory-cancel-edit" type="button">Hủy</button><button class="we-btn we-btn-primary we-memory-save-person" type="button">Lưu</button></div>
-    </div>`;
-  }
-
-  function renderMemoryPeople(state) {
-    const people = Array.isArray(state.personal_memory) ? state.personal_memory : [];
-    const draft = _memoryEditingPerson === '__new__'
-      ? `<div class="we-memory-record we-memory-record-new">${renderMemoryPersonEditor({ id: '', names: [], memory: {} }, true, state)}</div>` : '';
-    const cards = people.map(person => {
-      const editing = _memoryEditingPerson === person.id;
-      const collapseKey = `person:${person.id}`;
-      const entries = Object.entries(person.memory || {}).flatMap(([time, memories]) =>
-        (Array.isArray(memories) ? memories : []).map(memory => {
-          const knownBy = memoryKnownBy(state, person, time, memory);
-          return `<div class="we-memory-line"><span class="we-memory-line-time">${h(time || 'Chưa rõ thời gian')}</span><div class="we-memory-line-main"><div class="we-memory-line-content">${h(memory)}</div><div class="we-memory-line-known">Người biết chuyện: ${h(knownBy.length ? knownBy.join(' · ') : 'Chỉ mình người này')}</div></div></div>`;
-        })
-      ).join('');
-      return `<div class="${memoryRecordClass(collapseKey)}" data-person-id="${h(person.id)}">
-        <div class="we-memory-record-head" data-memory-collapse-key="${h(collapseKey)}" role="button" tabindex="0"><div><div class="we-memory-record-title">${h(person.names?.[0] || 'Nhân Vật Chưa Đặt Tên')}</div><div class="we-memory-record-meta">${h((person.names || []).slice(1).join(' · ') || person.id)}</div></div>
-          <div class="we-memory-record-actions">${memoryRecordToggle(collapseKey)}<button class="we-icon-btn we-memory-edit-person" type="button" title="Sửa"><i class="fa-solid fa-pen"></i></button><button class="we-icon-btn we-memory-delete-person" type="button" title="Xóa"><i class="fa-solid fa-trash"></i></button></div>
-        </div>
-        ${memoryRecordBody(collapseKey, editing ? renderMemoryPersonEditor(person, false, state) : (entries || '<div class="we-empty">Chưa có ký ức nhân vật</div>'))}
-      </div>`;
-    }).join('');
-    return `<div class="we-memory-page-actions"><button class="we-btn we-btn-primary" id="we-memory-add-person" type="button"><i class="fa-solid fa-plus"></i> Thêm Nhân Vật</button></div>${draft}${cards || '<div class="we-empty">Chưa có nhân vật nào, nhấn "Thêm Nhân Vật" để tạo thủ công.</div>'}`;
-  }
-
-  function renderMemoryEntityEditor(entity, type, isNew) {
-    const history = (Array.isArray(entity?.history) ? entity.history : [])
-      .map(entry => renderMemoryEntryRow(entry.time, entry.event, 'history')).join('');
-    const options = Object.entries(MEMORY_ENTITY_LABELS).map(([value, label]) => `<option value="${value}" ${value === type ? 'selected' : ''}>${label}</option>`).join('');
-    return `<div class="we-memory-editor" data-entity-editor data-entity-id="${h(entity?.id || '')}" data-original-type="${h(type || 'organization')}" data-new="${isNew ? 'true' : 'false'}">
-      <div class="we-memory-form-grid"><div class="we-input-group"><label>Loại</label><select class="we-memory-entity-type">${options}</select></div><div class="we-input-group"><label>Tên</label><input class="we-memory-entity-name" type="text" value="${h(entity?.name || '')}" placeholder="Tên thực thể"></div></div>
-      <div class="we-input-group"><label>Biệt Danh (Phân Cách Bằng /)</label><input class="we-memory-entity-aliases" type="text" value="${h((entity?.aliases || []).join(' / '))}" placeholder="Ví dụ: Đoạn Triều Kiếm / Đoạn Triều / Hải Văn Cựu Kiếm"></div>
-      <div class="we-input-group"><label>Mô Tả Hiện Tại</label><textarea class="we-memory-entity-description" rows="3" placeholder="Trạng thái và đặc điểm hiện tại của thực thể">${h(entity?.description || '')}</textarea></div>
-      <div class="we-memory-editor-label">Sự Kiện Lịch Sử</div>
-      <div class="we-memory-entry-list">${history || '<div class="we-memory-entry-empty">Chưa có lịch sử, có thể thêm ở bên dưới</div>'}</div>
-      <button class="we-btn we-memory-add-entry" type="button" data-entry-kind="history"><i class="fa-solid fa-plus"></i> Thêm Lịch Sử</button>
-      <div class="we-memory-editor-actions"><button class="we-btn we-memory-cancel-edit" type="button">Hủy</button><button class="we-btn we-btn-primary we-memory-save-entity" type="button">Lưu</button></div>
-    </div>`;
-  }
-
-  function renderMemoryEntities(state) {
-    const draft = _memoryEditingEntity === '__new__'
-      ? `<div class="we-memory-record we-memory-record-new">${renderMemoryEntityEditor({ id: '', name: '', description: '', history: [] }, 'organization', true)}</div>` : '';
-    const groups = Object.entries(MEMORY_ENTITY_LABELS).map(([type, label]) => {
-      const entities = Array.isArray(state.entity_memory?.[type]) ? state.entity_memory[type] : [];
-      const cards = entities.map(entity => {
-        const key = `${type}:${entity.id}`;
-        const collapseKey = `entity:${key}`;
-        const history = (Array.isArray(entity.history) ? entity.history : []).map(entry =>
-          `<div class="we-memory-line"><span class="we-memory-line-time">${h(entry.time || 'Chưa rõ thời gian')}</span><div class="we-memory-line-main"><div class="we-memory-line-content">${h(entry.event)}</div></div></div>`
-        ).join('');
-        return `<div class="${memoryRecordClass(collapseKey)}" data-entity-id="${h(entity.id)}" data-entity-type="${type}">
-          <div class="we-memory-record-head" data-memory-collapse-key="${h(collapseKey)}" role="button" tabindex="0"><div><div class="we-memory-record-title"><span class="we-memory-type-badge">${label}</span>${h(entity.name || 'Thực Thể Chưa Đặt Tên')}</div><div class="we-memory-record-meta">${h((entity.aliases || []).join(' · ') || entity.id)}</div></div>
-            <div class="we-memory-record-actions">${memoryRecordToggle(collapseKey)}<button class="we-icon-btn we-memory-edit-entity" type="button" title="Sửa"><i class="fa-solid fa-pen"></i></button><button class="we-icon-btn we-memory-delete-entity" type="button" title="Xóa"><i class="fa-solid fa-trash"></i></button></div>
-          </div>
-          ${memoryRecordBody(collapseKey, _memoryEditingEntity === key ? renderMemoryEntityEditor(entity, type, false) : `<div class="we-memory-description">${h(entity.description || 'Chưa có mô tả')}</div>${history}`)}
-        </div>`;
-      }).join('');
-      const categoryKey = `entity-category:${type}`;
-      return `<div class="${memoryRecordClass(categoryKey, 'we-memory-entity-group')}" data-entity-category="${type}">
-        <div class="we-memory-record-head" data-memory-collapse-key="${h(categoryKey)}" role="button" tabindex="0"><div><div class="we-memory-record-title"><span class="we-memory-type-badge">${label}</span>${label}</div><div class="we-memory-record-meta">${entities.length} mục</div></div>
-          <div class="we-memory-record-actions">${memoryRecordToggle(categoryKey)}</div>
-        </div>
-        ${memoryRecordBody(categoryKey, cards || `<div class="we-empty">Chưa có ${label}</div>`)}
-      </div>`;
-    }).join('');
-    return `<div class="we-memory-page-actions"><button class="we-btn we-btn-primary" id="we-memory-add-entity" type="button"><i class="fa-solid fa-plus"></i> Thêm Thực Thể</button></div>${draft}${groups}`;
-  }
-
-  function renderMemoryMinutes(state) {
-    const eventMemory = state.event_memory || {};
-    const items = Array.isArray(eventMemory.small_summaries) ? eventMemory.small_summaries : [];
-    const cursor = Math.max(0, Math.min(items.length, parseInt(eventMemory.big_summary_cursor) || 0));
-    const editor = (item, isNew) => `<div class="we-memory-editor">
-      <div class="we-memory-form-grid"><div class="we-input-group"><label>Tầng Bắt Đầu</label><input class="we-memory-small-start" type="number" min="0" value="${h(String(item.startLayer ?? 0))}"></div><div class="we-input-group"><label>Tầng Kết Thúc</label><input class="we-memory-small-end" type="number" min="0" value="${h(String(item.endLayer ?? 0))}"></div></div>
-      <div class="we-input-group"><label>Nội Dung Lược Ghi</label><textarea class="we-memory-small-content" rows="6">${h(item.content || '')}</textarea><div class="we-hint">API nhắm mục tiêu 50–200 chữ, vượt quá vẫn giữ nguyên vẹn; lược ghi thêm thủ công chỉ được nối vào phần chưa xử lý, không thay đổi tổng thuật đã có.</div></div>
-      <div class="we-memory-editor-actions"><button class="we-btn we-memory-cancel-edit" type="button">Hủy</button><button class="we-btn we-btn-primary we-memory-save-small" data-new="${isNew ? 'true' : 'false'}" type="button">Lưu</button></div>
-    </div>`;
-    const draft = _memoryEditingSmall === '__new__'
-      ? `<div class="we-memory-record we-memory-record-new" data-small-id="__new__">${editor({ startLayer: eventMemory.small_summary_layer ?? 0, endLayer: eventMemory.small_summary_layer ?? 0, content: '' }, true)}</div>` : '';
-    const cards = items.map((item, index) => {
-      const collapseKey = `small:${item.id}`;
-      const defaultCollapsed = index !== items.length - 1;
-      return `<div class="${memoryRecordClass(collapseKey, '', defaultCollapsed)}" data-small-id="${h(item.id)}">
-      <div class="we-memory-record-head" data-memory-collapse-key="${h(collapseKey)}" role="button" tabindex="0"><div><div class="we-memory-record-title">Tầng ${h(String(item.startLayer))}–${h(String(item.endLayer))}</div><div class="we-memory-record-meta">${index < cursor ? 'Đã đưa vào tổng thuật' : 'Chờ lưu trữ'} · ${h(item.id)}</div></div>
-        <div class="we-memory-record-actions">${memoryRecordToggle(collapseKey, defaultCollapsed)}<button class="we-icon-btn we-memory-edit-small" type="button" title="Chỉnh Sửa"><i class="fa-solid fa-pen"></i></button><button class="we-icon-btn we-memory-delete-small" type="button" title="Xóa"><i class="fa-solid fa-trash"></i></button></div>
-      </div>
-      ${memoryRecordBody(collapseKey, _memoryEditingSmall === item.id ? editor(item, false) : `<div class="we-memory-summary-text">${h(item.content || '(Nội dung trống)')}</div>`, defaultCollapsed)}
-    </div>`;
-    }).join('');
-    const countHint = items.length > 1 ? `<div class="we-hint">Tổng cộng ${items.length} lược ghi, mặc định mở rộng mục mới nhất.</div>` : '';
-    return `<div class="we-memory-page-actions"><button class="we-btn we-btn-primary" id="we-memory-add-small" type="button"><i class="fa-solid fa-plus"></i> Thêm Lược Ghi</button></div>${countHint}${draft}${cards || '<div class="we-empty">Chưa tạo lược ghi nào, có thể thêm thủ công.</div>'}`;
-  }
-
-  function renderMemoryOverview(state) {
-    const items = Array.isArray(state.event_memory?.big_summaries) ? state.event_memory.big_summaries : [];
-    const editor = (big, isNew) => `<div class="we-memory-editor">
-      <div class="we-memory-form-grid"><div class="we-input-group"><label>Tầng Bắt Đầu</label><input class="we-memory-big-start" type="number" min="0" value="${h(String(big.startLayer ?? 0))}"></div><div class="we-input-group"><label>Tầng Kết Thúc</label><input class="we-memory-big-end" type="number" min="0" value="${h(String(big.endLayer ?? 0))}"></div></div>
-      <div class="we-input-group"><label>Nội Dung Tổng Thuật</label><textarea class="we-memory-big-content" rows="10">${h(big.content || '')}</textarea><div class="we-hint">API nhắm mục tiêu tối thiểu 500 chữ, tối đa bằng một nửa nội dung lược ghi của đợt này; khi tối đa dưới 500 thì cả hai đều lấy 500 chữ. Vượt quá vẫn giữ nguyên vẹn; xóa tổng thuật sẽ không lùi lại con trỏ xử lý lược ghi.</div></div>
-      <div class="we-memory-editor-actions"><button class="we-btn we-memory-cancel-edit" type="button">Hủy</button><button class="we-btn we-btn-primary we-memory-save-big" data-new="${isNew ? 'true' : 'false'}" type="button">Lưu</button></div>
-    </div>`;
-    const draft = _memoryEditingBig === '__new__'
-      ? `<div class="we-memory-record we-memory-record-new" data-big-id="__new__">${editor({ startLayer: 0, endLayer: 0, content: '' }, true)}</div>` : '';
-    const cards = items.map((big, index) => {
-      const collapseKey = `big:${big.id}`;
-      const defaultCollapsed = index !== items.length - 1;
-      return `<div class="${memoryRecordClass(collapseKey, 'we-memory-overview-record', defaultCollapsed)}" data-big-id="${h(big.id)}">
-      <div class="we-memory-record-head" data-memory-collapse-key="${h(collapseKey)}" role="button" tabindex="0"><div><div class="we-memory-record-title">Tổng Thuật ${index + 1}</div><div class="we-memory-record-meta">Tầng ${h(String(big.startLayer))}–${h(String(big.endLayer))} · ${h(big.id)}</div></div>
-        <div class="we-memory-record-actions">${memoryRecordToggle(collapseKey, defaultCollapsed)}<button class="we-icon-btn we-memory-edit-big" type="button" title="Chỉnh Sửa"><i class="fa-solid fa-pen"></i></button><button class="we-icon-btn we-memory-delete-big" type="button" title="Xóa"><i class="fa-solid fa-trash"></i></button></div>
-      </div>
-      ${memoryRecordBody(collapseKey, _memoryEditingBig === big.id ? editor(big, false) : `<div class="we-memory-summary-text">${h(big.content || '(Nội dung trống)')}</div>`, defaultCollapsed)}
-    </div>`;
-    }).join('');
-    const countHint = items.length > 1 ? `<div class="we-hint">Tổng cộng ${items.length} tổng thuật, mặc định mở rộng mục mới nhất.</div>` : '';
-    return `<div class="we-memory-page-actions"><button class="we-btn we-btn-primary" id="we-memory-add-big" type="button"><i class="fa-solid fa-plus"></i> Thêm Tổng Thuật</button></div>${countHint}${draft}${cards || '<div class="we-empty">Chưa tạo tổng thuật nào, có thể thêm thủ công.</div>'}`;
-  }
-
-  function renderMemorySubView(view) {
-    const scope = String(window.WORLD_ENGINE_CORE?.getChatId?.() || 'default');
-    if (_memoryCollapseScope !== scope) {
-      _memoryCollapseScope = scope;
-      _memoryCollapsedRecords.clear();
-      _memorySeenRecords.clear();
-    }
-    const state = window.MEMORY_ENGINE_DATA?.loadState?.() || {};
-    const meta = MEMORY_VIEW_META[view] || { title: view, poem: '' };
-    const content = view === 'people' ? renderMemoryPeople(state)
-      : view === 'entities' ? renderMemoryEntities(state)
-      : view === 'minutes' ? renderMemoryMinutes(state)
-      : renderMemoryOverview(state);
-    return `<div class="we-sub-topbar"><button class="we-icon-btn" id="we-memory-btn-back" type="button" title="Quay Lại"><i class="fa-solid fa-arrow-left"></i></button><span class="we-sub-title">${meta.title}</span><span class="we-memory-sub-poem">${meta.poem}</span></div><div class="we-memory-subview">${content}</div>`;
-  }
-
-  function clearMemoryEditing() {
-    _memoryEditingPerson = null;
-    _memoryEditingEntity = null;
-    _memoryEditingSmall = null;
-    _memoryEditingBig = null;
-  }
-
-  function nextMemoryUiId(items, prefix) {
-    const pattern = new RegExp(`^${prefix}_(\\d+)$`);
-    const max = (items || []).reduce((number, item) => {
-      const match = pattern.exec(String(item?.id || ''));
-      return Math.max(number, match ? Number(match[1]) : 0);
-    }, 0);
-    return `${prefix}_${String(max + 1).padStart(6, '0')}`;
-  }
-
-  function saveEditedMemoryState(state, message, afterRepair) {
-    if (window.MEMORY_ENGINE?.isRunning?.()) {
-      showToast('Tác vụ ký ức đang chạy, tạm thời không thể sửa dữ liệu', true);
-      return false;
-    }
-    const previousState = window.MEMORY_ENGINE_DATA?.loadState?.();
-    window.MEMORY_ENGINE?.repairStateIndexes?.(state, previousState);
-    if (typeof afterRepair === 'function') afterRepair(state);
-    window.MEMORY_ENGINE?.commitManualState?.(state, previousState);
-    window.MEMORY_ENGINE_DATA?.saveState?.(state);
-    window.WORLD_ENGINE_CHATCACHE?.forScope?.('memory')?.afterEvolution?.();
-    window.MEMORY_ENGINE?.applyInjection?.();
-    showToast(message || 'Đã lưu dữ liệu ký ức');
-    return true;
-  }
-
-  function readMemoryEntryRows(editor) {
-    return Array.from(editor?.querySelectorAll?.('[data-memory-entry-row]') || []).map(row => ({
-      time: String(row.querySelector('.we-memory-entry-time')?.value || '').trim(),
-      content: String(row.querySelector('.we-memory-entry-content')?.value || '').trim(),
-      known_by: Array.from(new Set(String(row.querySelector('.we-memory-entry-known-by')?.value || '')
-        .split(/[\/／,，\n]/).map(value => value.trim()).filter(Boolean)))
-    })).filter(entry => entry.content);
-  }
-
-  function bindMemoryView() {
-    const back = document.getElementById('we-memory-btn-back');
-    if (back) back.onclick = () => { clearMemoryEditing(); _memoryView = 'home'; _memorySelectedNavView = null; refresh(); };
-    const settingsBack = document.getElementById('we-memory-settings-back');
-    if (settingsBack) settingsBack.onclick = () => { _memorySettingsOpen = false; clearMemoryEditing(); refresh(); };
-
-    document.querySelectorAll('.we-memory-nav-row[data-memory-view]').forEach(row => {
-      row.onclick = () => {
-        const view = row.dataset.memoryView;
-        if (_memorySelectedNavView === view) {
-          _memorySelectedNavView = null;
-          _memoryView = view;
-        } else {
-          _memorySelectedNavView = view;
-        }
-        refresh();
-      };
-    });
-
-    const toggleMemoryRecord = (key, card) => {
-      if (!key || !card) return;
-      const body = card.querySelector(':scope > .we-memory-record-body');
-      const button = card.querySelector(':scope > .we-memory-record-head .we-memory-toggle-record');
-      const collapse = !_memoryCollapsedRecords.has(key);
-      if (collapse) _memoryCollapsedRecords.add(key); else _memoryCollapsedRecords.delete(key);
-      card.classList.toggle('is-collapsed', collapse);
-      if (body) body.hidden = collapse;
-      if (button) {
-        button.title = collapse ? 'Mở Rộng' : 'Thu Gọn';
-        button.setAttribute('aria-expanded', collapse ? 'false' : 'true');
-        const icon = button.querySelector('i');
-        if (icon) icon.className = `fa-solid fa-chevron-${collapse ? 'right' : 'down'}`;
-      }
-    };
-    document.querySelectorAll('.we-memory-toggle-record').forEach(button => {
-      button.onclick = event => {
-        event.stopPropagation();
-        toggleMemoryRecord(button.dataset.memoryCollapseKey, button.closest('.we-memory-record'));
-      };
-    });
-    document.querySelectorAll('.we-memory-record-head[data-memory-collapse-key]').forEach(head => {
-      const activate = event => {
-        if (event.target.closest('button, input, textarea, select, a')) return;
-        toggleMemoryRecord(head.dataset.memoryCollapseKey, head.closest('.we-memory-record'));
-      };
-      head.onclick = activate;
-      head.onkeydown = event => {
-        if (event.key !== 'Enter' && event.key !== ' ') return;
-        event.preventDefault();
-        activate(event);
-      };
-    });
-
-    const addPerson = document.getElementById('we-memory-add-person');
-    if (addPerson) addPerson.onclick = () => { clearMemoryEditing(); _memoryEditingPerson = '__new__'; refresh(); };
-    document.querySelectorAll('.we-memory-edit-person').forEach(button => {
-      button.onclick = () => {
-        const id = button.closest('[data-person-id]')?.dataset.personId || null;
-        if (id) expandMemoryRecord(`person:${id}`);
-        clearMemoryEditing(); _memoryEditingPerson = id; refresh();
-      };
-    });
-    document.querySelectorAll('.we-memory-delete-person').forEach(button => {
-      button.onclick = () => {
-        const id = button.closest('[data-person-id]')?.dataset.personId;
-        const state = window.MEMORY_ENGINE_DATA?.loadState?.();
-        const person = state?.personal_memory?.find(item => item.id === id);
-        if (!person || !confirm(`Xóa nhân vật "${person.names?.[0] || id}" cùng toàn bộ ký ức liên quan?`)) return;
-        state.personal_memory = state.personal_memory.filter(item => item.id !== id);
-        if (saveEditedMemoryState(state, 'Đã xóa nhân vật')) { clearMemoryEditing(); refresh(); }
-      };
-    });
-    document.querySelectorAll('.we-memory-save-person').forEach(button => {
-      button.onclick = () => {
-        const editor = button.closest('[data-person-editor]');
-        const state = window.MEMORY_ENGINE_DATA?.loadState?.();
-        if (!editor || !state) return;
-        const names = Array.from(new Set(String(editor.querySelector('.we-memory-person-names')?.value || '')
-          .split(/[\/／,，\n]/).map(value => value.trim()).filter(Boolean)));
-        if (!names.length) { showToast('Nhân vật cần ít nhất một tên', true); return; }
-        const id = editor.dataset.new === 'true'
-          ? nextMemoryUiId(state.personal_memory, 'char') : editor.dataset.personId;
-        const duplicated = state.personal_memory.some(item => item.id !== id && (item.names || []).some(name =>
-          names.some(candidate => candidate.toLocaleLowerCase() === String(name).trim().toLocaleLowerCase())
-        ));
-        if (duplicated) { showToast('Tên hoặc biệt danh đã được nhân vật khác sử dụng', true); return; }
-        const entries = readMemoryEntryRows(editor);
-        if (entries.some(entry => Array.from(entry.content).length > 50)) { showToast('Mỗi ký ức nhân vật không được vượt quá 50 chữ', true); return; }
-        const memory = {};
-        for (const entry of entries) {
-          if (!Array.isArray(memory[entry.time])) memory[entry.time] = [];
-          if (!memory[entry.time].includes(entry.content)) memory[entry.time].push(entry.content);
-        }
-        const person = { id, names, memory };
-        const index = state.personal_memory.findIndex(item => item.id === id);
-        if (index >= 0) state.personal_memory[index] = person; else state.personal_memory.push(person);
-        if (saveEditedMemoryState(state, 'Đã lưu ký ức nhân vật', repaired =>
-          window.MEMORY_ENGINE?.replaceKnownByRecords?.(repaired, id, entries.map(entry => ({
-            time: entry.time, memory: entry.content, known_by: entry.known_by
-          })))
-        )) { clearMemoryEditing(); refresh(); }
-      };
-    });
-
-    const addEntity = document.getElementById('we-memory-add-entity');
-    if (addEntity) addEntity.onclick = () => { clearMemoryEditing(); _memoryEditingEntity = '__new__'; refresh(); };
-    document.querySelectorAll('.we-memory-edit-entity').forEach(button => {
-      button.onclick = () => {
-        const card = button.closest('[data-entity-id]');
-        const key = card ? `${card.dataset.entityType}:${card.dataset.entityId}` : null;
-        if (key) {
-          expandMemoryRecord(`entity-category:${card.dataset.entityType}`);
-          expandMemoryRecord(`entity:${key}`);
-        }
-        clearMemoryEditing();
-        _memoryEditingEntity = key;
-        refresh();
-      };
-    });
-    document.querySelectorAll('.we-memory-delete-entity').forEach(button => {
-      button.onclick = () => {
-        const card = button.closest('[data-entity-id]'), type = card?.dataset.entityType, id = card?.dataset.entityId;
-        const state = window.MEMORY_ENGINE_DATA?.loadState?.();
-        const entity = state?.entity_memory?.[type]?.find(item => item.id === id);
-        if (!entity || !confirm(`Xóa ${MEMORY_ENTITY_LABELS[type] || 'thực thể'} "${entity.name || id}" cùng toàn bộ lịch sử liên quan?`)) return;
-        state.entity_memory[type] = state.entity_memory[type].filter(item => item.id !== id);
-        if (saveEditedMemoryState(state, 'Đã xóa thực thể')) { clearMemoryEditing(); refresh(); }
-      };
-    });
-    document.querySelectorAll('.we-memory-save-entity').forEach(button => {
-      button.onclick = () => {
-        const editor = button.closest('[data-entity-editor]');
-        const state = window.MEMORY_ENGINE_DATA?.loadState?.();
-        if (!editor || !state) return;
-        const oldType = editor.dataset.originalType;
-        const type = editor.querySelector('.we-memory-entity-type')?.value;
-        const name = String(editor.querySelector('.we-memory-entity-name')?.value || '').trim();
-        const aliases = Array.from(new Set(String(editor.querySelector('.we-memory-entity-aliases')?.value || '')
-          .split(/[\/／,，\n]/).map(value => value.trim()).filter(Boolean)))
-          .filter(alias => alias.toLocaleLowerCase() !== name.toLocaleLowerCase());
-        if (!MEMORY_ENTITY_LABELS[type] || !name) { showToast('Vui lòng chọn loại và điền tên thực thể', true); return; }
-        const oldId = editor.dataset.entityId;
-        const incomingNames = [name, ...aliases].map(value => value.toLocaleLowerCase());
-        const duplicate = (state.entity_memory?.[type] || []).some(item => item.id !== oldId
-          && [item.name, ...(item.aliases || [])].some(existing => incomingNames.includes(String(existing || '').trim().toLocaleLowerCase())));
-        if (duplicate) { showToast('Tên hoặc biệt danh trong cùng loại đã được thực thể khác sử dụng', true); return; }
-        const prefix = { organization: 'org', object: 'obj', ability: 'ability', location: 'location' }[type];
-        let id = oldId;
-        if (editor.dataset.new === 'true' || oldType !== type) id = nextMemoryUiId(state.entity_memory?.[type], prefix);
-        const entity = {
-          id, name, aliases,
-          description: String(editor.querySelector('.we-memory-entity-description')?.value || '').trim(),
-          history: readMemoryEntryRows(editor).map(entry => ({ time: entry.time, event: entry.content }))
-        };
-        if (editor.dataset.new !== 'true') state.entity_memory[oldType] = state.entity_memory[oldType].filter(item => item.id !== oldId);
-        state.entity_memory[type].push(entity);
-        if (saveEditedMemoryState(state, 'Đã lưu ký ức thực thể')) { clearMemoryEditing(); refresh(); }
-      };
-    });
-
-    document.querySelectorAll('.we-memory-add-entry').forEach(button => {
-      button.onclick = () => {
-        const editor = button.closest('.we-memory-editor');
-        const list = editor?.querySelector('.we-memory-entry-list');
-        if (!list) return;
-        list.querySelector('.we-memory-entry-empty')?.remove();
-        list.insertAdjacentHTML('beforeend', renderMemoryEntryRow('', '', button.dataset.entryKind));
-        bindMemoryEntryRemoveButtons(list);
-      };
-    });
-    bindMemoryEntryRemoveButtons(panelBodyElement);
-    document.querySelectorAll('.we-memory-cancel-edit').forEach(button => {
-      button.onclick = () => { clearMemoryEditing(); refresh(); };
-    });
-
-    const addSmall = document.getElementById('we-memory-add-small');
-    if (addSmall) addSmall.onclick = () => { clearMemoryEditing(); _memoryEditingSmall = '__new__'; refresh(); };
-    document.querySelectorAll('.we-memory-edit-small').forEach(button => {
-      button.onclick = () => {
-        const id = button.closest('[data-small-id]')?.dataset.smallId || null;
-        if (id) expandMemoryRecord(`small:${id}`);
-        clearMemoryEditing(); _memoryEditingSmall = id; refresh();
-      };
-    });
-    document.querySelectorAll('.we-memory-delete-small').forEach(button => {
-      button.onclick = () => {
-        const id = button.closest('[data-small-id]')?.dataset.smallId;
-        const state = window.MEMORY_ENGINE_DATA?.loadState?.(), items = state?.event_memory?.small_summaries || [];
-        const index = items.findIndex(item => item.id === id);
-        if (index < 0 || !confirm(`Xóa lược ghi này?${index < (parseInt(state.event_memory.big_summary_cursor) || 0) ? ' Nó đã được đưa vào tổng thuật, nội dung tổng thuật hiện có sẽ không tự động cập nhật.' : ''}`)) return;
-        items.splice(index, 1);
-        if (index < (parseInt(state.event_memory.big_summary_cursor) || 0)) state.event_memory.big_summary_cursor--;
-        if (saveEditedMemoryState(state, 'Đã xóa lược ghi')) { clearMemoryEditing(); refresh(); }
-      };
-    });
-    document.querySelectorAll('.we-memory-save-small').forEach(button => {
-      button.onclick = () => {
-        const card = button.closest('[data-small-id]'), id = card?.dataset.smallId;
-        const content = String(card?.querySelector('.we-memory-small-content')?.value || '').trim();
-        const startLayer = Math.max(0, parseInt(card?.querySelector('.we-memory-small-start')?.value) || 0);
-        const endLayer = Math.max(startLayer, parseInt(card?.querySelector('.we-memory-small-end')?.value) || startLayer);
-        if (!content) { showToast('Nội dung lược ghi không được để trống', true); return; }
-        const state = window.MEMORY_ENGINE_DATA?.loadState?.(), items = state?.event_memory?.small_summaries || [];
-        if (button.dataset.new === 'true') {
-          items.push({ id: nextMemoryUiId(items, 'small'), startLayer, endLayer, content });
-          if (saveEditedMemoryState(state, 'Đã thêm lược ghi')) { clearMemoryEditing(); refresh(); }
-          return;
-        }
-        const index = items.findIndex(item => item.id === id);
-        if (index < 0) return;
-        items[index] = { ...items[index], startLayer, endLayer, content };
-        if (saveEditedMemoryState(state, 'Đã sửa lược ghi')) { clearMemoryEditing(); refresh(); }
-      };
-    });
-    const addBig = document.getElementById('we-memory-add-big');
-    if (addBig) addBig.onclick = () => { clearMemoryEditing(); _memoryEditingBig = '__new__'; refresh(); };
-    document.querySelectorAll('.we-memory-edit-big').forEach(button => {
-      button.onclick = () => {
-        const id = button.closest('[data-big-id]')?.dataset.bigId || null;
-        if (id) expandMemoryRecord(`big:${id}`);
-        clearMemoryEditing(); _memoryEditingBig = id; refresh();
-      };
-    });
-    document.querySelectorAll('.we-memory-delete-big').forEach(button => {
-      button.onclick = () => {
-        const id = button.closest('[data-big-id]')?.dataset.bigId;
-        const state = window.MEMORY_ENGINE_DATA?.loadState?.(), items = state?.event_memory?.big_summaries || [];
-        const index = items.findIndex(item => item.id === id);
-        if (index < 0 || !confirm('Xóa tổng thuật này? Các lược ghi tương ứng vẫn giữ trạng thái "đã xử lý", hệ thống sẽ không tự động tạo lại tổng thuật.')) return;
-        items.splice(index, 1);
-        if (saveEditedMemoryState(state, 'Đã xóa tổng thuật')) { clearMemoryEditing(); refresh(); }
-      };
-    });
-    document.querySelectorAll('.we-memory-save-big').forEach(button => {
-      button.onclick = () => {
-        const card = button.closest('[data-big-id]'), id = card?.dataset.bigId;
-        const content = String(card?.querySelector('.we-memory-big-content')?.value || '').trim();
-        const startLayer = Math.max(0, parseInt(card?.querySelector('.we-memory-big-start')?.value) || 0);
-        const endLayer = Math.max(startLayer, parseInt(card?.querySelector('.we-memory-big-end')?.value) || startLayer);
-        if (!content) { showToast('Nội dung tổng thuật không được để trống', true); return; }
-        const state = window.MEMORY_ENGINE_DATA?.loadState?.();
-        const items = state?.event_memory?.big_summaries || [];
-        if (button.dataset.new === 'true') {
-          items.push({ id: nextMemoryUiId(items, 'big'), startLayer, endLayer, content });
-          if (saveEditedMemoryState(state, 'Đã thêm tổng thuật')) { clearMemoryEditing(); refresh(); }
-          return;
-        }
-        const item = state?.event_memory?.big_summaries?.find(big => big.id === id);
-        if (!item) return;
-        Object.assign(item, { startLayer, endLayer, content });
-        if (saveEditedMemoryState(state, 'Đã sửa tổng thuật')) { clearMemoryEditing(); refresh(); }
-      };
-    });
-  }
-
-  function bindMemoryEntryRemoveButtons(root) {
-    root?.querySelectorAll?.('.we-memory-remove-entry').forEach(button => {
-      button.onclick = () => button.closest('[data-memory-entry-row]')?.remove();
-    });
-  }
-
-  const MEMORY_SETTINGS_TABS = [
-    { key: 'common', label: 'Thường Dùng' },
-    { key: 'link', label: 'Liên Kết' },
-    { key: 'advanced', label: 'Nâng Cao' },
-    { key: 'mechanics', label: 'Cơ Chế Cục Bộ' },
-    { key: 'archive', label: 'Lưu Trữ' },
-    { key: 'worldbook', label: 'Worldbook' },
-    { key: 'debug', label: 'Gỡ Lỗi' },
-    { key: 'about', label: 'Giới Thiệu' }
-  ];
-
-  function renderMemoryDebug() {
-    const engine = window.MEMORY_ENGINE;
-    const dbg = engine?.getLastDebug?.() || null;
-    const sentPrompt = typeof dbg?.prompt === 'string' ? dbg.prompt
-      : (typeof dbg?.requestPrompt === 'string' ? dbg.requestPrompt : '');
-    const apiResult = typeof dbg?.rawResult === 'string' ? dbg.rawResult
-      : (typeof dbg?.apiResponse === 'string' ? dbg.apiResponse
-        : (typeof dbg?.response === 'string' ? dbg.response : ''));
-    const card = (title, meta, content, emptyText) => {
-      const hasContent = content !== null && content !== undefined && content !== '';
-      const shown = typeof content === 'string' ? content : (hasContent ? JSON.stringify(content, null, 2) : '');
-      return '<div class="we-prompt-seg-card">'
-        + '<div class="we-prompt-seg-head" data-we-seg-toggle>'
-        + '<span class="we-prompt-seg-arrow">▶</span>'
-        + '<span class="we-prompt-seg-label">' + h(title) + '</span>'
-        + '<span class="we-prompt-seg-meta">' + h(meta || (hasContent ? shown.length + ' chữ' : 'Chưa có')) + '</span>'
-        + '</div>'
-        + '<div class="we-prompt-seg-body" style="display:none;">'
-        + (hasContent ? '<pre class="we-prompt-seg-pre">' + h(shown) + '</pre>' : '<div class="we-prompt-seg-empty">' + h(emptyText) + '</div>')
-        + '</div></div>';
-    };
-    return '<div class="we-prompt-debug">'
-      + '<div class="we-prompt-debug-summary">Chỉ hiển thị bản ghi chạy thực tế gần nhất; Prompt ký ức tích hợp sẵn không hiển thị trong cài đặt và không cho phép sửa đổi.</div>'
-      + renderInjectInspector('memory')
-      + card('Prompt Thực Tế Gửi Đến API Ký Ức', sentPrompt ? sentPrompt.length + ' chữ' : 'Chưa có', sentPrompt, 'Sau khi thực hiện trích xuất nhân vật/thực thể/lược ghi hoặc tạo tổng thuật, sẽ hiển thị Prompt đầy đủ thực sự đã gửi lần này.')
-      + card('Phản Hồi Gốc Từ API Ký Ức', apiResult ? apiResult.length + ' chữ' : 'Chưa có', apiResult, 'Sau khi thực hiện trích xuất ký ức sẽ hiển thị phản hồi gốc từ API.')
-      + '<div style="display:flex;gap:6px;margin-top:8px;"><button class="we-btn" id="we-memory-export-prompt" style="flex:1;">Xuất Prompt Đầy Đủ</button><button class="we-btn" id="we-memory-export-raw-result" style="flex:1;">Xuất Phản Hồi API</button></div>'
-      + '</div>';
-  }
-
-  function renderMemoryCheckpointSection() {
-    const data = window.MEMORY_ENGINE_DATA;
-    const checkpoint = data?.loadCheckpoint?.() || null;
-    const count = Array.isArray(checkpoint?.personal_memory) ? checkpoint.personal_memory.length : 0;
-    const entityCount = ['organization', 'object', 'ability', 'location']
-      .reduce((sum, type) => sum + (Array.isArray(checkpoint?.entity_memory?.[type]) ? checkpoint.entity_memory[type].length : 0), 0);
-    const smallSummaryCount = Array.isArray(checkpoint?.event_memory?.small_summaries)
-      ? checkpoint.event_memory.small_summaries.length : 0;
-    const bigSummaries = Array.isArray(checkpoint?.event_memory?.big_summaries) ? checkpoint.event_memory.big_summaries : [];
-    const bigSummaryContent = bigSummaries.length
-      ? '<div class="we-chatcache-list">' + bigSummaries.map(item =>
-          '<div class="we-prompt-seg-card"><div class="we-prompt-seg-head"><span class="we-prompt-seg-label">Tầng '
-          + h(item.startLayer) + '-' + h(item.endLayer) + '</span></div><div class="we-prompt-seg-body" style="display:block;"><pre class="we-prompt-seg-pre">'
-          + h(item.content) + '</pre></div></div>'
-        ).join('') + '</div>'
-      : '<div class="we-empty">Chưa có tổng thuật</div>';
-    const smallSummaryContent = smallSummaryCount
-      ? '<div class="we-chatcache-list">' + checkpoint.event_memory.small_summaries.map(item =>
-          '<div class="we-prompt-seg-card"><div class="we-prompt-seg-head"><span class="we-prompt-seg-label">Tầng '
-          + h(item.startLayer) + '-' + h(item.endLayer) + '</span></div><div class="we-prompt-seg-body" style="display:block;"><pre class="we-prompt-seg-pre">'
-          + h(item.content) + '</pre></div></div>'
-        ).join('') + '</div>'
-      : '<div class="we-empty">Chưa có lược ghi</div>';
-    const content = checkpoint
-      ? '<div class="we-hint">Bao gồm ' + count + ' nhân vật, ' + entityCount + ' thực thể thế giới, ' + smallSummaryCount + ' lược ghi và ' + bigSummaries.length + ' tổng thuật</div>'
-        + '<div class="we-section" style="margin-top:10px;"><div class="we-section-title">' + sectionHeader('Tổng Thuật · ' + bigSummaries.length + ' mục', 'memory-checkpoint-big-summary') + '</div>' + sectionBody('memory-checkpoint-big-summary', bigSummaryContent) + '</div>'
-        + '<div class="we-section" style="margin-top:10px;"><div class="we-section-title">' + sectionHeader('Lược Ghi · ' + smallSummaryCount + ' mục', 'memory-checkpoint-small-summaries') + '</div>' + sectionBody('memory-checkpoint-small-summaries', smallSummaryContent) + '</div>'
-        + '<div class="we-section" style="margin-top:10px;"><div class="we-section-title">' + sectionHeader('JSON Đầy Đủ', 'memory-checkpoint-json') + '</div>' + sectionBody('memory-checkpoint-json', '<pre class="we-prompt-seg-pre">' + h(JSON.stringify(checkpoint, null, 2)) + '</pre>') + '</div>'
-      : '<div class="we-empty">Chưa có điểm lưu trữ</div>';
-    return '<div class="we-section" style="margin-top:16px;"><div class="we-section-title">'
-      + sectionHeader(checkpoint ? 'Điểm Lưu Trữ - ' + count + ' Nhân Vật / ' + entityCount + ' Thực Thể' : 'Điểm Lưu Trữ', 'memory-checkpoint-section')
-      + '</div>' + sectionBody('memory-checkpoint-section', content) + '</div>';
-  }
-
-  function renderMemorySnapshotRows() {
-    const list = window.WORLD_ENGINE_CHATCACHE?.forScope?.('memory')?.listSnapshots?.() || [];
-    if (!list.length) return '<div class="we-empty">Chưa có bản lưu ký ức</div>';
-    return list.map(item => {
-      let time = '';
-      try { time = new Date(item.createdAt).toLocaleString(); } catch (error) {}
-      const count = Number(item.characters) || 0;
-      const entityCount = Number(item.entities) || 0;
-      return '<div class="we-snapshot-row" data-memory-snap-id="' + u(item.id) + '">'
-        + '<div class="we-snapshot-main"><div class="we-snapshot-name"><span class="we-snapshot-badge' + (item.auto ? ' is-auto' : '') + '">' + (item.auto ? 'Tự Động' : 'Thủ Công') + '</span>' + h(item.name) + '</div>'
-        + '<div class="we-snapshot-meta">Vòng ' + (item.round || 0) + ' · ' + count + ' nhân vật · ' + entityCount + ' thực thể' + (time ? ' · ' + h(time) : '') + '</div></div>'
-        + '<div class="we-snapshot-actions">'
-        + '<button class="we-icon-btn" data-memory-snap-action="restore" title="Khôi Phục"><i class="fa-solid fa-rotate-left"></i></button>'
-        + '<button class="we-icon-btn" data-memory-snap-action="rename" title="Đổi Tên"><i class="fa-solid fa-pen"></i></button>'
-        + '<button class="we-icon-btn" data-memory-snap-action="export" title="Xuất"><i class="fa-solid fa-download"></i></button>'
-        + '<button class="we-icon-btn" data-memory-snap-action="delete" title="Xóa"><i class="fa-solid fa-trash"></i></button>'
-        + '</div></div>';
-    }).join('');
-  }
-
   function bindFilterControls(scope) {
-    const memoryScope = scope === 'memory';
-    const id = suffix => memoryScope ? 'we-memory-' + suffix : 'we-' + suffix;
+    const npcScope = scope === 'npc';
+    const id = suffix => npcScope ? 'we-npc-' + suffix : 'we-' + suffix;
     const textarea = document.getElementById(id('filter-regex'));
     if (!textarea) return;
     const tagsBox = document.getElementById(id('filter-tags'));
@@ -1143,368 +442,6 @@ window.WORLD_ENGINE_UI = (function() {
     let timer;
     textarea.addEventListener('input', () => { clearTimeout(timer); timer = setTimeout(syncTags, 300); });
     syncTags();
-  }
-
-  function renderMemorySettingsView() {
-    const settings = window.MEMORY_ENGINE_SETTINGS?.getSettings(true) || {};
-    const extra = renderSettingsAfterCheckpoint({ scope: 'memory' });
-    const sec = (id, title, body) =>
-      '<div class="we-section"><div class="we-section-title">' + sectionHeader(title, id) + '</div>'
-      + sectionBody(id, body) + '</div>';
-    const mode = settings.evolveMode === 'manual' ? 'manual' : 'auto';
-    const bigSummaryEveryX = Math.max(1, parseInt(settings.bigSummaryEveryX) || 5);
-    const bigSummaryInjectLimit = Math.max(1, parseInt(settings.bigSummaryInjectLimit) || 3);
-    const hideCoveredRawText = settings.hideCoveredRawText !== false;
-    const recentRawRounds = Math.max(0, parseInt(settings.recentRawRounds) || 0);
-    const referenceRawRounds = Math.max(0, parseInt(settings.referenceRawRounds) || 0);
-    const referenceSmallSummaryCount = Math.max(0, parseInt(settings.referenceSmallSummaryCount) || 0);
-    const referenceBigSummaryCount = Math.max(0, parseInt(settings.referenceBigSummaryCount) || 0);
-    const worldEngineMemoryLimit = Math.max(1, parseInt(settings.worldEngineMemoryLimit) || 5);
-    const searchDepth = Math.max(1, parseInt(settings.searchDepth) || 5);
-    const maxPerCharacter = Math.max(1, parseInt(settings.maxPerCharacter) || 20);
-    const backfillBatch = Math.max(1, parseInt(settings.backfillBatchSize) || 5);
-    const backfillEnd = Math.max(0, parseInt(settings.backfillEndLayer) || 0);
-    const backfillRetries = Math.max(0, parseInt(settings.backfillRetries) || 0);
-    const summaryBackfillSmallEveryX = Math.max(1, parseInt(settings.summaryBackfillSmallEveryX) || 5);
-    const summaryBackfillBigEveryX = Math.max(1, parseInt(settings.summaryBackfillBigEveryX) || 5);
-    const apiTemperature = Number.isFinite(Number(settings.temperature)) ? Math.max(0, Number(settings.temperature)) : 0.2;
-    const apiMaxTokens = Math.max(1, parseInt(settings.maxTokens) || 65000);
-    const apiTimeoutSec = Math.max(0, Math.round((Number(settings.apiTimeoutMs) || 120000) / 1000));
-
-    const apiBody = `
-      <div class="we-input-group">
-        <label>Phương Thức Kết Nối</label>
-        <select id="we-connection-mode" style="width:100%;">
-          <option value="direct" ${settings.connectionMode !== 'proxy' ? 'selected' : ''}>Kết Nối Trực Tiếp (Mặc Định)</option>
-          <option value="proxy" ${settings.connectionMode === 'proxy' ? 'selected' : ''}>Qua Proxy Của SillyTavern (Khắc Phục CORS)</option>
-        </select>
-      </div>
-      <div class="we-input-group">
-        <label>URL API Của Memory Engine (Tương Thích OpenAI)</label>
-        <input type="text" id="we-api-url" value="${u(settings.apiUrl || '')}" placeholder="https://api.openai.com/v1">
-      </div>
-      <div class="we-input-group">
-        <label>API Key Của Memory Engine</label>
-        <input type="password" id="we-api-key" value="${u(settings.apiKey || '')}">
-      </div>
-      <div class="we-input-group" style="display:flex;gap:6px;align-items:end;">
-        <div style="flex:1;">
-          <label>Mô Hình</label>
-          <input type="text" id="we-model" value="${u(settings.model || 'gpt-3.5-turbo')}" placeholder="Tên mô hình" style="width:100%;">
-        </div>
-        <button class="we-btn" id="we-fetch-models" style="white-space:nowrap;flex-shrink:0;">Lấy Danh Sách</button>
-      </div>
-      <div class="we-input-group">
-        <select id="we-model-list" style="display:none;width:100%;margin-top:4px;"><option value="">-- Chọn Mô Hình --</option></select>
-      </div>
-      <div class="we-input-group" style="display:flex;gap:6px;">
-        <div style="flex:1;"><label>Nhiệt Độ</label><input type="number" id="we-temperature" min="0" step="0.1" value="${apiTemperature}" style="width:100%;"></div>
-        <div style="flex:1;"><label>Token Đầu Ra Tối Đa</label><input type="number" id="we-max-tokens" min="1" step="1" value="${apiMaxTokens}" style="width:100%;"></div>
-      </div>
-      <div class="we-input-group">
-        <label>Thời Gian Chờ Yêu Cầu (Giây)</label>
-        <input type="number" id="we-api-timeout-sec" min="0" step="1" value="${apiTimeoutSec}" style="width:100%;">
-        <div style="font-size:11px;color:var(--we-text3);margin-top:3px;">Ở đây chỉ cấu hình cho Memory Engine; cách xử lý yêu cầu dùng chung với World Engine, nhưng các giá trị cấu hình không ghi đè lẫn nhau.</div>
-      </div>`;
-
-    const modeBody = `
-      <div class="we-input-group">
-        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
-          <input type="checkbox" id="we-memory-engine-enabled" ${settings.engineEnabled !== false ? 'checked' : ''}>
-          Bật Memory Engine
-        </label>
-        <div style="font-size:11px;color:var(--we-text3);margin-top:3px;">Sau khi tắt sẽ dừng trích xuất và chèn ký ức, không ảnh hưởng đến World Engine.</div>
-      </div>
-      <div class="we-input-group">
-        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
-          <input type="checkbox" id="we-memory-first-layer-ai-opening" ${settings.firstLayerIsAiOpening !== false ? 'checked' : ''}>
-          Tầng Đầu Là Lời Mở Đầu Của AI
-        </label>
-        <div style="font-size:11px;color:var(--we-text3);margin-top:3px;">Mặc định chọn: tầng 0 không tham gia trích xuất nhân vật/thực thể, lược ghi và điền lại hàng loạt; bỏ chọn thì tầng 0 được xử lý như đoạn hội thoại thông thường.</div>
-      </div>
-      <div class="we-input-group">
-        <label>Chế Độ Diễn Biến Ký Ức</label>
-        <select id="we-memory-evolve-mode" style="width:100%;">
-          <option value="auto" ${mode === 'auto' ? 'selected' : ''}>Tự Động · Trích Xuất Mỗi Vòng</option>
-          <option value="manual" ${mode === 'manual' ? 'selected' : ''}>Thủ Công (Chỉ Kích Hoạt Diễn Biến Ký Ức Thủ Công)</option>
-        </select>
-      </div>
-      <div style="font-size:11px;color:var(--we-text3);margin-bottom:8px;">Nhân vật, thực thể và lược ghi luôn xử lý theo đơn vị một vòng, và gộp thành một yêu cầu API. Roll lại không tính là vòng mới.</div>
-      <div class="we-input-group">
-        <label>Xử Lý Tổng Thuật</label>
-        <div style="font-size:11px;color:var(--we-text3);margin-top:3px;">Mỗi vòng tạo một lược ghi nhắm mục tiêu 50–200 chữ; mỗi khi tích lũy đủ X lược ghi chưa xử lý sẽ tạo tổng thuật độc lập. Tổng thuật nhắm mục tiêu tối thiểu 500 chữ, tối đa bằng một nửa nội dung lược ghi của đợt này; khi tối đa dưới 500 thì cả hai đều lấy 500 chữ. Vượt mục tiêu vẫn lưu nguyên vẹn, tổng thuật cũ sẽ không bị ghi đè.</div>
-      </div>
-      <div class="we-input-group">
-        <label>Số Vòng Cách Nhau Giữa Các Lần Tổng Thuật (X)</label>
-        <input type="number" id="we-memory-big-summary-every" min="1" step="1" value="${bigSummaryEveryX}" style="width:100%;">
-      </div>
-      <div style="display:flex;gap:6px;flex-wrap:wrap;">
-        <button class="we-btn we-btn-primary" id="we-memory-run-now" type="button"><i class="fa-solid fa-brain"></i> Trích Xuất Ký Ức Vòng Này</button>
-        <button class="we-btn" id="we-memory-big-summary-now" type="button"><i class="fa-solid fa-book-open"></i> Tạo Tổng Thuật</button>
-      </div>
-      <div class="we-hint" id="we-memory-task-status" style="margin-top:8px;">${_memoryRunningLabel ? 'Đang thực hiện ' + h(_memoryRunningLabel) : 'Hiện không có tác vụ ký ức nào đang chạy'}</div>`;
-
-    const injectBody = `
-      <div class="we-input-group">
-        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
-          <input type="checkbox" id="we-memory-inject" ${settings.injectIntoPrompt !== false ? 'checked' : ''}>
-          Chèn Thông Tin Ký Ức
-        </label>
-        <div style="font-size:11px;color:var(--we-text3);margin-top:3px;">Chèn Y tổng thuật mới nhất và các lược ghi chưa xử lý; nội dung cũ đã được lược ghi hoặc tổng thuật hợp lệ bao phủ sẽ tự động ẩn, nhưng số vòng gần đây thiết lập trong "Cơ Chế Cục Bộ" luôn giữ nguyên văn; đồng thời quét tên nhân vật và thực thể trong N tầng nội dung gần nhất, chèn ký ức nhân vật và thực thể liên quan khi cần.</div>
-      </div>
-      <div class="we-input-group" style="display:flex;gap:6px;">
-        <div style="flex:1;">
-          <label>Số Tầng Tìm Kiếm Tên (N)</label>
-          <input type="number" id="we-memory-search-depth" min="1" step="1" value="${searchDepth}" style="width:100%;">
-        </div>
-        <div style="flex:1;">
-          <label>Tối Đa Chèn Cho Mỗi Mục</label>
-          <input type="number" id="we-memory-max-per-character" min="1" step="1" value="${maxPerCharacter}" style="width:100%;">
-        </div>
-      </div>
-      <div class="we-input-group">
-        <label>Tối Đa Chèn Số Tổng Thuật Mới Nhất (Y)</label>
-        <input type="number" id="we-memory-big-summary-inject-limit" min="1" step="1" value="${bigSummaryInjectLimit}" style="width:100%;">
-        <div style="font-size:11px;color:var(--we-text3);margin-top:3px;">Chỉ giới hạn số lượng tổng thuật; lược ghi chưa xử lý vẫn được chèn toàn bộ. Tổng thuật lịch sử trong dữ liệu cục bộ và JSON sẽ không bị xóa hay cắt bớt.</div>
-      </div>
-      <div style="font-size:11px;color:var(--we-text3);">Lịch sử nhân vật và thực thể được rút chọn theo trọng số mũ 1d10000: bản ghi càng mới càng dễ được chọn, bản ghi cũ nhất vẫn giữ cơ hội khác không.</div>`;
-
-    const mechanicsBody = `
-      <div class="we-input-group">
-        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
-          <input type="checkbox" id="we-memory-hide-covered-raw" ${hideCoveredRawText ? 'checked' : ''}>
-          Ẩn Nội Dung
-        </label>
-        <div style="font-size:11px;color:var(--we-text3);margin-top:3px;">Khi bật, chỉ nội dung cũ được lược ghi hoặc tổng thuật hợp lệ bao phủ rõ ràng mới bị ẩn; tắt và lưu lại sẽ khôi phục, giữ toàn bộ nội dung, mục "Số Vòng Nội Dung Gần Đây Giữ Lại" bên dưới không còn hiệu lực.</div>
-      </div>
-      <div class="we-input-group">
-        <label>Số Vòng Nội Dung Gần Đây Giữ Lại</label>
-        <input type="number" id="we-memory-recent-raw-rounds" min="0" step="1" value="${recentRawRounds}" style="width:100%;" ${hideCoveredRawText ? '' : 'disabled'}>
-        <div style="font-size:11px;color:var(--we-text3);margin-top:3px;">Bao nhiêu lượt AI gần nhất mà nội dung người dùng và AI luôn không bị ẩn; 0 nghĩa là không giữ thêm. Nội dung cũ hơn chỉ bị ẩn khi nằm trong phạm vi bao phủ rõ ràng của lược ghi hoặc tổng thuật hợp lệ.</div>
-      </div>
-      <div class="we-input-group">
-        <label>Hỗ Trợ Diễn Biến · Thêm Số Vòng Nội Dung Gần Đây</label>
-        <input type="number" id="we-memory-reference-raw-rounds" min="0" step="1" value="${referenceRawRounds}" style="width:100%;">
-        <div style="font-size:11px;color:var(--we-text3);margin-top:3px;">Nhân vật, thực thể và lược ghi vẫn chỉ trích xuất vòng mới nhất; nội dung cũ ở đây chỉ dùng làm tham khảo nhân vật, đại từ, nguyên nhân và trạng thái hiện có, sẽ không được lưu lặp lại.</div>
-      </div>
-      <div class="we-input-group">
-        <label>Hỗ Trợ Diễn Biến · Thêm Số Lược Ghi Trước Nội Dung</label>
-        <input type="number" id="we-memory-reference-small-count" min="0" step="1" value="${referenceSmallSummaryCount}" style="width:100%;">
-        <div style="font-size:11px;color:var(--we-text3);margin-top:3px;">Từ điểm bắt đầu của nội dung hỗ trợ, tiếp tục lùi về trước lấy các lược ghi không trùng lặp; 0 nghĩa là không thêm lược ghi.</div>
-      </div>
-      <div class="we-input-group">
-        <label>Hỗ Trợ Diễn Biến · Thêm Số Tổng Thuật Trước Lược Ghi</label>
-        <input type="number" id="we-memory-reference-big-count" min="0" step="1" value="${referenceBigSummaryCount}" style="width:100%;">
-        <div style="font-size:11px;color:var(--we-text3);margin-top:3px;">Từ lược ghi đã chọn, tiếp tục lùi về trước lấy các tổng thuật không trùng lặp; 0 nghĩa là không thêm tổng thuật. Thứ tự tham khảo cố định là "Tổng Thuật → Lược Ghi → Nội Dung → Vòng Này".</div>
-      </div>`;
-
-    const linkBody = `
-      <div class="we-input-group">
-        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
-          <input type="checkbox" id="we-memory-inject-world-engine" ${settings.injectIntoWorldEngine === true ? 'checked' : ''}>
-          Cung Cấp Ký Ức Cho World Engine
-        </label>
-        <div style="font-size:11px;color:var(--we-text3);margin-top:3px;">Khi diễn biến thế giới, quét tên người, biệt danh và tên thực thể xuất hiện trong toàn bộ trạng thái thế giới, chỉ cung cấp ký ức nhân vật/thực thể khớp; không cung cấp lược ghi hay tổng thuật. Lỗi ở Memory Engine sẽ không làm gián đoạn diễn biến thế giới.</div>
-      </div>
-      <div class="we-input-group">
-        <label>Số Mục Tối Đa Được Chèn Cho Mỗi Kết Quả Khớp Khi Diễn Biến Thế Giới (X)</label>
-        <input type="number" id="we-memory-world-engine-limit" min="1" step="1" value="${worldEngineMemoryLimit}" style="width:100%;">
-      </div>`;
-
-    const backfillBody = `
-      <div style="font-size:11px;color:var(--we-text3);margin-bottom:6px;">Hai loại điền lại độc lập với nhau: điền lại nhân vật/thực thể không xóa lược ghi và tổng thuật; điền lại lược ghi và tổng thuật không viết lại nhân vật và thực thể.</div>
-      <div style="display:flex;gap:6px;flex-wrap:wrap;">
-        <div class="we-input-group" style="flex:1;min-width:90px;margin-bottom:0;"><label>Số Tầng Mỗi Đợt (Nhân Vật/Thực Thể)</label>
-          <input type="number" id="we-memory-backfill-batch" min="1" step="1" value="${backfillBatch}"></div>
-        <div class="we-input-group" style="flex:1;min-width:90px;margin-bottom:0;"><label>Tầng Kết Thúc (0 = Tất Cả)</label>
-          <input type="number" id="we-memory-backfill-end" min="0" step="1" value="${backfillEnd}"></div>
-        <div class="we-input-group" style="flex:1;min-width:90px;margin-bottom:0;"><label>Số Lần Thử Lại Mỗi Đợt Khi Lỗi</label>
-          <input type="number" id="we-memory-backfill-retries" min="0" step="1" value="${backfillRetries}"></div>
-      </div>
-      <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px;">
-        <div class="we-input-group" style="flex:1;min-width:120px;margin-bottom:0;"><label>Điền Lại Lược Ghi: Mỗi X Tầng AI</label>
-          <input type="number" id="we-memory-summary-backfill-small-every" min="1" step="1" value="${summaryBackfillSmallEveryX}"></div>
-        <div class="we-input-group" style="flex:1;min-width:120px;margin-bottom:0;"><label>Điền Lại Tổng Thuật: Mỗi Y Lược Ghi</label>
-          <input type="number" id="we-memory-summary-backfill-big-every" min="1" step="1" value="${summaryBackfillBigEveryX}"></div>
-      </div>
-      <div class="we-hint" id="we-memory-person-backfill-status" style="margin:6px 0;"></div>
-      <div style="display:flex;gap:6px;flex-wrap:wrap;margin:6px 0;">
-        <button class="we-btn we-btn-primary" id="we-memory-backfill-start">▶ Điền Lại Nhân Vật Và Thực Thể</button>
-        <button class="we-btn we-btn-primary" id="we-memory-summary-backfill-start">▶ Điền Lại Lược Ghi Và Tổng Thuật</button>
-        <button class="we-btn" id="we-memory-backfill-stop">■ Dừng</button>
-      </div>
-      <div class="we-hint" id="we-memory-summary-backfill-status" style="margin:6px 0;"></div>`;
-
-    const memoryTheme = getStoredMemoryTheme();
-    const memoryThemeOptions = WE_THEMES.map(theme =>
-      `<option value="${theme.id}" ${theme.id === memoryTheme ? 'selected' : ''}>${theme.name}</option>`
-    ).join('');
-    const displayBody = `
-      <div class="we-input-group">
-        <label>Bảng Màu Theme Của Memory Engine</label>
-        <select id="we-memory-theme-select" style="width:100%;">${memoryThemeOptions}</select>
-        <div style="font-size:11px;color:var(--we-text3);margin-top:3px;">Chỉ ảnh hưởng đến Memory Engine và độc lập ghi nhớ; khi chuyển về World Engine sẽ khôi phục bảng màu riêng của World Engine.</div>
-      </div>`;
-
-    const retryBody = `
-      <div class="we-input-group">
-        <label>Số Lần Tự Động Thử Lại Khi API Ký Ức Lỗi</label>
-        <input type="number" id="we-memory-api-auto-retries" min="0" step="1" value="${Math.max(0, parseInt(settings.apiAutoRetries) || 0)}" style="width:100%;">
-        <div style="font-size:11px;color:var(--we-text3);margin-top:3px;">Chỉ thử lại khi gặp lỗi kết nối, HTTP, hết thời gian chờ, trả về rỗng hoặc JSON không thể sửa; nội dung vượt quá số chữ hoặc số mục của Prompt không tính là lỗi.</div>
-      </div>`;
-
-    const blacklistBody = `
-      <div class="we-input-group">
-        <label>Danh Sách Đen Tên Nhân Vật Và Thực Thể</label>
-        <textarea id="we-memory-name-blacklist" rows="5" style="width:100%;resize:vertical;" placeholder="Mỗi dòng một tên">${h(settings.nameBlacklist || '')}</textarea>
-        <div style="font-size:11px;color:var(--we-text3);margin-top:3px;">Trong phản hồi API, khi bất kỳ tên nhân vật hoặc tên thực thể nào trùng danh sách đen, chỉ bỏ qua dữ liệu nhân vật hoặc thực thể đó; dữ liệu khác trong cùng phản hồi vẫn xử lý bình thường. So khớp bỏ qua chữ hoa/thường và khoảng trắng đầu/cuối.</div>
-      </div>`;
-
-    const filterBody = `
-      <div class="we-input-group">
-        <label>Mỗi dòng một biểu thức chính quy, nội dung khớp sẽ bị xóa trước khi gửi đến API ký ức</label>
-        <div style="margin-bottom:8px;border:1px solid var(--we-border,#3a3a3a);border-radius:4px;padding:6px;">
-          <div style="font-size:12px;color:var(--we-text2);margin-bottom:4px;">Chế độ đơn giản: chọn thẻ để tự động tạo biểu thức chính quy xóa bỏ</div>
-          <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:4px;">
-            <button class="we-btn" id="we-memory-btn-filter-scan" type="button">🔍 Quét Thẻ Trong Cuộc Trò Chuyện Này</button>
-            <input type="text" id="we-memory-filter-add-input" placeholder="Thêm tên thẻ thủ công (ví dụ tucao)" style="flex:1;min-width:140px;">
-            <button class="we-btn" id="we-memory-btn-filter-add" type="button">+ Thêm</button>
-          </div>
-          <div id="we-memory-filter-tags" style="display:flex;flex-wrap:wrap;gap:4px;min-height:4px;"></div>
-          <div style="font-size:11px;color:var(--we-text3);margin-top:3px;">Biểu thức chính quy tự động tạo không chắc luôn hiệu lực — thẻ có thuộc tính, có ~, lồng nhau hoặc thẻ đóng bất thường có thể khớp thất bại. Nếu không hiệu lực, hãy chỉnh sửa trực tiếp ô văn bản bên dưới. Thẻ chưa chọn sẽ không được lưu.</div>
-        </div>
-        <textarea id="we-memory-filter-regex" rows="4" style="width:100%;resize:vertical;" placeholder="Mỗi dòng một mục; hỗ trợ pattern thuần hoặc dạng /pattern/flags.">${h(settings.filterRegex || '')}</textarea>
-        <div style="display:flex;gap:6px;flex-wrap:wrap;margin:6px 0 4px;">
-          <button class="we-btn" id="we-memory-btn-filter-test" type="button">▶ Kiểm Tra Biểu Thức Chính Quy</button>
-        </div>
-        <div class="we-hint" id="we-memory-filter-status" style="margin:0 0 4px;white-space:pre-wrap;"></div>
-        <div style="font-size:11px;color:var(--we-text3);margin-top:3px;">Mỗi dòng một mục; hỗ trợ pattern thuần (mặc định toàn cục g) hoặc dạng /pattern/flags; dòng trống bị bỏ qua. Chỉ ảnh hưởng đến văn bản gửi tới API ký ức, không ảnh hưởng đến nội dung cuộc trò chuyện.</div>
-      </div>`;
-
-    const toneBody = `
-      <div class="we-input-group">
-        <label>Prompt Bổ Sung Cho Memory Engine</label>
-        <textarea id="we-memory-tone-prompt" rows="5" style="width:100%;resize:vertical;" placeholder="Tùy chọn; chỉ được thêm vào yêu cầu trích xuất ký ức lần này">${h(settings.tonePrompt || '')}</textarea>
-        <div style="font-size:11px;color:var(--we-text3);margin-top:3px;">Đây là cài đặt vận hành nâng cao; không mở Prompt ký ức tích hợp gốc, cũng không cung cấp trình chỉnh sửa Prompt định sẵn.</div>
-      </div>`;
-
-    const archiveBody = `
-      <div class="we-input-group">
-        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
-          <input type="checkbox" id="we-memory-sync-to-chat" ${settings.syncToChat === true ? 'checked' : ''}>
-          Đồng Bộ Thời Gian Thực Đa Thiết Bị (Lưu Vào Cuộc Trò Chuyện Hiện Tại)
-        </label>
-        <div style="font-size:11px;color:var(--we-text3);margin-top:3px;">Khi bật, ký ức nhân vật và thực thể của cuộc trò chuyện này sẽ liên tục ghi vào file trò chuyện của SillyTavern và đồng bộ đa thiết bị theo đó; đổi thiết bị mở lại cùng cuộc trò chuyện là tiếp tục được tiến độ. <b>Sẽ không</b> đồng bộ API Key, cũng không đọc/ghi bản lưu của World Engine.</div>
-      </div>
-      <div class="we-input-group">
-        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
-          <input type="checkbox" id="we-memory-auto-backup" ${settings.autoBackup === true ? 'checked' : ''}>
-          Tự Động Sao Lưu Luân Phiên (Lưu Một Bản Mỗi Khi Ký Ức Tiến Triển, Giữ 3 Bản Gần Nhất)
-        </label>
-        <div style="font-size:11px;color:var(--we-text3);margin-top:3px;">Phòng ngừa xóa/sửa nhầm. Cả sao lưu tự động và bản lưu đặt tên đều được lưu trong cuộc trò chuyện này, có thể thấy trên mọi thiết bị.</div>
-      </div>
-      <div class="we-hint" id="we-memory-archive-status" style="margin:4px 0;"></div>
-      <div style="display:flex;gap:6px;flex-wrap:wrap;margin:6px 0;">
-        <button class="we-btn we-btn-primary" id="we-memory-snapshot-save">Tạo Bản Lưu Đặt Tên Mới</button>
-        <button class="we-btn" id="we-memory-snapshot-import">Nhập Bản Lưu</button>
-        <input type="file" id="we-memory-snapshot-import-file" accept=".json,application/json" style="display:none;">
-      </div>
-      <div class="we-chatcache-list" id="we-memory-snapshot-list">${renderMemorySnapshotRows()}</div>`;
-
-    const dataBody = `
-      <div style="display:flex;gap:6px;flex-wrap:wrap;">
-        <button class="we-btn" id="we-memory-export-data">Xuất Toàn Bộ Ký Ức Dạng JSON</button>
-        <button class="we-btn" id="we-memory-import-data">Nhập JSON</button>
-        <input type="file" id="we-memory-import-data-file" accept=".json,application/json" style="display:none;">
-      </div>
-      <div style="font-size:11px;color:var(--we-text3);margin-top:5px;">Xuất đầy đủ bao gồm cả <b>state (dữ liệu hiện tại mới nhất)</b> và <b>checkpoint (điểm lưu cũ trước khi diễn biến lại)</b>, hai phần này lần lượt ghi rõ số lượng nhân vật, thực thể, lược ghi và tổng thuật; ký ức nhân vật giữ nguyên known_by cho từng mục.</div>`;
-
-    const memoryVersion = window.MEMORY_ENGINE_SETTINGS?.VERSION || '0.1.0';
-    const memoryAboutBody = `
-      <div class="we-about-current"><span class="we-changelog-cur">Memory Engine v${h(memoryVersion)}</span></div>
-      <div class="we-section" style="margin-top:10px;">
-        <div class="we-section-title">Memory Engine 1.1</div>
-        <div style="font-size:12px;color:var(--we-text2);line-height:1.7;">
-          Hệ thống ký ức độc lập dành cho các cuộc trò chuyện dài kỳ. Ký ức nhân vật giữ ranh giới người biết chuyện, ký ức thực thể duy trì trạng thái hiện tại và lịch sử của tổ chức, vật phẩm, năng lực và địa điểm; lược ghi ghi lại sự kiện theo từng vòng mới, tổng thuật lại nén nhiều lược ghi thành mạch chuyện dài hạn.
-        </div>
-      </div>
-      <div class="we-section" style="margin-top:10px;">
-        <div class="we-section-title">v1.1.1 · Bảng Ký Ức Và Độ Ổn Định Trích Xuất</div>
-        <ul class="we-changelog-items">
-          <li>Ký ức nhân vật và thực thể mặc định thu gọn, thực thể hiển thị phân loại theo tổ chức, vật phẩm, năng lực và địa điểm; lược ghi và tổng thuật mặc định mở rộng mục mới nhất.</li>
-          <li>Thực thể hỗ trợ biệt danh, quá trình trích xuất, gộp và chỉnh sửa trên bảng đều giữ nguyên thông tin biệt danh.</li>
-          <li>Sửa ràng buộc cấu trúc đầu ra của yêu cầu ký ức tổng hợp; lỗi phân tích và lưu dữ liệu sau khi API thành công không còn gây thử lại toàn bộ yêu cầu.</li>
-          <li>Thông báo vận hành của liên kết diễn biến thế giới và ký ức đổi thành hiển thị tuần tự nghiêm ngặt, kết thúc giai đoạn thế giới trước rồi mới vào giai đoạn ký ức.</li>
-        </ul>
-      </div>
-      <div class="we-section" style="margin-top:10px;">
-        <div class="we-section-title">v1.1.0 · Quản Lý Ngữ Cảnh Và Nội Dung</div>
-        <ul class="we-changelog-items">
-          <li>Trích xuất hằng ngày vẫn chỉ xử lý vòng mới nhất, có thể thêm riêng nội dung gần đây, lược ghi và tổng thuật cũ hơn làm tham khảo chỉ đọc; mặc định tham khảo 1 vòng nội dung, 5 lược ghi và 1 tổng thuật.</li>
-          <li>Thêm công tắc tổng "Ẩn Nội Dung"; khi tắt sẽ giữ toàn bộ nội dung, khi bật mới ẩn nội dung cũ theo "Số Vòng Nội Dung Gần Đây Giữ Lại" và phạm vi bao phủ của tóm tắt hợp lệ.</li>
-          <li>Lược ghi và tổng thuật giữ nguyên vẹn nội dung API trả về, không còn cắt bớt cục bộ; đầu ra tối đa mặc định của API chỉnh thành 65000, và tự động chuyển đổi cài đặt 4096 cũ.</li>
-          <li>Nhân vật, thực thể, lược ghi và tổng thuật đều có thể thu gọn; bảng tự động làm mới sau khi phân tích và lưu dữ liệu từ API.</li>
-        </ul>
-      </div>
-      <div class="we-section" style="margin-top:10px;">
-        <div class="we-section-title">v1.0.0 · Phiên Bản Chính Thức</div>
-        <div style="font-size:12px;color:var(--we-text2);line-height:1.7;">
-          Nhân vật, thực thể, lược ghi, tổng thuật đều có thể xem và chỉnh sửa trên bảng, hỗ trợ nhập/xuất JSON đầy đủ và lưu trữ độc lập. Có thể chọn cung cấp cho World Engine ký ức mới nhất của nhân vật và thực thể được khớp; chế độ này sẽ không gửi lược ghi hay tổng thuật lặp lại vào diễn biến thế giới.
-        </div>
-      </div>`;
-
-    const memoryWorldbookBody = `
-      <div class="we-input-group">
-        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
-          <input type="checkbox" id="we-memory-worldbook-enabled" ${settings.worldbookEnabled === true ? 'checked' : ''}>
-          Bật Worldbook Cho Diễn Biến Ký Ức
-        </label>
-        <div style="font-size:11px;color:var(--we-text3);margin-top:3px;">Mặc định tắt. Khi bật mới đưa các mục Worldbook được chọn bên dưới làm tham khảo nhân vật và bối cảnh; nội dung Worldbook sẽ không được coi trực tiếp là ký ức mới.</div>
-      </div>`;
-
-    const worldbook = String(extra.worldbook || '')
-      .replace(/Worldbook Diễn Biến Nền/g, 'Worldbook Diễn Biến Ký Ức')
-      .replace(/Chèn Diễn Biến/g, 'Chèn Diễn Biến Ký Ức');
-    const panelContent = {
-      common: sec('set-memory-api', 'API Memory Engine', apiBody)
-        + sec('set-memory-evolve', 'Trích Xuất Ký Ức Và Xử Lý Sự Kiện', modeBody)
-        + sec('set-memory-inject', 'Chèn Thông Tin Ký Ức', injectBody),
-      mechanics: sec('set-memory-mechanics', 'Giữ Lại Nội Dung Và Tham Khảo Diễn Biến', mechanicsBody),
-      link: sec('set-memory-link', 'Liên Kết Với World Engine', linkBody),
-      advanced: sec('set-memory-retry', 'Tự Động Thử Lại API', retryBody)
-        + sec('set-memory-blacklist', 'Danh Sách Đen Nhân Vật Và Thực Thể', blacklistBody)
-        + sec('set-memory-backfill', 'Điền Lại Diễn Biến Ký Ức Hàng Loạt', backfillBody)
-        + sec('set-memory-filter', 'Bộ Lọc Đầu Vào', filterBody)
-        + sec('set-memory-display', 'Hiển Thị Giao Diện', displayBody)
-        + sec('set-memory-tone', 'Prompt Bổ Sung', toneBody),
-      archive: sec('set-memory-archive', 'Bộ Nhớ Đệm Và Lưu Trữ Ký Ức', archiveBody)
-        + sec('set-memory-data', 'Nhập/Xuất Dữ Liệu Ký Ức', dataBody)
-        + renderMemoryCheckpointSection(),
-      worldbook: sec('set-memory-worldbook-enabled', 'Công Tắc Tổng Worldbook', memoryWorldbookBody) + worldbook,
-      debug: sec('set-memory-debug', 'Gỡ Lỗi Diễn Biến Ký Ức', '<button class="we-btn" id="we-memory-export-diag" style="width:100%;margin-bottom:8px;">Xuất Gói Chẩn Đoán</button><div id="we-memory-debug-render">' + renderMemoryDebug() + '</div>'),
-      about: memoryAboutBody
-    };
-
-    if (!MEMORY_SETTINGS_TABS.some(tab => tab.key === _memorySettingsTab)) _memorySettingsTab = 'common';
-    const tabBar = '<div class="we-settings-tabs-shell">'
-      + '<button class="we-settings-tab-scroll" data-dir="-1" title="Cuộn Sang Trái"><i class="fa-solid fa-chevron-left"></i></button>'
-      + '<div class="we-settings-tabs" id="we-settings-tabs">'
-      + MEMORY_SETTINGS_TABS.map(tab =>
-          '<button class="we-settings-tab' + (tab.key === _memorySettingsTab ? ' we-settings-tab--active' : '')
-          + '" data-tab="' + tab.key + '">' + tab.label + '</button>').join('')
-      + '</div>'
-      + '<button class="we-settings-tab-scroll" data-dir="1" title="Cuộn Sang Phải"><i class="fa-solid fa-chevron-right"></i></button>'
-      + '</div>';
-    const panels = MEMORY_SETTINGS_TABS.map(tab =>
-      '<div class="we-settings-panel" data-tab="' + tab.key + '"'
-      + (tab.key === _memorySettingsTab ? '' : ' style="display:none;"') + '>'
-      + (panelContent[tab.key] || '') + '</div>').join('');
-
-    return '<div class="we-sub-topbar"><button class="we-icon-btn" id="we-memory-settings-back" type="button" title="Quay Lại"><i class="fa-solid fa-arrow-left"></i></button><span class="we-sub-title">Cài Đặt</span></div>'
-      + tabBar + panels
-      + '<div class="we-settings-save-actions we-settings-save-sticky">'
-      + '<button class="we-btn" id="we-save-memory-settings">Lưu Cài Đặt</button>'
-      + '</div>';
   }
 
   function updateEngineFaceChrome() {
@@ -1620,8 +557,7 @@ window.WORLD_ENGINE_UI = (function() {
 
   function isEditingPanelContent() {
     if (editingEvent || editingFaction || editingWind || editingTrend || editingDigest ||
-        editingEnemy || editingInfluence || editingRI || editingSecret || _memoryEditingPerson ||
-        _memoryEditingEntity || _memoryEditingSmall || _memoryEditingBig) return true;
+        editingEnemy || editingInfluence || editingRI || editingSecret) return true;
 
     // Một số ít nội dung như tín hiệu kinh tế dùng contentEditable để chỉnh sửa trực tiếp, không đi qua các biến trạng thái chỉnh sửa ở trên.
     const active = document.activeElement;
@@ -1645,7 +581,6 @@ window.WORLD_ENGINE_UI = (function() {
         'render',
         '<div class="we-empty">Giao diện engine này tải thất bại hoặc chưa cung cấp bộ render; các engine khác không bị ảnh hưởng.</div>'
       );
-      if (currentFace.id === 'memory') updateMemoryPanelHeader();
       bindEvents(null);
       callEngineFace(currentFace, 'bind', undefined, panelBodyElement);
       return;
@@ -1971,7 +906,6 @@ window.WORLD_ENGINE_UI = (function() {
     { key: 'about',     label: 'Giới Thiệu' }
   ];
   let _settingsTab = 'common';
-  let _memorySettingsTab = 'common';
 
   function renderSettingsView(checkpoint, cpLayer) {
     const cpContent = checkpoint
@@ -3015,65 +1949,6 @@ window.WORLD_ENGINE_UI = (function() {
     }
   }
 
-  function updateMemoryPanelHeader() {
-    const state = window.MEMORY_ENGINE_DATA?.loadState?.() || {};
-    const eventMemory = state.event_memory || {};
-    const memoryLayer = Number.isFinite(Number(state.chatLayer)) ? Math.max(0, Number(state.chatLayer)) : 0;
-    const summaryLayer = Number.isFinite(Number(eventMemory.small_summary_layer))
-      ? Math.max(0, Number(eventMemory.small_summary_layer)) : 0;
-    const overviewCount = Array.isArray(eventMemory.big_summaries) ? eventMemory.big_summaries.length : 0;
-    const roundEl = document.getElementById('we-header-round');
-    if (roundEl) roundEl.textContent = '';
-    const moodEl = document.getElementById('we-header-mood');
-    if (!moodEl) return;
-    const dot = moodEl.querySelector('.we-header-dot');
-    const text = moodEl.querySelector('.we-header-mood-text');
-    if (dot) {
-      dot.style.background = 'var(--we-accent)';
-      dot.style.boxShadow = '0 0 6px var(--we-accent)';
-    }
-    if (text) {
-      text.textContent = `Nhân vật/thực thể đến tầng ${memoryLayer} · Lược ghi đến tầng ${summaryLayer} · Tổng thuật ${overviewCount} mục`;
-      text.style.color = 'var(--we-text2)';
-    }
-  }
-
-  function refreshMemoryDebugRender() {
-    const box = document.getElementById('we-memory-debug-render');
-    if (!box) return;
-    box.innerHTML = renderMemoryDebug();
-    bindPromptSegToggle(box.querySelector('.we-prompt-debug'));
-    bindMemoryDebugExportButtons();
-  }
-
-  function bindMemoryDebugExportButtons() {
-    const download = (content, filename) => {
-      const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
-      const url = URL.createObjectURL(blob), anchor = document.createElement('a');
-      anchor.href = url; anchor.download = filename; anchor.click(); URL.revokeObjectURL(url);
-    };
-    const debug = () => window.MEMORY_ENGINE?.getLastDebug?.() || {};
-    const promptButton = document.getElementById('we-memory-export-prompt');
-    if (promptButton) promptButton.onclick = () => {
-      const value = debug().prompt || debug().requestPrompt || '';
-      if (!value) { showToast('Không có Prompt ký ức để xuất', true); return; }
-      download(value, 'memory-prompt-' + Date.now() + '.txt'); showToast('Đã xuất Prompt ký ức');
-    };
-    const resultButton = document.getElementById('we-memory-export-raw-result');
-    if (resultButton) resultButton.onclick = () => {
-      const current = debug();
-      const value = current.rawResult || current.apiResponse || current.response || '';
-      if (!value) { showToast('Không có phản hồi API ký ức để xuất', true); return; }
-      download(typeof value === 'string' ? value : JSON.stringify(value, null, 2), 'memory-api-raw-' + Date.now() + '.txt'); showToast('Đã xuất phản hồi API ký ức');
-    };
-  }
-
-  // ═══════════════════════════════════════════════════════════
-  // [MAP] UI Quản Lý Preset Engine (cùng thẻ gỡ lỗi với hiển thị phân đoạn chỉ đọc của PR#12)
-  // Nâng cấp 4 đoạn hardcode của prompt diễn biến (① vai trò engine / ② 10 bước nhân quả / ⑦ mô tả đầu ra JSON / ⑧ ví dụ JSON)
-  // thành preset có thể chỉnh sửa, lưu, chuyển đổi, nhập/xuất. Lưu qua storage key riêng,
-  // không vào we-save-settings, không vào world_engine_settings.
-  // ═══════════════════════════════════════════════════════════
   function getPresetMod() {
     return (window.WORLD_ENGINE_PRESET && typeof window.WORLD_ENGINE_PRESET.getAllPresets === 'function')
       ? window.WORLD_ENGINE_PRESET : null;
@@ -3298,15 +2173,15 @@ window.WORLD_ENGINE_UI = (function() {
   //    Dữ liệu hoàn toàn lấy từ snapshot chỉ đọc của inspector; hàm này chỉ ghép HTML thuần, không gây tác dụng phụ nào.
   //    Trả về là đoạn con bên trong .we-prompt-debug (đầu thu gọn dùng chung data-we-seg-toggle, do bindPromptSegToggle tiếp quản thống nhất).
   function renderInjectInspector(scope) {
-    const memoryScope = scope === 'memory';
-    const engine = window.MEMORY_ENGINE;
+    const npcScope = scope === 'npc';
+    const engine = window.NPC_ENGINE;
     const insp = window.WORLD_ENGINE_INJECT_INSPECTOR;
-    const snap = insp?.getLastSnapshot?.(memoryScope ? 'memory' : 'world')
-      || (memoryScope ? engine?.getLastInjectionDebug?.() : null)
-      || (memoryScope ? engine?.getLastDebug?.()?.injection : null)
+    const snap = insp?.getLastSnapshot?.(npcScope ? 'npc' : 'world')
+      || (npcScope ? engine?.getLastInjectionDebug?.() : null)
+      || (npcScope ? engine?.getLastDebug?.()?.injection : null)
       || null;
     const status = snap ? snap.status : 'NOT_YET';
-    const fallbackText = memoryScope ? {
+    const fallbackText = npcScope ? {
       NOT_YET: 'Chưa sinh, chưa có bản ghi chèn ký ức',
       SKIPPED_DISABLED: 'Vòng này không chèn: chèn ký ức đã tắt',
       SKIPPED_REROLL: 'Vòng này theo thiết kế không chèn: roll lại cùng tầng',
@@ -3314,8 +2189,8 @@ window.WORLD_ENGINE_UI = (function() {
       SUCCESS: '✅ Thông tin ký ức vòng này đã vào nội dung',
       MISSING: '❌ Đã đăng ký nhưng không vào prompt cuối cùng'
     } : {};
-    const text = insp?.statusText ? insp.statusText(status, memoryScope ? 'memory' : 'world') : (fallbackText[status] || fallbackText.NOT_YET || '');
-    const subject = memoryScope ? 'Ký ức nhân vật' : 'Trạng thái thế giới';
+    const text = insp?.statusText ? insp.statusText(status, npcScope ? 'npc' : 'world') : (fallbackText[status] || fallbackText.NOT_YET || '');
+    const subject = npcScope ? 'Hồ sơ nhân vật' : 'Trạng thái thế giới';
 
     const palette = {
       SUCCESS:          { icon: '✅', color: '#3fb950', bg: 'rgba(63,185,80,0.10)' },
@@ -3577,7 +2452,7 @@ window.WORLD_ENGINE_UI = (function() {
           <input type="checkbox" id="we-world-engine-enabled" ${settings.engineEnabled !== false ? 'checked' : ''}>
           Bật World Engine
         </label>
-        <div style="font-size:11px;color:var(--we-text3);margin-top:3px;">Sau khi tắt sẽ dừng diễn biến thế giới và chèn trạng thái thế giới, không ảnh hưởng đến Memory Engine.</div>
+        <div style="font-size:11px;color:var(--we-text3);margin-top:3px;">Sau khi tắt sẽ dừng diễn biến thế giới và chèn trạng thái thế giới, không ảnh hưởng đến Công Cụ Nhân Vật.</div>
       </div>
       <div class="we-input-group">
         <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
@@ -3697,15 +2572,16 @@ window.WORLD_ENGINE_UI = (function() {
         <div style="font-size:11px;color:var(--we-text3);margin-top:3px;">Khi bật, Lv1–Lv4 của chuỗi sự kiện và Tin Đồn đều được chèn vào nội dung; khi tắt, Tin Đồn chỉ chèn Lv3/4, chuỗi sự kiện chèn Lv3/4 cùng các sự kiện Lv1/2 đã bùng phát hoặc đã hoàn thành.</div>
       </div>`;
 
+    const npcLinkSettings = window.NPC_ENGINE_SETTINGS?.getSettings?.(true) || {};
     const linkBody = `
       <div class="we-input-group">
         <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
-          <input type="checkbox" id="we-memory-link-enabled" ${settings.memoryLinkEnabled === true ? 'checked' : ''}>
-          Liên Kết Với Memory Engine Sau Khi Diễn Biến Thế Giới Hoàn Tất
+          <input type="checkbox" id="we-npc-link-enabled" ${npcLinkSettings.npcLinkEnabled !== false ? 'checked' : ''}>
+          Liên Kết Với Công Cụ Nhân Vật Sau Khi Diễn Biến Thế Giới Hoàn Tất
         </label>
-        <div style="font-size:11px;color:var(--we-text3);margin-top:3px;">Khi bật, kết quả API thế giới trả về vòng này sẽ được giao cho API ký ức để cập nhật nhân vật và thực thể, và thêm tóm tắt thế giới thành một lược ghi. Roll lại cùng tầng chỉ hủy kết quả cũ có đánh dấu liên kết, không ảnh hưởng đến ký ức thông thường và lược ghi đã có.</div>
-        <button class="we-btn we-btn-primary" id="we-memory-link-now" type="button" style="width:100%;margin-top:8px;"><i class="fa-solid fa-link"></i> Liên Kết Thủ Công Thông Tin Thế Giới Hiện Tại</button>
-        <div style="font-size:11px;color:var(--we-text3);margin-top:3px;">Lập tức giao trạng thái thế giới hiện tại cho Memory Engine xử lý, và thêm tóm tắt thế giới hiện tại thành lược ghi; thực hiện lặp lại cùng tầng sẽ thay thế kết quả liên kết lần trước.</div>
+        <div style="font-size:11px;color:var(--we-text3);margin-top:3px;">Khi bật, xong vòng suy diễn thế giới là chạy tiếp phần trích xuất nhân vật và hoạt động ngầm, ngay trong cùng lượt. Tắt thì Công Cụ Nhân Vật ngừng cập nhật theo lượt, chỉ còn chạy khi bấm tay.</div>
+        <button class="we-btn we-btn-primary" id="we-npc-link-now" type="button" style="width:100%;margin-top:8px;"><i class="fa-solid fa-link"></i> Cập Nhật Hồ Sơ Nhân Vật Ngay</button>
+        <div style="font-size:11px;color:var(--we-text3);margin-top:3px;">Đẩy tóm tắt thế giới hiện tại sang Công Cụ Nhân Vật mà không đợi lượt kế tiếp. Chạy lại ở cùng tầng sẽ ghi đè kết quả lần trước.</div>
       </div>`;
 
     const displayMode = settings.displayMode === 'expand' ? 'expand' : 'mask';
@@ -3932,14 +2808,14 @@ window.WORLD_ENGINE_UI = (function() {
       display: sec('set-display', 'Hiển Thị Giao Diện', displayBody),
       chatcache: sec('set-chatcache', 'Bộ Nhớ Đệm Và Lưu Trữ SillyTavern', chatcacheBody),
       inject: sec('set-inject', 'Chèn Vào Nội Dung', injectBody),
-      link: sec('set-world-memory-link', 'World → Memory', linkBody)
+      link: sec('set-world-npc-link', 'Thế Giới → Nhân Vật', linkBody)
     };
   }
 
   function renderSettingsAfterCheckpoint(options) {
-    const memoryScope = options?.scope === 'memory';
-    const settings = memoryScope
-      ? (window.MEMORY_ENGINE_SETTINGS?.getSettings() || {})
+    const npcScope = options?.scope === 'npc';
+    const settings = npcScope
+      ? (window.NPC_ENGINE_SETTINGS?.getSettings() || {})
       : ((window.WORLD_ENGINE_API && window.WORLD_ENGINE_API.getSettings) ? window.WORLD_ENGINE_API.getSettings() : {});
     const sec = (id, title, body) =>
       '<div class="we-section"><div class="we-section-title">' + sectionHeader(title, id) + '</div>' +
@@ -3980,7 +2856,7 @@ window.WORLD_ENGINE_UI = (function() {
       <div class="we-hint" id="we-tone-status" style="margin-top:6px;"></div>`;
     // [FIX] Chia tab: cũng trả về từ điển các đoạn
     return {
-      worldbook: sec('set-worldbook', memoryScope ? 'Worldbook Diễn Biến Ký Ức' : 'Worldbook Diễn Biến Nền', worldbookBody),
+      worldbook: sec('set-worldbook', npcScope ? 'Worldbook Diễn Biến Nhân Vật' : 'Worldbook Diễn Biến Nền', worldbookBody),
       data: sec('set-data', 'Nhập/Xuất Dữ Liệu', dataBody),
       tone: sec('set-tone', 'Prompt Bổ Sung', toneBody)
     };
@@ -3989,8 +2865,8 @@ window.WORLD_ENGINE_UI = (function() {
   function bindEvents(state) {
     const themeSelect = document.getElementById('we-theme-select');
     if (themeSelect) themeSelect.onchange = () => setTheme(themeSelect.value);
-    const memoryThemeSelect = document.getElementById('we-memory-theme-select');
-    if (memoryThemeSelect) memoryThemeSelect.onchange = () => setMemoryTheme(memoryThemeSelect.value);
+    const npcThemeSelect = document.getElementById('we-npc-theme-select');
+    if (npcThemeSelect) npcThemeSelect.onchange = () => setNpcTheme(npcThemeSelect.value);
 
     document.querySelectorAll('[data-we-mechanics-reset]').forEach(button => {
       button.onclick = () => {
@@ -4899,234 +3775,29 @@ window.WORLD_ENGINE_UI = (function() {
     syncTagsFromTextarea();
     }
     bindFilterControls('world');
-    bindFilterControls('memory');
 
-    const memoryLinkNow = document.getElementById('we-memory-link-now');
-    if (memoryLinkNow) {
-      memoryLinkNow.onclick = async () => {
-        memoryLinkNow.disabled = true;
+    // Công tắc và nút liên kết sang Công Cụ Nhân Vật, đặt trong trang cài đặt của Công Cụ Thế Giới
+    // vì đây là chỗ quyết định thứ tự chạy giữa hai engine.
+    const npcLinkEnabled = document.getElementById('we-npc-link-enabled');
+    if (npcLinkEnabled) {
+      npcLinkEnabled.onchange = () => {
+        window.NPC_ENGINE_SETTINGS?.patchSettings({ npcLinkEnabled: npcLinkEnabled.checked });
+        showToast(npcLinkEnabled.checked ? 'Đã bật liên kết Thế Giới → Nhân Vật' : 'Đã tắt liên kết Thế Giới → Nhân Vật');
+      };
+    }
+
+    const npcLinkNow = document.getElementById('we-npc-link-now');
+    if (npcLinkNow) {
+      npcLinkNow.onclick = async () => {
+        npcLinkNow.disabled = true;
         try {
-          const ok = await window.WORLD_ENGINE?.manualMemoryLink?.();
-          showToast(ok ? 'Liên kết thủ công hoàn tất, tóm tắt thế giới đã thêm thành lược ghi' : 'Liên kết thủ công chưa hoàn tất', !ok);
+          const ok = await window.WORLD_ENGINE?.manualNpcLink?.();
+          showToast(ok ? 'Đã cập nhật hồ sơ nhân vật' : 'Chưa cập nhật được hồ sơ nhân vật', !ok);
         } catch (error) {
-          showToast('Liên kết thủ công thất bại: ' + (error?.message || error), true);
+          showToast('Cập nhật thất bại: ' + (error?.message || error), true);
         } finally {
-          memoryLinkNow.disabled = false;
+          npcLinkNow.disabled = false;
         }
-      };
-    }
-
-    const memoryHideCoveredRaw = document.getElementById('we-memory-hide-covered-raw');
-    const memoryRecentRawRounds = document.getElementById('we-memory-recent-raw-rounds');
-    if (memoryHideCoveredRaw && memoryRecentRawRounds) {
-      const syncRawRetentionAvailability = () => {
-        memoryRecentRawRounds.disabled = !memoryHideCoveredRaw.checked;
-      };
-      memoryHideCoveredRaw.onchange = syncRawRetentionAvailability;
-      syncRawRetentionAvailability();
-    }
-
-    const memorySaveBtn = document.getElementById('we-save-memory-settings');
-    if (memorySaveBtn) {
-      memorySaveBtn.onclick = () => {
-        const gv = id => document.getElementById(id)?.value;
-        const memoryCurrent = window.MEMORY_ENGINE_SETTINGS?.getSettings(true) || {};
-        const temperatureRaw = parseFloat(gv('we-temperature'));
-        const timeoutSecRaw = parseFloat(gv('we-api-timeout-sec'));
-        const memorySettings = {
-          ...memoryCurrent,
-          engineEnabled: document.getElementById('we-memory-engine-enabled')?.checked !== false,
-          firstLayerIsAiOpening: document.getElementById('we-memory-first-layer-ai-opening')?.checked !== false,
-          apiUrl: gv('we-api-url') || '',
-          apiKey: gv('we-api-key') || '',
-          model: gv('we-model') || 'gpt-3.5-turbo',
-          temperature: Number.isFinite(temperatureRaw) ? Math.max(0, temperatureRaw) : 0.2,
-          maxTokens: Math.max(1, parseInt(gv('we-max-tokens')) || 65000),
-          apiTimeoutMs: Number.isFinite(timeoutSecRaw) ? Math.max(0, Math.round(timeoutSecRaw * 1000)) : 120000,
-          connectionMode: document.getElementById('we-connection-mode')?.value === 'proxy' ? 'proxy' : 'direct',
-          evolveMode: gv('we-memory-evolve-mode') === 'manual' ? 'manual' : 'auto',
-          evolveEveryX: 1,
-          evolveReadRounds: 1,
-          manualReadRounds: 1,
-          smallSummaryEveryX: 1,
-          bigSummaryEveryX: Math.max(1, parseInt(gv('we-memory-big-summary-every')) || 5),
-          bigSummaryInjectLimit: Math.max(1, parseInt(gv('we-memory-big-summary-inject-limit')) || 3),
-          hideCoveredRawText: document.getElementById('we-memory-hide-covered-raw')?.checked !== false,
-          recentRawRounds: Math.max(0, parseInt(gv('we-memory-recent-raw-rounds')) || 0),
-          referenceRawRounds: Math.max(0, parseInt(gv('we-memory-reference-raw-rounds')) || 0),
-          referenceSmallSummaryCount: Math.max(0, parseInt(gv('we-memory-reference-small-count')) || 0),
-          referenceBigSummaryCount: Math.max(0, parseInt(gv('we-memory-reference-big-count')) || 0),
-          injectIntoPrompt: document.getElementById('we-memory-inject')?.checked !== false,
-          injectIntoWorldEngine: document.getElementById('we-memory-inject-world-engine')?.checked === true,
-          worldEngineMemoryLimit: Math.max(1, parseInt(gv('we-memory-world-engine-limit')) || 5),
-          searchDepth: Math.max(1, parseInt(gv('we-memory-search-depth')) || 5),
-          maxPerCharacter: Math.max(1, parseInt(gv('we-memory-max-per-character')) || 20),
-          apiAutoRetries: Math.max(0, parseInt(gv('we-memory-api-auto-retries')) || 0),
-          nameBlacklist: gv('we-memory-name-blacklist') || '',
-          filterRegex: gv('we-memory-filter-regex') || '',
-          tonePrompt: gv('we-memory-tone-prompt') || '',
-          worldbookEnabled: document.getElementById('we-memory-worldbook-enabled')?.checked === true,
-          worldbookTrigger: document.getElementById('we-worldbook-trigger')?.checked === true,
-          syncToChat: document.getElementById('we-memory-sync-to-chat')?.checked === true,
-          autoBackup: document.getElementById('we-memory-auto-backup')?.checked === true,
-          backfillBatchSize: Math.max(1, parseInt(gv('we-memory-backfill-batch')) || 5),
-          summaryBackfillSmallEveryX: Math.max(1, parseInt(gv('we-memory-summary-backfill-small-every')) || 5),
-          summaryBackfillBigEveryX: Math.max(1, parseInt(gv('we-memory-summary-backfill-big-every')) || 5),
-          backfillEndLayer: Math.max(0, parseInt(gv('we-memory-backfill-end')) || 0),
-          backfillRetries: Math.max(0, parseInt(gv('we-memory-backfill-retries')) || 0)
-        };
-        window.MEMORY_ENGINE_SETTINGS?.saveSettings(memorySettings);
-        window.MEMORY_ENGINE?.applyInjection?.();
-        showToast('Đã lưu cài đặt');
-      };
-    }
-
-    const memoryData = window.MEMORY_ENGINE_DATA;
-    const memoryCache = window.WORLD_ENGINE_CHATCACHE?.forScope?.('memory');
-    const memoryExportData = document.getElementById('we-memory-export-data');
-    if (memoryExportData) memoryExportData.onclick = () => {
-      if (!memoryData) { showToast('Module dữ liệu ký ức chưa tải', true); return; }
-      setupDownload(JSON.stringify(memoryData.exportData(), null, 2), 'memory-engine-data-' + Date.now() + '.json');
-      showToast('Đã xuất toàn bộ dữ liệu ký ức (trạng thái mới nhất và điểm lưu trữ đã ghi rõ riêng)');
-    };
-    const memoryImportData = document.getElementById('we-memory-import-data');
-    const memoryImportDataFile = document.getElementById('we-memory-import-data-file');
-    if (memoryImportData && memoryImportDataFile) {
-      memoryImportData.onclick = () => memoryImportDataFile.click();
-      memoryImportDataFile.onchange = async () => {
-        const file = memoryImportDataFile.files?.[0];
-        if (!file) return;
-        try {
-          const imported = memoryData.importData(JSON.parse(await file.text()));
-          window.WORLD_ENGINE_CHATCACHE?.forScope?.('memory')?.afterEvolution?.();
-          window.MEMORY_ENGINE?.applyInjection?.();
-          showToast(`Đã nhập dữ liệu ký ức, tiến độ đã nối tiếp tại tầng ${Math.max(0, Number(imported?.chatLayer) || 0)}`);
-          refresh();
-        } catch (error) {
-          showToast('Nhập dữ liệu ký ức thất bại: ' + (error?.message || error), true);
-        } finally {
-          memoryImportDataFile.value = '';
-        }
-      };
-    }
-
-    const memorySnapshotSave = document.getElementById('we-memory-snapshot-save');
-    if (memorySnapshotSave) memorySnapshotSave.onclick = () => {
-      const name = prompt('Đặt tên cho bản lưu ký ức này:', 'Bản Lưu Ký Ức ' + new Date().toLocaleString());
-      if (name == null) return;
-      if (memoryCache?.createSnapshot?.(name)) { showToast('Đã tạo bản lưu ký ức'); refresh(); }
-      else showToast('Lưu thất bại (cuộc trò chuyện hiện tại không có dữ liệu ký ức hoặc không thể ghi)', true);
-    };
-    const memorySnapshotImport = document.getElementById('we-memory-snapshot-import');
-    const memorySnapshotImportFile = document.getElementById('we-memory-snapshot-import-file');
-    if (memorySnapshotImport && memorySnapshotImportFile) {
-      memorySnapshotImport.onclick = () => memorySnapshotImportFile.click();
-      memorySnapshotImportFile.onchange = async () => {
-        const file = memorySnapshotImportFile.files?.[0];
-        if (!file) return;
-        try {
-          if (memoryCache?.importSnapshot?.(JSON.parse(await file.text()))) { showToast('Đã nhập bản lưu ký ức'); refresh(); }
-          else showToast('Không phải file bản lưu ký ức hợp lệ', true);
-        } catch (error) {
-          showToast('Nhập bản lưu ký ức thất bại: ' + (error?.message || error), true);
-        } finally {
-          memorySnapshotImportFile.value = '';
-        }
-      };
-    }
-    document.querySelectorAll('[data-memory-snap-action]').forEach(button => {
-      button.onclick = () => {
-        const row = button.closest('[data-memory-snap-id]');
-        const id = row?.dataset.memorySnapId;
-        const item = memoryCache?.listSnapshots?.().find(entry => entry.id === id);
-        if (!id || !item) return;
-        const action = button.dataset.memorySnapAction;
-        if (action === 'restore') {
-          if (!confirm('Khôi phục bản lưu ký ức "' + item.name + '"? Dữ liệu ký ức hiện tại sẽ bị thay thế.')) return;
-          if (memoryCache.restoreSnapshot(id)) { showToast('Đã khôi phục bản lưu ký ức'); refresh(); }
-          else showToast('Khôi phục thất bại', true);
-        } else if (action === 'rename') {
-          const name = prompt('Tên bản lưu mới:', item.name);
-          if (name == null) return;
-          if (memoryCache.renameSnapshot(id, name)) { showToast('Đã đổi tên'); refresh(); }
-        } else if (action === 'export') {
-          const exported = memoryCache.exportSnapshot(id);
-          if (exported) setupDownload(JSON.stringify(exported, null, 2), 'memory-snapshot-' + Date.now() + '.json');
-        } else if (action === 'delete') {
-          if (!confirm('Xóa bản lưu ký ức "' + item.name + '"?')) return;
-          if (memoryCache.deleteSnapshot(id)) { showToast('Đã xóa'); refresh(); }
-        }
-      };
-    });
-
-    const memoryArchiveStatus = document.getElementById('we-memory-archive-status');
-    if (memoryArchiveStatus && memoryCache?.getStatus) {
-      const status = memoryCache.getStatus();
-      if (!status.usable) memoryArchiveStatus.textContent = 'Hiện không có cuộc trò chuyện khả dụng (vui lòng mở một nhân vật/nhóm chat trước).';
-      else if (!status.apiAvailable) memoryArchiveStatus.textContent = 'Phiên bản SillyTavern hiện tại không hỗ trợ ghi chat_metadata, bộ nhớ đệm SillyTavern không khả dụng.';
-      else memoryArchiveStatus.textContent = `Đồng bộ thời gian thực ${status.syncEnabled ? 'đã bật' : 'đã tắt'} · Bản sửa cục bộ ${status.localRev} / Cloud ${status.liveRev} · Tổng ${status.snapshotCount} bản lưu`;
-    }
-    const memorySyncBox = document.getElementById('we-memory-sync-to-chat');
-    if (memorySyncBox) memorySyncBox.onchange = () => {
-      window.MEMORY_ENGINE_SETTINGS?.patchSettings({ syncToChat: memorySyncBox.checked });
-      if (memorySyncBox.checked) memoryCache?.pushLiveNow?.();
-      showToast(memorySyncBox.checked ? 'Đã bật đồng bộ ký ức đa thiết bị' : 'Đã tắt đồng bộ ký ức đa thiết bị');
-      refresh();
-    };
-    const memoryAutoBackupBox = document.getElementById('we-memory-auto-backup');
-    if (memoryAutoBackupBox) memoryAutoBackupBox.onchange = () => {
-      window.MEMORY_ENGINE_SETTINGS?.patchSettings({ autoBackup: memoryAutoBackupBox.checked });
-      showToast(memoryAutoBackupBox.checked ? 'Đã bật tự động sao lưu ký ức' : 'Đã tắt tự động sao lưu ký ức');
-    };
-
-    const memoryBackfillStart = document.getElementById('we-memory-backfill-start');
-    if (memoryBackfillStart) {
-      memoryBackfillStart.onclick = async () => {
-        if (window.MEMORY_ENGINE && typeof window.MEMORY_ENGINE.backfill === 'function') {
-          try { await window.MEMORY_ENGINE.backfill(); }
-          catch (error) { showToast(`Điền lại ký ức thất bại: ${error?.message || error}`, true); }
-          return;
-        }
-        showToast('Memory Engine chưa tải', true);
-      };
-    }
-    const memoryRunNow = document.getElementById('we-memory-run-now');
-    if (memoryRunNow) {
-      memoryRunNow.onclick = async () => {
-        memoryRunNow.disabled = true;
-        try { await runMemoryExtract(); }
-        finally { memoryRunNow.disabled = false; }
-      };
-    }
-    const memoryBigSummaryNow = document.getElementById('we-memory-big-summary-now');
-    if (memoryBigSummaryNow) {
-      memoryBigSummaryNow.onclick = async () => {
-        memoryBigSummaryNow.disabled = true;
-        try {
-          await window.MEMORY_ENGINE?.manualBigSummary?.();
-          showToast('Tổng thuật hoàn tất');
-          refresh();
-        } catch (error) { showToast(`Tổng thuật thất bại: ${error?.message || error}`, true); }
-        finally { memoryBigSummaryNow.disabled = false; }
-      };
-    }
-    const memorySummaryBackfillStart = document.getElementById('we-memory-summary-backfill-start');
-    if (memorySummaryBackfillStart) {
-      memorySummaryBackfillStart.onclick = async () => {
-        memorySummaryBackfillStart.disabled = true;
-        try { await window.MEMORY_ENGINE?.backfillSummaries?.(); }
-        catch (error) { showToast(`Điền lại lược ghi và tổng thuật thất bại: ${error?.message || error}`, true); }
-        finally { memorySummaryBackfillStart.disabled = false; }
-      };
-    }
-    const memoryBackfillStop = document.getElementById('we-memory-backfill-stop');
-    if (memoryBackfillStop) {
-      memoryBackfillStop.onclick = () => {
-        if (window.MEMORY_ENGINE && typeof window.MEMORY_ENGINE.stopBackfill === 'function') {
-          window.MEMORY_ENGINE.stopBackfill();
-          return;
-        }
-        showToast('Hiện không có tác vụ điền lại ký ức nào đang chạy');
       };
     }
 
@@ -5152,7 +3823,6 @@ window.WORLD_ENGINE_UI = (function() {
           injectIntoPrompt: document.getElementById('we-inject-into-prompt')?.checked !== false,
           injectMaxChars: Math.max(0, parseInt(gv('we-inject-max-chars')) || 0),
           injectAllLevels: document.getElementById('we-inject-all-levels')?.checked === true,
-          memoryLinkEnabled: document.getElementById('we-memory-link-enabled')?.checked === true,
           syncToChat: document.getElementById('we-sync-to-chat')?.checked === true,
           autoBackup: document.getElementById('we-auto-backup')?.checked === true,
           evolveMode: (_modeRaw === 'manual' || _modeRaw === 'time') ? _modeRaw : 'auto',
@@ -5343,8 +4013,8 @@ window.WORLD_ENGINE_UI = (function() {
         const entries = _wbCachedEntries;
         const selectedIds = _wbCachedSelectedIds || new Set();
         const overrides = _wbCachedOverrides || {};
-        const triggerOn = worldbookScope === 'memory'
-          ? window.MEMORY_ENGINE_SETTINGS?.getSettings()?.worldbookTrigger === true
+        const triggerOn = worldbookScope === 'npc'
+          ? window.NPC_ENGINE_SETTINGS?.getSettings()?.worldbookTrigger === true
           : !!(window.WORLD_ENGINE_WORLDBOOK?.triggerEnabled?.());
         if (!entries || !entries.length) {
           worldbookList.innerHTML = '<div class="we-empty">Cuộc trò chuyện hiện tại chưa liên kết mục Worldbook nào có thể đọc</div>';
@@ -5462,13 +4132,13 @@ window.WORLD_ENGINE_UI = (function() {
         const ids = [..._wbCachedSelectedIds];
         if (worldbook.saveSelection) worldbook.saveSelection(ids, _wbCachedOverrides || {}, worldbookScope);
         else worldbook.saveSelectedIds(ids, worldbookScope);
-        showToast(`Đã lưu ${_wbCachedSelectedIds.size} mục Worldbook ${worldbookScope === 'memory' ? 'ký ức' : 'nền'}`);
+        showToast(`Đã lưu ${_wbCachedSelectedIds.size} mục Worldbook ${worldbookScope === 'npc' ? 'nhân vật' : 'nền'}`);
         updateWorldbookSummary();
       };
       const triggerBox = document.getElementById('we-worldbook-trigger');
       if (triggerBox) triggerBox.onchange = () => {
-        if (worldbookScope === 'memory') {
-          window.MEMORY_ENGINE_SETTINGS?.patchSettings({ worldbookTrigger: triggerBox.checked });
+        if (worldbookScope === 'npc') {
+          window.NPC_ENGINE_SETTINGS?.patchSettings({ worldbookTrigger: triggerBox.checked });
         } else {
           const wapi = window.WORLD_ENGINE_API;
           const cur = wapi && wapi.getSettings ? wapi.getSettings(true) : {};
@@ -5540,14 +4210,14 @@ window.WORLD_ENGINE_UI = (function() {
           model: document.getElementById('we-model')?.value || '',
           temperature: Number.isFinite(parseFloat(document.getElementById('we-temperature')?.value))
             ? Math.max(0, parseFloat(document.getElementById('we-temperature')?.value))
-            : (requestScope === 'memory' ? 0.2 : 0.7),
+            : (requestScope === 'npc' ? 0.2 : 0.7),
           maxTokens: Math.max(1, parseInt(document.getElementById('we-max-tokens')?.value) || 65000),
           apiTimeoutMs: Number.isFinite(parseFloat(document.getElementById('we-api-timeout-sec')?.value)) ? Math.max(0, Math.round(parseFloat(document.getElementById('we-api-timeout-sec')?.value) * 1000)) : 120000,
           connectionMode: document.getElementById('we-connection-mode')?.value === 'proxy' ? 'proxy' : 'direct'
         };
         let requestSettings;
-        if (requestScope === 'memory') {
-          requestSettings = window.MEMORY_ENGINE_SETTINGS?.patchSettings(apiPatch) || apiPatch;
+        if (requestScope === 'npc') {
+          requestSettings = window.NPC_ENGINE_SETTINGS?.patchSettings(apiPatch) || apiPatch;
         } else {
           const worldSettings = {
             ...(api.getSettings ? api.getSettings(true) : {}),
@@ -5907,7 +4577,6 @@ window.WORLD_ENGINE_UI = (function() {
 
     // [FIX] Thu gọn thẻ phân đoạn prompt diễn biến (ủy quyền sự kiện, logic ở bindPromptSegToggle cấp module)
     bindPromptSegToggle(document.querySelector('.we-prompt-debug'));
-    bindMemoryDebugExportButtons();
 
     // [FIX] Xuất gói chẩn đoán
     const exportDiagBtn = document.getElementById('we-export-diag');
@@ -5923,11 +4592,11 @@ window.WORLD_ENGINE_UI = (function() {
         }
       };
     }
-    const memoryExportDiagBtn = document.getElementById('we-memory-export-diag');
-    if (memoryExportDiagBtn) memoryExportDiagBtn.onclick = () => {
+    const npcExportDiagBtn = document.getElementById('we-npc-export-diag');
+    if (npcExportDiagBtn) npcExportDiagBtn.onclick = () => {
       const diag = window.WORLD_ENGINE_DIAG;
       if (!diag?.download) { showToast('Module chẩn đoán ký ức không khả dụng', true); return; }
-      try { diag.download('memory'); showToast('Đã xuất gói chẩn đoán ký ức'); }
+      try { diag.download('npc'); showToast('Đã xuất gói chẩn đoán nhân vật'); }
       catch (error) { showToast('Xuất gói chẩn đoán ký ức thất bại: ' + (error?.message || error), true); }
     };
 
@@ -6239,13 +4908,6 @@ window.WORLD_ENGINE_UI = (function() {
     updateBallControls();
   }
 
-  function setMemoryEvolvingUI(active, label) {
-    _memoryRunningLabel = active ? String(label || 'Tác vụ ký ức') : '';
-    const status = document.getElementById('we-memory-task-status');
-    if (status) status.textContent = active ? `Đang thực hiện ${_memoryRunningLabel}` : 'Hiện không có tác vụ ký ức nào đang chạy';
-    updateBallControls();
-  }
-
   function setInjectedScope(scope) {
     _injectedScope = scope === 'checkpoint' ? 'checkpoint' : 'state';
   }
@@ -6261,25 +4923,6 @@ window.WORLD_ENGINE_UI = (function() {
     const ok = await window.WORLD_ENGINE.manualEvolve(mode, scope);
     if (ok) showToast('Diễn biến hoàn tất');
     else if (evolution.getLastError?.()) showToast(evolution.getLastError(), true);
-  }
-
-  async function runMemoryExtract() {
-    if (!window.MEMORY_ENGINE?.manualExtract) { showToast('Lối vào trích xuất ký ức chưa sẵn sàng', true); return; }
-    try {
-      const result = await window.MEMORY_ENGINE.manualExtract();
-      showToast(`Trích xuất ký ức hoàn tất, đã ghi hoặc cập nhật ${result?.added || 0} mục`);
-      return result;
-    } catch (error) {
-      showToast(`Trích xuất ký ức thất bại: ${error?.message || error}`, true);
-    }
-  }
-
-  async function runMemoryReextract() {
-    if (!window.MEMORY_ENGINE?.manualReextract) { showToast('Lối vào diễn biến ký ức chưa sẵn sàng', true); return; }
-    try {
-      const result = await window.MEMORY_ENGINE.manualReextract();
-      showToast(`Diễn biến lại ký ức hoàn tất, đã ghi hoặc cập nhật ${result?.added ?? 'không rõ'} mục`);
-    } catch (error) { showToast(`Diễn biến lại ký ức thất bại: ${error?.message || error}`, true); }
   }
 
   // Điền lại "diễn biến thế giới" hàng loạt: xóa sạch trạng thái thế giới hiện tại, từ tầng AI đầu tiên chia đợt diễn biến đến tầng chỉ định.
@@ -6421,14 +5064,14 @@ window.WORLD_ENGINE_UI = (function() {
       power.title = `Bật/Tắt Diễn Biến Và Chèn Của ${face.label}`;
     }
     if (engineSwitch) {
-      const targetId = face.id === 'memory' ? 'world' : 'memory';
+      const targetId = face.id === 'npc' ? 'world' : 'npc';
       const target = getEngineFace(targetId);
       const targetActive = Boolean(callEngineFace(target, 'isRunning', false));
       const targetRunningLabel = String(callEngineFace(target, 'getRunningLabel', '') || '');
       engineSwitch.dataset.targetEngine = target.id;
       engineSwitch.dataset.engineRunning = targetActive ? 'true' : 'false';
       engineSwitch.classList.toggle('we-sat-target-world', target.id === 'world');
-      engineSwitch.classList.toggle('we-sat-target-memory', target.id === 'memory');
+      engineSwitch.classList.toggle('we-sat-target-npc', target.id === 'npc');
       engineSwitch.classList.toggle('we-sat-engine-running', targetActive);
       engineSwitch.title = targetActive
         ? `${target.label} đang ${targetRunningLabel || 'diễn biến'} · Nhấn để chuyển sang xem`
@@ -6701,7 +5344,7 @@ window.WORLD_ENGINE_UI = (function() {
       else done(result);
     });
 
-    // "Phích cắm" theo mặt quả cầu hiện tại: mặt thế giới sửa world_engine_settings, mặt ký ức sửa memory_engine_settings.
+    // "Phích cắm" theo mặt quả cầu hiện tại: mặt thế giới sửa world_engine_settings, mặt nhân vật sửa npc_engine_settings.
     // Mỗi engine đã đăng ký tự quản lý công tắc tổng riêng, và không ghi đè chế độ diễn biến và tùy chọn chèn mà người dùng đã chọn.
     //   Không dùng we-sat-off (bên trong wire sẽ chặn we-sat-off không cho bấm); dùng class .on để đánh dấu trạng thái tắt, power luôn bấm được.
     wire('we-sat-power', () => {
@@ -6719,7 +5362,7 @@ window.WORLD_ENGINE_UI = (function() {
     });
     wire('we-sat-engine-switch', () => {
       const shortcut = ball.querySelector('#we-sat-engine-switch');
-      switchEngineFace(shortcut?.dataset.targetEngine || (getEngineFace().id === 'memory' ? 'world' : 'memory'));
+      switchEngineFace(shortcut?.dataset.targetEngine || (getEngineFace().id === 'npc' ? 'world' : 'npc'));
     });
   }
 
@@ -6737,7 +5380,7 @@ window.WORLD_ENGINE_UI = (function() {
       btn.innerHTML =
         '<span class="we-ball-orbit"></span>' +
         '<span class="we-ball-ring"></span>' +
-        '<span class="we-ball-core"><span class="we-ball-globe"></span><span class="we-ball-memory"><span class="we-memory-scan"></span></span></span>' +
+        '<span class="we-ball-core"><span class="we-ball-globe"></span><span class="we-ball-npc"><span class="we-npc-scan"></span></span></span>' +
         '<span class="we-ball-count"></span>' +
         '<span class="we-ball-badge"></span>' +
         '<span class="we-ball-tip"></span>' +
@@ -6782,9 +5425,370 @@ window.WORLD_ENGINE_UI = (function() {
     observeInputButton();
   }
 
+  // ==================== Công Cụ Nhân Vật (NPC Engine) ====================
+
+  const NPC_THEME_KEY = 'npc-engine-theme';
+
+  function getStoredNpcTheme() {
+    try { return localStorage.getItem(NPC_THEME_KEY) || 'night'; }
+    catch (error) { return 'night'; }
+  }
+
+  const NPC_VIEW_META = {
+    core: { title: 'Trọng Yếu', poem: 'Người đáng nhớ thì thế gian nhớ' },
+    peripheral: { title: 'Ngoại Vi', poem: 'Chưa rõ chí hướng, hãy còn đợi thời' },
+    archive: { title: 'Kho Lưu Trữ', poem: 'Người đi rồi, tiếng vẫn còn' },
+    rumors: { title: 'Tin Đồn', poem: 'Lời truyền đi xa hơn chân người' }
+  };
+
+  const npcData = () => window.NPC_ENGINE_DATA;
+  const npcSettings = () => window.NPC_ENGINE_SETTINGS?.getSettings?.(true) || {};
+
+  function npcPath(path) {
+    const parts = (Array.isArray(path) ? path : []).map(part => String(part || '').trim()).filter(Boolean);
+    return parts.length ? parts.join(' › ') : 'chưa rõ';
+  }
+
+  function renderNpcView() {
+    if (_npcSettingsOpen) return renderNpcSettingsView();
+    if (_npcView === 'home') return renderNpcHomeView();
+    return renderNpcSubView(_npcView);
+  }
+
+  function renderNpcHomeView() {
+    const state = npcData()?.loadState?.() || {};
+    const npcs = Array.isArray(state.npcs) ? state.npcs : [];
+    const core = npcs.filter(npc => npc.tier === 'core');
+    const peripheral = npcs.filter(npc => npc.tier !== 'core');
+    const archive = Array.isArray(state.archive) ? state.archive : [];
+    const rumors = Array.isArray(state.rumorQueue) ? state.rumorQueue : [];
+    const limit = Math.max(1, parseInt(npcSettings().npcCoreLimit) || 12);
+
+    const moving = core.filter(npc => npc.location?.movingTo && npc.location.etaRounds > 0).length;
+    const stats = [
+      { label: 'Trọng Yếu', value: `${core.length}/${limit}` },
+      { label: 'Đang Di Chuyển', value: String(moving) },
+      { label: 'Lượt', value: String(state.round || 0) }
+    ];
+
+    const counts = { core: core.length, peripheral: peripheral.length, archive: archive.length, rumors: rumors.length };
+    const rows = ['core', 'peripheral', 'archive', 'rumors'].map((view, index, all) => {
+      const meta = NPC_VIEW_META[view];
+      const selected = _npcSelectedNavView === view ? ' we-nav-row--selected' : '';
+      const topLine = index === 0 ? '<div class="we-nav-line we-nav-line-hidden"></div>' : '<div class="we-nav-line"></div>';
+      const bottomLine = index === all.length - 1 ? '<div class="we-nav-line we-nav-line-hidden"></div>' : '<div class="we-nav-line"></div>';
+      return `<div class="we-nav-row we-npc-nav-row${selected}" data-npc-view="${view}">
+        <div class="we-nav-label">${meta.title}</div>
+        <div class="we-nav-track">${topLine}<div class="we-nav-dot"></div>${bottomLine}</div>
+        <div class="we-nav-content"><span class="we-nav-sub">${counts[view]} mục</span><span class="we-nav-poem">${meta.poem}</span></div>
+        <i class="fa-solid fa-chevron-right we-nav-arrow"></i>
+      </div>`;
+    }).join('');
+
+    return '<div class="we-npc-home">'
+      + '<div class="we-npc-core">' + stats.map(stat =>
+          `<div class="we-npc-stat"><div class="we-npc-stat-value">${h(stat.value)}</div><div class="we-npc-stat-label">${h(stat.label)}</div></div>`
+        ).join('') + '</div>'
+      + '<div class="we-nav-list we-npc-nav-list">' + rows + '</div>'
+      + '</div>';
+  }
+
+  function renderNpcCard(npc, options) {
+    const key = String(npc.id || npc.name);
+    const collapsed = !_npcExpanded.has(key);
+    const location = npc.location || {};
+    const inTransit = location.movingTo && location.etaRounds > 0;
+
+    const badges = [];
+    if (npc.pinned) badges.push('<span class="we-npc-badge we-npc-badge-pin">ghim</span>');
+    if (inTransit) badges.push(`<span class="we-npc-badge we-npc-badge-move">đi đường · ${location.etaRounds} lượt</span>`);
+    if (npc.status?.alive === false) badges.push('<span class="we-npc-badge we-npc-badge-dead">đã chết</span>');
+
+    const axes = [];
+    axes.push(`<div class="we-npc-axis"><span class="we-npc-axis-key">Vị trí</span><span>${h(npcPath(location.path))}${
+      inTransit ? ` → ${h(npcPath(location.movingTo))} (còn ${location.etaRounds} lượt)` : ''}</span></div>`);
+
+    if (location.userBelievesAt && location.userBelievesAt !== npcPath(location.path)) {
+      axes.push(`<div class="we-npc-axis"><span class="we-npc-axis-key">Người chơi tưởng</span><span>${h(location.userBelievesAt)}</span></div>`);
+    }
+
+    const goals = (Array.isArray(npc.goals) ? npc.goals : []).slice(0, 4)
+      .map(goal => `${h(goal.text || '')} <em>(${h(goal.progress || 'đang tiến hành')})</em>`).join('<br>');
+    if (goals) axes.push(`<div class="we-npc-axis"><span class="we-npc-axis-key">Mục tiêu</span><span>${goals}</span></div>`);
+
+    if (npc.faction?.name) {
+      axes.push(`<div class="we-npc-axis"><span class="we-npc-axis-key">Thế lực</span><span>${h(npc.faction.name)}${
+        npc.faction.role ? ' — ' + h(npc.faction.role) : ''}${npc.faction.standing ? ' (' + h(npc.faction.standing) + ')' : ''}</span></div>`);
+    }
+    if (npc.relations?.user?.attitude) {
+      axes.push(`<div class="we-npc-axis"><span class="we-npc-axis-key">Với người chơi</span><span>${h(npc.relations.user.attitude)}${
+        npc.relations.user.lastChangeReason ? ' — ' + h(npc.relations.user.lastChangeReason) : ''}</span></div>`);
+    }
+
+    const knowledge = (Array.isArray(npc.knowledge) ? npc.knowledge : []).slice(-5)
+      .map(item => `${h(item.fact || '')} <em>(${h(item.source || '')})</em>`).join('<br>');
+    if (knowledge) axes.push(`<div class="we-npc-axis"><span class="we-npc-axis-key">Biết</span><span>${knowledge}</span></div>`);
+
+    if (npc.status?.condition) {
+      axes.push(`<div class="we-npc-axis"><span class="we-npc-axis-key">Trạng thái</span><span>${h(npc.status.condition)}${
+        npc.status.resources ? ' · ' + h(npc.status.resources) : ''}</span></div>`);
+    }
+    if (npc.pendingIntent?.action) {
+      axes.push(`<div class="we-npc-axis"><span class="we-npc-axis-key">Dự định</span><span>${h(npc.pendingIntent.action)}</span></div>`);
+    }
+
+    const log = (Array.isArray(npc.offscreenLog) ? npc.offscreenLog : []).slice(-6).reverse()
+      .map(entry => `<div class="we-npc-log-row"><span class="we-npc-log-layer">tầng ${entry.layer ?? '?'}</span>${h(entry.action || '')}</div>`).join('');
+
+    const actions = options?.archived
+      ? `<button class="we-btn we-btn-sm we-npc-revive" data-npc-id="${h(key)}">Đưa trở lại</button>`
+      : `<button class="we-btn we-btn-sm we-npc-pin" data-npc-id="${h(key)}">${npc.pinned ? 'Bỏ ghim' : 'Ghim'}</button>
+         <button class="we-btn we-btn-sm we-npc-tier" data-npc-id="${h(key)}">${npc.tier === 'core' ? 'Hạ xuống ngoại vi' : 'Nâng lên trọng yếu'}</button>
+         <button class="we-btn we-btn-sm we-npc-archive" data-npc-id="${h(key)}">Đưa vào kho</button>`;
+
+    return `<div class="we-npc-card${collapsed ? ' is-collapsed' : ''}">
+      <div class="we-npc-card-head" data-npc-toggle="${h(key)}">
+        <div class="we-npc-name">${h(npc.name || 'không tên')}${
+          npc.aliases?.length ? `<span class="we-npc-alias">${h(npc.aliases.join(' / '))}</span>` : ''}</div>
+        <div class="we-npc-badges">${badges.join('')}<span class="we-npc-score">${parseInt(npc.significance) || 0}</span></div>
+        <i class="fa-solid fa-chevron-${collapsed ? 'right' : 'down'}"></i>
+      </div>
+      <div class="we-npc-card-body"${collapsed ? ' hidden' : ''}>
+        ${axes.join('')}
+        ${log ? `<div class="we-npc-log"><div class="we-npc-axis-key">Hoạt động ngầm</div>${log}</div>` : ''}
+        <div class="we-npc-actions">${actions}</div>
+      </div>
+    </div>`;
+  }
+
+  function renderNpcSubView(view) {
+    const state = npcData()?.loadState?.() || {};
+    const meta = NPC_VIEW_META[view] || { title: 'Nhân Vật', poem: '' };
+    let body = '';
+
+    if (view === 'rumors') {
+      const rumors = (Array.isArray(state.rumorQueue) ? state.rumorQueue : []).slice().reverse();
+      body = rumors.length
+        ? rumors.map(item => `<div class="we-npc-rumor"><span class="we-npc-log-layer">tầng ${item.layer ?? '?'}</span>${h(item.text || '')}</div>`).join('')
+        : '<div class="we-empty">Chưa có tin đồn nào</div>';
+    } else {
+      const source = view === 'archive'
+        ? (Array.isArray(state.archive) ? state.archive : [])
+        : (Array.isArray(state.npcs) ? state.npcs : []).filter(npc => view === 'core' ? npc.tier === 'core' : npc.tier !== 'core');
+      body = source.length
+        ? source.map(npc => renderNpcCard(npc, { archived: view === 'archive' })).join('')
+        : '<div class="we-empty">Chưa có nhân vật nào ở mục này</div>';
+    }
+
+    return `<div class="we-sub-topbar">
+        <button class="we-icon-btn" id="we-npc-btn-back" type="button" title="Quay Lại"><i class="fa-solid fa-arrow-left"></i></button>
+        <span class="we-sub-title">${h(meta.title)}</span>
+        <span class="we-npc-sub-poem">${h(meta.poem)}</span>
+      </div>
+      <div class="we-npc-subview"><div class="we-npc-list">${body}</div></div>`;
+  }
+
+  function renderNpcSettingsView() {
+    const settings = npcSettings();
+    const sec = (id, title, inner) =>
+      '<div class="we-section"><div class="we-section-title">' + sectionHeader(title, id) + '</div>' + sectionBody(id, inner) + '</div>';
+    const num = (id, label, value, hint) => `<div class="we-input-group"><label>${h(label)}</label>
+      <input type="number" id="${id}" value="${h(String(value))}" style="width:100%;">
+      ${hint ? `<div class="we-hint">${h(hint)}</div>` : ''}</div>`;
+    const toggle = (id, label, checked, hint) => `<div class="we-input-group">
+      <label class="we-switch-row"><input type="checkbox" id="${id}" ${checked ? 'checked' : ''}> ${h(label)}</label>
+      ${hint ? `<div class="we-hint">${h(hint)}</div>` : ''}</div>`;
+    const select = (id, label, value, options, hint) => `<div class="we-input-group"><label>${h(label)}</label>
+      <select id="${id}" style="width:100%;">${options.map(option =>
+        `<option value="${h(option[0])}" ${value === option[0] ? 'selected' : ''}>${h(option[1])}</option>`).join('')}</select>
+      ${hint ? `<div class="we-hint">${h(hint)}</div>` : ''}</div>`;
+
+    return `<div class="we-npc-settings">
+      <div class="we-sub-topbar">
+        <button class="we-icon-btn" id="we-npc-settings-back" type="button" title="Quay Lại"><i class="fa-solid fa-arrow-left"></i></button>
+        <span class="we-sub-title">Cài Đặt Công Cụ Nhân Vật</span>
+      </div>
+      ${sec('set-npc-filter', 'Bộ Lọc Nhân Vật',
+        num('we-npc-core-limit', 'Số nhân vật trọng yếu tối đa', settings.npcCoreLimit,
+            'Vượt ngưỡng thì người lâu không xuất hiện nhất bị hạ bậc. Người được ghim thì miễn.') +
+        num('we-npc-threshold', 'Ngưỡng điểm để lên bậc trọng yếu', settings.significanceThreshold,
+            'Mô hình đề xuất điểm, nhưng chỉ vượt ngưỡng này mới được lên trọng yếu.'))}
+      ${sec('set-npc-offscreen', 'Hoạt Động Ngầm',
+        toggle('we-npc-offscreen', 'Cho phép nhân vật vắng mặt tự hành động', settings.offscreenEnabled !== false) +
+        num('we-npc-offscreen-max', 'Số nhân vật hành động tối đa mỗi lượt', settings.offscreenMaxPerRound) +
+        num('we-npc-aggressiveness', 'Mức chủ động (0 đến 1)', settings.offscreenAggressiveness,
+            'Càng cao thì nhân vật càng ráo riết theo đuổi mục tiêu.'))}
+      ${sec('set-npc-inject', 'Chèn Vào Prompt',
+        toggle('we-npc-inject', 'Bật chèn ràng buộc vào prompt', settings.injectIntoPrompt !== false) +
+        toggle('we-npc-time-anchor', 'Neo thời gian', settings.timeAnchorEnabled !== false,
+               'Một dòng ngắn nhắc ngày truyện, số lượt và diễn biến nền gần đây.') +
+        toggle('we-npc-inject-location', 'Ràng buộc vị trí', settings.injectLocation !== false) +
+        toggle('we-npc-inject-knowledge', 'Ràng buộc tri thức', settings.injectKnowledge !== false) +
+        toggle('we-npc-inject-rumor', 'Tin đồn', settings.injectRumor !== false) +
+        select('we-npc-fog', 'Che vị trí thật', settings.locationFogMode, [
+          ['off', 'Tắt — AI biết vị trí thật'],
+          ['fog', 'Sương mù — chỉ nói chỗ người chơi tưởng, kèm gợi ý mơ hồ'],
+          ['strict', 'Nghiêm ngặt — chỉ nói chỗ người chơi tưởng']
+        ], 'Sương mù giữ được bất ngờ mà AI vẫn có chất liệu để viết.') +
+        select('we-npc-knowledge-scope', 'Phạm vi ràng buộc tri thức', settings.knowledgeInjectScope, [
+          ['in-scene', 'Chỉ nhân vật có mặt trong cảnh'],
+          ['all', 'Toàn bộ nhân vật trọng yếu'],
+          ['none', 'Tắt']
+        ], 'Phát cho toàn bộ thì prompt phình theo số nhân vật nhân số sự kiện.') +
+        num('we-npc-knowledge-limit', 'Số mục tối đa mỗi nhân vật', settings.knowledgeInjectLimit))}
+      ${sec('set-npc-travel', 'Di Chuyển',
+        select('we-npc-world-scale', 'Thế giới quan', settings.worldScale, [
+          ['auto', 'Tự suy từ lorebook'], ['cổ trang', 'Cổ trang'], ['hiện đại', 'Hiện đại'],
+          ['tu tiên', 'Tu tiên'], ['viễn tưởng', 'Viễn tưởng']
+        ], 'Quyết định tốc độ đi lại: cùng quãng đường, kiếm hiệp mất nhiều lượt hơn truyện có phi kiếm.') +
+        toggle('we-npc-travel-cache', 'Nhớ số lượt của các tuyến đường đã đi', settings.travelCacheEnabled !== false,
+               'Giữ nhất quán: cùng một tuyến không thể lúc nhanh lúc chậm.'))}
+      ${sec('set-npc-link', 'Nối Với Công Cụ Thế Giới',
+        toggle('we-npc-link', 'Thế Giới → Nhân Vật', settings.npcLinkEnabled !== false,
+               'Sau khi suy diễn thế giới xong thì chạy trích xuất nhân vật và hoạt động ngầm.') +
+        toggle('we-npc-to-world', 'Nhân Vật → Thế Giới', settings.injectIntoWorldEngine !== false,
+               'Đưa dự định của nhân vật trọng yếu vào prompt suy diễn thế giới.') +
+        num('we-npc-world-limit', 'Số nhân vật đưa sang thế giới', settings.worldEngineNpcLimit))}
+      ${sec('set-npc-theme', 'Giao Diện',
+        select('we-npc-theme-select', 'Bộ phối màu của mặt Nhân Vật', getStoredNpcTheme(),
+          WE_THEMES.map(theme => [theme.id, theme.name]),
+          'Mỗi mặt engine nhớ bộ màu riêng, chuyển mặt là đổi theo.'))}
+      ${sec('set-npc-maintain', 'Bảo Trì',
+        `<button class="we-btn" id="we-npc-unhide-all" style="width:100%;margin-bottom:8px;">Bỏ Ẩn Toàn Bộ Tin Nhắn</button>
+         <div class="we-hint">Công cụ cứu hộ: gỡ mọi tin nhắn còn bị Bộ Nhớ Ký Ức che đi. Chạy một lần là đủ.</div>
+         <button class="we-btn" id="we-npc-link-now" style="width:100%;margin:12px 0 8px;">Cập Nhật Hồ Sơ Ngay</button>
+         <div class="we-hint">Đẩy tóm tắt thế giới hiện có sang Công Cụ Nhân Vật mà không đợi lượt kế tiếp.</div>`)}
+    </div>`;
+  }
+
+  async function runNpcLink() {
+    try {
+      const ok = await window.WORLD_ENGINE?.manualNpcLink?.();
+      showToast(ok ? 'Đã cập nhật hồ sơ nhân vật' : 'Chưa cập nhật được hồ sơ nhân vật', !ok);
+    } catch (error) {
+      showToast('Cập nhật thất bại: ' + (error?.message || error), true);
+    }
+    refresh();
+  }
+
+  function bindNpcView() {
+    const back = document.getElementById('we-npc-btn-back');
+    if (back) back.onclick = () => { _npcView = 'home'; _npcSelectedNavView = null; refresh(); };
+    const settingsBack = document.getElementById('we-npc-settings-back');
+    if (settingsBack) settingsBack.onclick = () => { _npcSettingsOpen = false; refresh(); };
+
+    document.querySelectorAll('.we-npc-nav-row[data-npc-view]').forEach(row => {
+      row.onclick = () => {
+        const view = row.dataset.npcView;
+        if (_npcSelectedNavView === view) { _npcSelectedNavView = null; _npcView = view; }
+        else { _npcSelectedNavView = view; }
+        refresh();
+      };
+    });
+
+    document.querySelectorAll('[data-npc-toggle]').forEach(head => {
+      head.onclick = event => {
+        if (event.target.closest('button')) return;
+        const key = head.dataset.npcToggle;
+        if (_npcExpanded.has(key)) _npcExpanded.delete(key); else _npcExpanded.add(key);
+        refresh();
+      };
+    });
+
+    // Thao tác tay trên hồ sơ: đọc trạng thái, sửa, ghi lại — không đụng tới API.
+    const mutate = (id, action) => {
+      const state = npcData()?.loadState?.();
+      if (!state) return;
+      const npc = npcData().findNpc(state, id);
+      if (!npc) return;
+      action(npc, state);
+      npcData().saveState(state);
+      window.NPC_ENGINE?.applyInjection?.();
+      refresh();
+    };
+
+    document.querySelectorAll('.we-npc-pin').forEach(button => {
+      button.onclick = () => mutate(button.dataset.npcId, npc => { npc.pinned = !npc.pinned; });
+    });
+    document.querySelectorAll('.we-npc-tier').forEach(button => {
+      button.onclick = () => mutate(button.dataset.npcId, npc => {
+        npc.tier = npc.tier === 'core' ? 'peripheral' : 'core';
+      });
+    });
+    document.querySelectorAll('.we-npc-archive').forEach(button => {
+      button.onclick = () => mutate(button.dataset.npcId, (npc, state) => {
+        npcData().archiveNpc(state, npc.id, npc.status?.condition);
+      });
+    });
+    document.querySelectorAll('.we-npc-revive').forEach(button => {
+      button.onclick = () => mutate(button.dataset.npcId, (npc, state) => {
+        npcData().reviveNpc(state, npc.id);
+      });
+    });
+
+    const patch = patchValue => window.NPC_ENGINE_SETTINGS?.patchSettings(patchValue);
+    const bindNumber = (id, key) => {
+      const element = document.getElementById(id);
+      if (element) element.onchange = () => { patch({ [key]: element.value }); window.NPC_ENGINE?.applyInjection?.(); };
+    };
+    const bindToggle = (id, key) => {
+      const element = document.getElementById(id);
+      if (element) element.onchange = () => { patch({ [key]: element.checked }); window.NPC_ENGINE?.applyInjection?.(); };
+    };
+    const bindSelect = (id, key) => {
+      const element = document.getElementById(id);
+      if (element) element.onchange = () => { patch({ [key]: element.value }); window.NPC_ENGINE?.applyInjection?.(); };
+    };
+
+    bindNumber('we-npc-core-limit', 'npcCoreLimit');
+    bindNumber('we-npc-threshold', 'significanceThreshold');
+    bindNumber('we-npc-offscreen-max', 'offscreenMaxPerRound');
+    bindNumber('we-npc-aggressiveness', 'offscreenAggressiveness');
+    bindNumber('we-npc-knowledge-limit', 'knowledgeInjectLimit');
+    bindNumber('we-npc-world-limit', 'worldEngineNpcLimit');
+    bindToggle('we-npc-offscreen', 'offscreenEnabled');
+    bindToggle('we-npc-inject', 'injectIntoPrompt');
+    bindToggle('we-npc-time-anchor', 'timeAnchorEnabled');
+    bindToggle('we-npc-inject-location', 'injectLocation');
+    bindToggle('we-npc-inject-knowledge', 'injectKnowledge');
+    bindToggle('we-npc-inject-rumor', 'injectRumor');
+    bindToggle('we-npc-travel-cache', 'travelCacheEnabled');
+    bindToggle('we-npc-link', 'npcLinkEnabled');
+    bindToggle('we-npc-to-world', 'injectIntoWorldEngine');
+    bindSelect('we-npc-fog', 'locationFogMode');
+    bindSelect('we-npc-knowledge-scope', 'knowledgeInjectScope');
+    bindSelect('we-npc-world-scale', 'worldScale');
+
+    const themeSelect = document.getElementById('we-npc-theme-select');
+    if (themeSelect) themeSelect.onchange = () => { setNpcTheme(themeSelect.value); refresh(); };
+
+    const unhide = document.getElementById('we-npc-unhide-all');
+    if (unhide) {
+      unhide.onclick = async () => {
+        unhide.disabled = true;
+        try {
+          const count = await window.WORLD_ENGINE?.unhideAllMessages?.();
+          showToast(count ? `Đã bỏ ẩn ${count} tin nhắn` : 'Không có tin nhắn nào đang bị ẩn');
+        } catch (error) {
+          showToast('Bỏ ẩn thất bại: ' + (error?.message || error), true);
+        } finally {
+          unhide.disabled = false;
+        }
+      };
+    }
+
+    const linkNow = document.getElementById('we-npc-link-now');
+    if (linkNow) {
+      linkNow.onclick = async () => {
+        linkNow.disabled = true;
+        try { await runNpcLink(); } finally { linkNow.disabled = false; }
+      };
+    }
+  }
+
   return {
     buildPanel, buildInputButton, showPanel, hidePanel, togglePanel, refresh, setStatus,
-    setEvolvingUI, setMemoryEvolvingUI, setInjectedScope,
+    setEvolvingUI, setInjectedScope,
     registerEngineFace,
     listEngineFaces: () => { ensureBuiltinEngineFaces(); return _engineFaceOrder.map(id => ({ ...getEngineFace(id) })); },
     advanceEngineFace

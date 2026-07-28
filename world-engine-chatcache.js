@@ -290,8 +290,8 @@ window.WORLD_ENGINE_CHATCACHE = (function() {
   }
 
   function onStoreWrite(key, value) {
-    try { memoryScope.onStoreWrite(key); }
-    catch (e) { console.warn('[Memory Engine] Lên lịch ghi bộ nhớ đệm Tavern thất bại (đã cách ly)', e); }
+    try { npcScope.onStoreWrite(key); }
+    catch (e) { console.warn('[Công Cụ Nhân Vật] Lên lịch ghi bộ nhớ đệm Tavern thất bại (đã cách ly)', e); }
     if (_suspend) return;
     const ctx = getCtx();
     if (!ctx || !chatUsable(ctx)) return;
@@ -303,8 +303,8 @@ window.WORLD_ENGINE_CHATCACHE = (function() {
   // ========== Nạp chat: khôi phục / thu gọn cho đồng bộ thời gian thực ==========
 
   function onChatLoaded() {
-    try { memoryScope.onChatLoaded(); }
-    catch (e) { console.warn('[Memory Engine] Khôi phục bộ nhớ đệm Tavern thất bại (đã cách ly)', e); }
+    try { npcScope.onChatLoaded(); }
+    catch (e) { console.warn('[Công Cụ Nhân Vật] Khôi phục bộ nhớ đệm Tavern thất bại (đã cách ly)', e); }
     // Bỏ tick đang chờ còn sót lại từ chat trước, tránh nó vô tình ghi đĩa / sinh bản tự động sao lưu ở ngữ cảnh B
     if (_tickTimer) { clearTimeout(_tickTimer); _tickTimer = null; }
     const ctx = getCtx();
@@ -500,21 +500,21 @@ window.WORLD_ENGINE_CHATCACHE = (function() {
     };
   }
 
-  // ========== Phạm vi (scope) Memory Engine ==========
+  // ========== Phạm vi (scope) Công Cụ Nhân Vật ==========
   // Dùng chung ngữ cảnh chat, việc ghi chat_metadata, tương tác lưu trữ và store sink của module này;
   // chỉ thay đổi cài đặt và slot.
-  const memoryScope = (function() {
-    const MEMORY_NS = 'memory_engine';
+  const npcScope = (function() {
+    const NPC_NS = 'npc_engine';
     const MSLOTS = {
-      state: id => `memory_engine_state_${id}`,
-      checkpoint: id => `memory_engine_checkpoint_${id}`,
-      worldbook: id => `memory_engine_worldbook_selection_${id}`
+      state: id => `npc_engine_state_${id}`,
+      checkpoint: id => `npc_engine_checkpoint_${id}`,
+      worldbook: id => `npc_engine_worldbook_selection_${id}`
     };
     let suspend = false, tickTimer = null, lastAutoState = null;
-    const msettings = () => window.MEMORY_ENGINE_SETTINGS?.getSettings?.() || {};
+    const msettings = () => window.NPC_ENGINE_SETTINGS?.getSettings?.() || {};
     const syncOn = () => msettings().syncToChat === true;
     const backupOn = () => msettings().autoBackup === true;
-    const mrevKey = id => `memory_engine_${id}_syncrev`;
+    const mrevKey = id => `npc_engine_${id}_syncrev`;
     const mrev = id => Math.max(0, parseInt(store().getItem(mrevKey(id)) || '0') || 0);
     function setMrev(id, rev) { suspend = true; try { store().setItem(mrevKey(id), String(rev)); } finally { suspend = false; } }
     function isSlot(key, id) { return Object.values(MSLOTS).some(make => make(id) === key); }
@@ -537,11 +537,14 @@ window.WORLD_ENGINE_CHATCACHE = (function() {
       try {
         const state = JSON.parse(store().getItem(MSLOTS.state(id)) || '{}');
         const entities = ['organization', 'object', 'ability', 'location']
-          .reduce((sum, type) => sum + (Array.isArray(state.entity_memory?.[type]) ? state.entity_memory[type].length : 0), 0);
-        return { round: Number(state.round) || 0, characters: Array.isArray(state.personal_memory) ? state.personal_memory.length : 0, entities };
+        return {
+          round: Number(state.round) || 0,
+          characters: Array.isArray(state.npcs) ? state.npcs.length : 0,
+          entities: Array.isArray(state.archive) ? state.archive.length : 0
+        };
       } catch (e) { return { round: 0, characters: 0, entities: 0 }; }
     }
-    function read() { const ns = getCtx()?.chatMetadata?.[MEMORY_NS]; return ns && typeof ns === 'object' ? ns : null; }
+    function read() { const ns = getCtx()?.chatMetadata?.[NPC_NS]; return ns && typeof ns === 'object' ? ns : null; }
     function ensure() {
       const ns = read() || { v: SCHEMA_VERSION, live: null, snapshots: [] };
       ns.v = SCHEMA_VERSION; if (!Array.isArray(ns.snapshots)) ns.snapshots = [];
@@ -553,13 +556,13 @@ window.WORLD_ENGINE_CHATCACHE = (function() {
     function write(ns) {
       const ctx = getCtx(); if (!chatUsable(ctx)) return false;
       try {
-        if (typeof ctx.updateChatMetadata === 'function') ctx.updateChatMetadata({ [MEMORY_NS]: ns });
-        else if (ctx.chatMetadata) ctx.chatMetadata[MEMORY_NS] = ns; else return false;
+        if (typeof ctx.updateChatMetadata === 'function') ctx.updateChatMetadata({ [NPC_NS]: ns });
+        else if (ctx.chatMetadata) ctx.chatMetadata[NPC_NS] = ns; else return false;
         if (typeof ctx.saveMetadataDebounced === 'function') ctx.saveMetadataDebounced();
         else if (typeof ctx.saveMetadata === 'function') ctx.saveMetadata();
         else if (typeof ctx.saveChat === 'function') ctx.saveChat();
         return true;
-      } catch (e) { console.warn('[Memory Engine] Ghi bộ nhớ đệm chat thất bại', e); return false; }
+      } catch (e) { console.warn('[Công Cụ Nhân Vật] Ghi bộ nhớ đệm chat thất bại', e); return false; }
     }
     function add(ns, input, id) {
       const info = meta(id);
@@ -617,24 +620,15 @@ window.WORLD_ENGINE_CHATCACHE = (function() {
       const ctx = getCtx(); if (!chatUsable(ctx)) return false;
       const ns = ensure(), snap = ns.snapshots.find(s => s.id === id); if (!snap) return false;
       if (hasLocal(ctx.chatId)) add(ns, { name: 'Tự động sao lưu trước khi khôi phục', auto: true, data: mpack(ctx.chatId) }, ctx.chatId);
-      minstall(snap.data, ctx.chatId, true);
-      // Chuỗi ký ức nhập vào/khôi phục từ chat khác không thể tiếp tục dùng con trỏ tầng cũ;
-      // gập về Root của chat hiện tại rồi mới cộng dồn tiếp về sau.
-      try {
-        const memoryData = window.MEMORY_ENGINE_DATA;
-        const restored = memoryData?.loadState?.();
-        if (restored?.timeline?.originChatId && restored.timeline.originChatId !== ctx.chatId) {
-          memoryData.saveState(memoryData.rebaseToCurrentChat(restored));
-        }
-      } catch (e) { console.warn('[Memory Engine] Định vị lại bản lưu liên chat thất bại', e); }
+      minstall(snap.data, ctx.chatId, true);
       const rev = syncOn() ? pushLiveNow(ns, true) : null;
       if (!write(ns)) return false; if (rev != null) setMrev(ctx.chatId, rev); return true;
     }
     function renameSnapshot(id, name) { const ns = ensure(), snap = ns.snapshots.find(s => s.id === id); if (!snap) return false; snap.name = String(name || snap.name).slice(0, 60); return write(ns); }
     function deleteSnapshot(id) { const ns = ensure(), before = ns.snapshots.length; ns.snapshots = ns.snapshots.filter(s => s.id !== id); return ns.snapshots.length !== before && write(ns); }
-    function exportSnapshot(id) { const s = listSnapshots().find(x => x.id === id); return s ? { type: 'memory-engine-chat-snapshot', v: SCHEMA_VERSION, name: s.name, round: s.round, characters: s.characters, entities: s.entities, createdAt: s.createdAt, data: s.data } : null; }
+    function exportSnapshot(id) { const s = listSnapshots().find(x => x.id === id); return s ? { type: 'npc-engine-chat-snapshot', v: SCHEMA_VERSION, name: s.name, round: s.round, characters: s.characters, entities: s.entities, createdAt: s.createdAt, data: s.data } : null; }
     function importSnapshot(obj) {
-      const ctx = getCtx(); if (!chatUsable(ctx) || obj?.type !== 'memory-engine-chat-snapshot' || !obj.data) return null;
+      const ctx = getCtx(); if (!chatUsable(ctx) || obj?.type !== 'npc-engine-chat-snapshot' || !obj.data) return null;
       const ns = ensure(), snap = add(ns, { name: String(obj.name || 'Bản lưu đã nhập') + ' (đã nhập)', auto: false, round: obj.round, characters: obj.characters, entities: obj.entities, data: obj.data }, ctx.chatId);
       return write(ns) ? snap : null;
     }
@@ -666,7 +660,7 @@ window.WORLD_ENGINE_CHATCACHE = (function() {
   }
 
   function forScope(scope) {
-    if (scope === 'memory') return memoryScope;
+    if (scope === 'npc') return npcScope;
     if (scope == null || scope === '' || scope === 'world') return null;
     throw new Error(`Scope bộ nhớ đệm chat không xác định: ${scope}`);
   }

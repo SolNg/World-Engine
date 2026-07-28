@@ -19,8 +19,8 @@ assert.match(
 );
 assert.match(
   css,
-  /we-sat-target-memory\.we-sat-engine-running::before/,
-  'Lối vào Memory Engine phải có hiệu ứng chạy độc lập'
+  /we-sat-target-npc\.we-sat-engine-running::before/,
+  'Lối vào NPC Engine phải có hiệu ứng chạy độc lập'
 );
 assert.match(
   css,
@@ -31,10 +31,10 @@ assert.match(
 const worldComplete = world.indexOf("setStatus('Suy diễn thế giới hoàn tất')");
 const worldUiStop = world.indexOf('ui.setEvolvingUI(false)', worldComplete);
 const worldUiRefresh = world.indexOf('ui.refresh(true)', worldComplete);
-const memoryLinkStart = world.indexOf('await window.MEMORY_ENGINE?.ingestWorldEvolution?.');
+const npcLinkStart = world.indexOf('await window.NPC_ENGINE?.ingestWorldEvolution?.');
 assert.ok(worldComplete >= 0 && worldUiStop > worldComplete && worldUiRefresh > worldUiStop,
   'Sau khi API thế giới hoàn tất, phải dừng hiệu ứng thế giới rồi mới làm mới giao diện thế giới');
-assert.ok(memoryLinkStart > worldUiRefresh,
-  'Liên kết bộ nhớ chỉ được bắt đầu sau khi hiệu ứng thế giới đã dừng và giao diện đã được làm mới');
+assert.ok(npcLinkStart > worldUiRefresh,
+  'Liên kết nhân vật chỉ được bắt đầu sau khi hiệu ứng thế giới đã dừng và giao diện đã được làm mới');
 
 console.log('engine switch animation tests passed');

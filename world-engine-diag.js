@@ -43,7 +43,7 @@ window.WORLD_ENGINE_DIAG = (function() {
   }
 
   function collect(scope) {
-    if (scope === 'memory') return collectMemory();
+    if (scope === 'npc') return collectNpc();
     if (scope != null && scope !== '' && scope !== 'world') throw new Error(`Scope chẩn đoán không xác định: ${scope}`);
     const core = window.WORLD_ENGINE_CORE;
     const api = window.WORLD_ENGINE_API;
@@ -279,42 +279,42 @@ window.WORLD_ENGINE_DIAG = (function() {
     return diag;
   }
 
-  function collectMemory() {
-    const data = window.MEMORY_ENGINE_DATA;
-    const engine = window.MEMORY_ENGINE;
-    const cache = window.WORLD_ENGINE_CHATCACHE?.forScope?.('memory');
+  function collectNpc() {
+    const data = window.NPC_ENGINE_DATA;
+    const engine = window.NPC_ENGINE;
     const debug = safe(function () { return engine?.getLastDebug?.() || {}; });
     const state = safe(function () { return data?.loadState?.() || {}; });
-    const characters = Array.isArray(state?.personal_memory) ? state.personal_memory : [];
-    const entityTypes = ['organization', 'object', 'ability', 'location'];
-    const entities = entityTypes.flatMap(function (type) { return Array.isArray(state?.entity_memory?.[type]) ? state.entity_memory[type] : []; });
+    const npcs = Array.isArray(state?.npcs) ? state.npcs : [];
+    const archive = Array.isArray(state?.archive) ? state.archive : [];
     return {
-      meta: safe(function () { return { engine: 'memory', extVersion: window.MEMORY_ENGINE_SETTINGS?.VERSION || '1.1.1', collectedAt: new Date().toISOString(), userAgent: navigator.userAgent }; }),
+      meta: safe(function () { return { engine: 'npc', extVersion: window.NPC_ENGINE_SETTINGS?.VERSION || '1.0.0', collectedAt: new Date().toISOString(), userAgent: navigator.userAgent }; }),
       env: safe(function () { const ctx = SillyTavern.getContext(); return { chatId: ctx?.chatId || null, chatCount: ctx?.chat?.length || 0, hasChatMetadata: !!ctx?.chatMetadata }; }),
-      settings: safe(function () { return sanitizeSettings(window.MEMORY_ENGINE_SETTINGS?.getSettings?.(true) || {}); }),
-      memoryState: safe(function () {
+      settings: safe(function () { return sanitizeSettings(window.NPC_ENGINE_SETTINGS?.getSettings?.(true) || {}); }),
+      npcState: safe(function () {
         return {
-          hasState: data?.hasState?.() || false,
           round: state?.round || 0,
-          characterCount: characters.length,
-          memoryCount: characters.reduce(function (total, character) {
-            return total + Object.values(character.memory || {}).reduce(function (sum, list) { return sum + (Array.isArray(list) ? list.length : 0); }, 0);
-          }, 0),
-          entityCount: entities.length,
-          entityHistoryCount: entities.reduce(function (total, entity) { return total + (Array.isArray(entity.history) ? entity.history.length : 0); }, 0),
-          smallSummaryCount: Array.isArray(state?.event_memory?.small_summaries) ? state.event_memory.small_summaries.length : 0,
-          bigSummaryExists: Boolean(state?.event_memory?.big_summaries?.length),
-          bigSummaryCount: Array.isArray(state?.event_memory?.big_summaries) ? state.event_memory.big_summaries.length : 0,
-          bigSummaryCursor: Number(state?.event_memory?.big_summary_cursor) || 0
+          chatLayer: state?.chatLayer ?? null,
+          coreCount: npcs.filter(function (npc) { return npc.tier === 'core'; }).length,
+          peripheralCount: npcs.filter(function (npc) { return npc.tier !== 'core'; }).length,
+          archivedCount: archive.length,
+          movingCount: npcs.filter(function (npc) { return npc.location?.movingTo && npc.location.etaRounds > 0; }).length,
+          knowledgeCount: npcs.reduce(function (total, npc) { return total + (Array.isArray(npc.knowledge) ? npc.knowledge.length : 0); }, 0),
+          offscreenLogCount: npcs.reduce(function (total, npc) { return total + (Array.isArray(npc.offscreenLog) ? npc.offscreenLog.length : 0); }, 0),
+          publicFactCount: Array.isArray(state?.publicFacts) ? state.publicFacts.length : 0,
+          rumorCount: Array.isArray(state?.rumorQueue) ? state.rumorQueue.length : 0,
+          travelRouteCount: Object.keys(state?.travelCache || {}).length,
+          sceneLayer: state?.scene?.layer ?? null,
+          scenePresentCount: Array.isArray(state?.scene?.presentIds) ? state.scene.presentIds.length : 0
         };
       }),
-      checkpoint: safe(function () { const cp = data?.loadCheckpoint?.(); return { exists: !!cp, characterCount: Array.isArray(cp?.personal_memory) ? cp.personal_memory.length : 0, entityCount: entityTypes.reduce(function (sum, type) { return sum + (Array.isArray(cp?.entity_memory?.[type]) ? cp.entity_memory[type].length : 0); }, 0), smallSummaryCount: Array.isArray(cp?.event_memory?.small_summaries) ? cp.event_memory.small_summaries.length : 0, bigSummaryExists: Boolean(cp?.event_memory?.big_summaries?.length), bigSummaryCount: Array.isArray(cp?.event_memory?.big_summaries) ? cp.event_memory.big_summaries.length : 0 }; }),
-      extraction: safe(function () { return { isRunning: engine?.isRunning?.() ?? null, lastError: engine?.getLastError?.() || null, lastPrompt: debug?.prompt || debug?.requestPrompt || '', lastRawResult: debug?.rawResult || debug?.apiResponse || debug?.response || '' }; }),
-      injectionInspector: safe(function () { return window.WORLD_ENGINE_INJECT_INSPECTOR?.getLastSnapshot?.('memory') || engine?.getLastInjectionDebug?.() || debug?.injection || { hasSnapshot: false }; }),
-      chatcache: safe(function () { return { status: cache?.getStatus?.() || null, snapshots: (cache?.listSnapshots?.() || []).map(function (item) { return { id: item.id, name: item.name, auto: !!item.auto, round: item.round, characters: item.characters, entities: item.entities, createdAt: item.createdAt }; }) }; }),
-      worldbook: safe(function () { return { selectedCount: window.WORLD_ENGINE_WORLDBOOK?.getSelectedIds?.('memory')?.length || 0, triggerEnabled: window.WORLD_ENGINE_WORLDBOOK?.triggerEnabled?.('memory') || false }; }),
+      checkpoint: safe(function () {
+        const cp = data?.loadCheckpoint?.();
+        return { exists: !!cp, npcCount: Array.isArray(cp?.npcs) ? cp.npcs.length : 0, round: cp?.round || 0 };
+      }),
+      extraction: safe(function () { return { isRunning: engine?.isRunning?.() ?? null, runningLabel: engine?.getRunningLabel?.() || '', lastError: debug?.error || null, lastPrompt: debug?.prompt || '', lastRawResult: debug?.apiResponse || '' }; }),
+      injection: safe(function () { return { text: engine?.applyInjection ? (window.NPC_ENGINE?.buildInjectionText?.(state, window.NPC_ENGINE_SETTINGS?.getSettings?.(true) || {}, {}) || '') : '' }; }),
       filterRegex: safe(function () {
-        const raw = window.MEMORY_ENGINE_SETTINGS?.getSettings?.().filterRegex || '';
+        const raw = window.NPC_ENGINE_SETTINGS?.getSettings?.().filterRegex || '';
         const result = window.WORLD_ENGINE_CORE?.validateFilterRegex?.(raw);
         return result ? { validCount: result.ok, invalidCount: result.bad.length, invalidList: result.bad, rawPreview: raw.slice(0, 200) } : { error: 'Bộ kiểm tra không khả dụng' };
       })
@@ -334,7 +334,7 @@ window.WORLD_ENGINE_DIAG = (function() {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = (scope === 'memory' ? 'memory-engine-diag-' : 'world-engine-diag-') + chatId + '-' + Date.now() + '.json';
+    a.download = (scope === 'npc' ? 'npc-engine-diag-' : 'world-engine-diag-') + chatId + '-' + Date.now() + '.json';
     a.click();
     URL.revokeObjectURL(url);
     return content;

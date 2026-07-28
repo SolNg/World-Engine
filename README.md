@@ -2,7 +2,7 @@
 
 Extension độc lập cho **SillyTavern**, dùng API riêng để **tự động suy diễn trạng thái thế giới** sau mỗi lượt hội thoại (sự kiện, thế lực, danh tiếng, kinh tế, tin đồn, kẻ thù, bí mật...), rồi chèn phần trạng thái đó vào prompt để mô hình AI viết tiếp câu chuyện nhất quán với những gì đã xảy ra — không cần bạn tự nhớ và nhắc lại bối cảnh.
 
-Đi kèm là **Bộ Nhớ Ký Ức (Memory Engine)** — một engine ghi nhớ nhân vật/thực thể và tóm tắt cốt truyện dài kỳ, hoạt động độc lập với World Engine.
+Đi kèm là **Công Cụ Nhân Vật (NPC Engine)** — theo dõi các NPC trọng yếu theo sáu trục và cho họ **hoạt động ngầm** khi vắng mặt khỏi cảnh, rồi ràng buộc AI phải tôn trọng vị trí và tri thức của từng nhân vật.
 
 > Đây là bản dịch tiếng Việt của dự án gốc tiếng Trung **世界引擎** (tác giả: Disnight, giấy phép MIT). Xem [Ghi chú về bản dịch](#-ghi-chú-về-bản-dịch) ở cuối file.
 
@@ -54,16 +54,23 @@ World Engine có thể đọc trực tiếp **World Info / Lorebook** của Sill
 
 Mặc định tắt để không ảnh hưởng hành vi cũ; bật lên trong mục cài đặt **Sổ Tay Thế Giới**.
 
-### 🧠 Memory Engine — Bộ Nhớ Ký Ức
+### 🧑 NPC Engine — Công Cụ Nhân Vật
 
-Một engine ghi nhớ độc lập, dùng cho các cuộc trò chuyện dài:
+Một engine độc lập, cho NPC tiếp tục sống khi không có mặt trên màn hình.
 
-- **Nhân Vật**: ký ức chủ quan theo từng nhân vật, kèm biệt danh và mốc thời gian
-- **Thực Thể**: tổ chức, vật phẩm, năng lực, địa điểm quan trọng xuất hiện trong truyện
-- **Lược Ghi**: tóm tắt ngắn theo từng giai đoạn (phạm vi vài tầng hội thoại)
-- **Tổng Thuật**: tổng thuật dài hơn, nắm mạch truyện toàn cục
+**Lọc ba bậc** — không phải ai xuất hiện cũng được lưu. Nhân vật có tên riêng, có động cơ rõ, có tác động tới người chơi thì lên bậc **trọng yếu**; có tên nhưng chưa rõ chí hướng thì **ngoại vi**; còn "lão chủ quán", "tên lính gác" thì bỏ qua hoàn toàn. Ngưỡng và số lượng tối đa chỉnh được trong cài đặt — đây là van chặn duy nhất giữ cho prompt không phình ra khi truyện dài.
 
-Hỗ trợ **ẩn chính văn cũ** đã được tóm tắt bao phủ (giữ ngữ cảnh gọn mà không mất thông tin), và **tái trích xuất / hồi cứu hàng loạt** khi cần dựng lại trí nhớ từ đầu cuộc trò chuyện.
+**Sáu trục theo dõi**: vị trí, mục tiêu, thế lực, quan hệ với người chơi và với NPC khác, tri thức, trạng thái.
+
+**Hoạt động ngầm** — mỗi lượt, các NPC trọng yếu đang vắng mặt sẽ tự hành động dựa trên mục tiêu của họ và diễn biến thế giới vừa xảy ra. Kết quả nào đủ lộ liễu thì lan thành tin đồn nối vào hệ tin đồn của World Engine.
+
+**Ràng buộc gửi cho AI** — engine không kể lể nhật ký vào prompt, mà chỉ đưa ràng buộc cứng:
+
+- **Vị trí**: ai đang ở đâu, ai đang trên đường và còn mấy lượt nữa mới tới. Ba nấc che vị trí thật — để AI biết hết, hoặc chỉ biết chỗ người chơi *tưởng* nhân vật đang ở (kèm gợi ý mơ hồ), hoặc mù hoàn toàn.
+- **Tri thức**: với nhân vật đang có mặt trong cảnh, liệt kê những gì họ **chưa** biết. NPC không được nhắc tới chuyện chưa từng tới tai mình — kể cả cái chết của người khác.
+- **Neo thời gian**: một dòng ngắn ghi ngày truyện, số lượt và vài diễn biến nền gần nhất, chống việc AI trôi mốc thời gian sau vài lượt.
+
+**Về khoảng cách**: engine không tự hiểu địa lý. Vị trí lưu dưới dạng đường dẫn phân cấp (quốc gia › vùng › thành › địa điểm) nên độ gần suy ra bằng so khớp tiền tố; còn thời gian đi lại thì AI ước lượng một lần theo thế giới quan — cùng quãng đường, truyện kiếm hiệp tốn nhiều lượt hơn truyện có phi kiếm — rồi engine chỉ việc trừ dần mỗi lượt.
 
 ### 💾 Lưu trữ & đồng bộ
 
@@ -86,7 +93,7 @@ Hỗ trợ **ẩn chính văn cũ** đã được tóm tắt bao phủ (giữ ng
 3. Trò chuyện bình thường trong SillyTavern — World Engine sẽ tự động suy diễn nền sau mỗi lượt (hoặc theo chu kỳ bạn đặt trong cài đặt **Chèn**).
 4. Mở bảng điều khiển (nhấn vào quả cầu nổi) để xem/sửa tay trạng thái thế giới: sự kiện, thế lực, tin đồn, danh tiếng...
 5. Nếu mới cài extension giữa một cuộc trò chuyện dài đã có sẵn, dùng **Tái Suy Diễn Hàng Loạt** trong mục **Bảo Trì** để dựng trạng thái từ đầu.
-6. Nếu muốn AI cũng "nhớ" nhân vật/cốt truyện dài hạn, bật thêm **Bộ Nhớ Ký Ức** trong cài đặt riêng của nó.
+6. Muốn NPC tiếp tục sống khi vắng mặt thì mở mặt **Công Cụ Nhân Vật** (nhấn nút chuyển engine trên quả cầu) và cấu hình API riêng cho nó.
 
 ---
 

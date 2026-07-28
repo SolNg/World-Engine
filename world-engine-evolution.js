@@ -941,10 +941,10 @@ Quy tắc chú thích:
     const worldbookSection = await window.WORLD_ENGINE_WORLDBOOK?.buildPromptSection?.(worldbookScanText) || '';
     let memoryEngineSection = '';
     try {
-      memoryEngineSection = window.MEMORY_ENGINE?.buildWorldEngineContext?.(state) || '';
+      memoryEngineSection = window.NPC_ENGINE?.buildWorldEngineContext?.(state) || '';
     } catch (error) {
-      // Ngữ cảnh xuyên engine tùy chọn phải được cách ly lỗi: sự cố của memory engine không được làm gián đoạn việc diễn biến thế giới.
-      console.error('[World Engine] Đọc ngữ cảnh của memory engine thất bại (đã cách ly)', error);
+      // Ngữ cảnh xuyên engine tùy chọn phải được cách ly lỗi: sự cố của npc engine không được làm gián đoạn việc diễn biến thế giới.
+      console.error('[World Engine] Đọc ngữ cảnh của npc engine thất bại (đã cách ly)', error);
     }
     const tonePrompt = ((api.getSettings ? api.getSettings() : {}).tonePrompt || '').trim();
     const toneSection = tonePrompt
@@ -1008,7 +1008,7 @@ Quy tắc chú thích:
       { key: 'causal-steps',   label: '③ Kiểm Tra Nhân Quả (10 Bước)',         content: segCausalSteps },
       { key: 'rules',          label: '④ Quy Tắc Diễn Biến Thế Giới',          content: fullRules },
       { key: 'worldbook',      label: '⑤ Chèn World Book',                     content: worldbookSection },
-      { key: 'memory-engine',  label: '⑤b Chèn Nhân Vật/Thực Thể Từ Memory Engine', content: memoryEngineSection },
+      { key: 'memory-engine',  label: '⑤b Chèn Nhân Vật Trọng Yếu Và Dự Định Từ NPC Engine', content: memoryEngineSection },
       { key: 'state',          label: '⑥ Trạng Thái Thế Giới Hiện Tại (JSON)', content: segStateBlock },
       { key: 'dialogue',       label: '⑦ Hội Thoại Gần Đây',                   content: segDialogue },
       { key: 'output-format',  label: '⑧ Giải Thích Trường Xuất JSON',        content: segOutputInstructions },

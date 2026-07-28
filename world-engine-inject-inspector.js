@@ -18,13 +18,13 @@ window.WORLD_ENGINE_INJECT_INSPECTOR = (function() {
 
   // Tương ứng với INJECTION_NAME của world-engine.js (key mà chúng ta dùng để đăng ký vào ST extension_prompts).
   const INJECTION_NAME = 'world-engine-world';
-  const MEMORY_INJECTION_NAME = 'memory-engine-memory';
+  const NPC_INJECTION_NAME = 'npc_engine_context';
 
   // Điểm neo hạ cánh: đầu ra của buildContext() luôn bắt đầu bằng "【世界信息】" (world-engine-inject.js),
   //   chuỗi con này không chứa bất kỳ macro {{...}} nào, không bị ST substituteParams viết lại → dùng nó để phán đoán "chèn có vào được prompt cuối cùng hay không" là ổn định nhất.
   //   (Lưu ý: nếu indexOf trên toàn bộ chuỗi chèn sẽ bị âm tính giả do các macro như {{user}} bị mở rộng, nên chỉ tin vào điểm neo không có macro này.)
   const SENTINEL = '【世界信息】';
-  const MEMORY_SENTINEL = '【记忆信息】';
+  const NPC_SENTINEL = '【TRẠNG THÁI NHÂN VẬT NỀN】';
 
   // Tên sự kiện (nghĩa đen; lúc chạy ưu tiên dùng hằng số trong ctx.event_types, nếu không lấy được thì quay về nghĩa đen).
   const EV_TEXT = 'generate_after_combine_prompts';   // Text Completion / API cổ điển: eventData={prompt,dryRun}
@@ -32,7 +32,7 @@ window.WORLD_ENGINE_INJECT_INSPECTOR = (function() {
 
   let _subscribed = false;
   let _last = null;  // Chỉ giữ lại snapshot cuối cùng
-  let _lastMemory = null;
+  let _lastNpc = null;
 
   function getCtx() {
     try { return (typeof SillyTavern !== 'undefined' && SillyTavern.getContext) ? SillyTavern.getContext() : null; }
@@ -41,20 +41,20 @@ window.WORLD_ENGINE_INJECT_INSPECTOR = (function() {
 
   // —— Thu thập các trường môi trường chỉ đọc ngay tại thời điểm sự kiện xảy ra (lúc này extension_prompts vẫn đang giữ đăng ký của vòng này) ——
   function snapEnv(ctx, scope) {
-    const memoryScope = scope === 'memory';
+    const npcScope = scope === 'npc';
     const api = window.WORLD_ENGINE_API;
     const core = window.WORLD_ENGINE_CORE;
     let injectEnabled = true, registeredAtSend = false, sameLayerReroll = false, round = null;
 
     try {
-      const settings = memoryScope ? window.MEMORY_ENGINE_SETTINGS?.getSettings?.(true) : (api && api.getSettings ? api.getSettings(true) : {});
+      const settings = npcScope ? window.NPC_ENGINE_SETTINGS?.getSettings?.(true) : (api && api.getSettings ? api.getSettings(true) : {});
       injectEnabled = settings?.injectIntoPrompt !== false;
     } catch (e) {}
 
     // Xác nhận độc lập "vòng này chúng ta có thực sự đăng ký hay không" — phân biệt "đã đăng ký nhưng không hạ cánh = bug thật" với "chúng ta tự không đăng ký = bỏ qua theo thiết kế".
     try {
       const ep = ctx && ctx.extensionPrompts;
-      const entry = ep && ep[memoryScope ? MEMORY_INJECTION_NAME : INJECTION_NAME];
+      const entry = ep && ep[npcScope ? NPC_INJECTION_NAME : INJECTION_NAME];
       registeredAtSend = !!(entry && entry.value && String(entry.value).length);
     } catch (e) {}
 
@@ -75,7 +75,7 @@ window.WORLD_ENGINE_INJECT_INSPECTOR = (function() {
   //   Mỗi mục đều sao chép content đầy đủ để UI mở rộng chỉ đọc (người dùng cần đối chiếu nội dung thực tế của tất cả role, không chỉ mục chúng ta chèn).
   //   Chỉ giữ lại snapshot cuối cùng, bộ nhớ có giới hạn; phía xuất diag không mang content (quyền riêng tư: chứa nguyên văn thẻ nhân vật/sách thế giới/lịch sử chat).
   function snapChat(chat, env, scope) {
-    const sentinel = scope === 'memory' ? MEMORY_SENTINEL : SENTINEL;
+    const sentinel = scope === 'npc' ? NPC_SENTINEL : SENTINEL;
     const messages = [];
     let landed = false, ourContent = '', ourIndex = -1;
     for (let i = 0; i < chat.length; i++) {
@@ -108,7 +108,7 @@ window.WORLD_ENGINE_INJECT_INSPECTOR = (function() {
   // —— Text Completion: prompt đã được flatten thành một chuỗi duy nhất, chuỗi không thể phân theo role; chỉ lưu độ dài + có khớp điểm neo hay không + đoạn trích quanh điểm neo ——
   function snapText(prompt, env, scope) {
     const text = String(prompt || '');
-    const idx = text.indexOf(scope === 'memory' ? MEMORY_SENTINEL : SENTINEL);
+    const idx = text.indexOf(scope === 'npc' ? NPC_SENTINEL : SENTINEL);
     const landed = idx >= 0;
     let excerpt = '';
     if (landed) {
@@ -146,7 +146,7 @@ window.WORLD_ENGINE_INJECT_INSPECTOR = (function() {
       if (!Array.isArray(eventData.chat)) return;            // Phòng thủ về hình dạng dữ liệu
       const ctx = getCtx();
       _last = snapChat(eventData.chat, snapEnv(ctx, 'world'), 'world');
-      _lastMemory = snapChat(eventData.chat, snapEnv(ctx, 'memory'), 'memory');
+      _lastNpc = snapChat(eventData.chat, snapEnv(ctx, 'npc'), 'npc');
     } catch (e) { /* Tự kiểm tra chỉ đọc tuyệt đối không ảnh hưởng đến việc sinh nội dung */ }
   }
 
@@ -156,7 +156,7 @@ window.WORLD_ENGINE_INJECT_INSPECTOR = (function() {
       if (typeof eventData.prompt !== 'string') return;
       const ctx = getCtx();
       _last = snapText(eventData.prompt, snapEnv(ctx, 'world'), 'world');
-      _lastMemory = snapText(eventData.prompt, snapEnv(ctx, 'memory'), 'memory');
+      _lastNpc = snapText(eventData.prompt, snapEnv(ctx, 'npc'), 'npc');
     } catch (e) {}
   }
 
@@ -181,7 +181,7 @@ window.WORLD_ENGINE_INJECT_INSPECTOR = (function() {
 
   // Trả về snapshot cuối cùng (tham chiếu bản sao chỉ đọc; UI/diag chỉ đọc không ghi). Không có thì trả về null.
   function getLastSnapshot(scope) {
-    if (scope === 'memory') return _lastMemory;
+    if (scope === 'npc') return _lastNpc;
     if (scope == null || scope === '' || scope === 'world') return _last;
     throw new Error(`Scope kiểm tra chèn không xác định: ${scope}`);
   }
@@ -197,8 +197,8 @@ window.WORLD_ENGINE_INJECT_INSPECTOR = (function() {
   };
   function statusText(status, scope) {
     const text = STATUS_TEXT[status] || STATUS_TEXT.NOT_YET;
-    return scope === 'memory' ? text.replace(/trạng thái thế giới/g, 'thông tin ký ức').replace(/không có trạng thái thế giới/g, 'không có thông tin ký ức') : text;
+    return scope === 'npc' ? text.replace(/trạng thái thế giới/g, 'thông tin nhân vật').replace(/không có trạng thái thế giới/g, 'không có thông tin nhân vật') : text;
   }
 
-  return { init, getLastSnapshot, statusText, SENTINEL, MEMORY_SENTINEL };
+  return { init, getLastSnapshot, statusText, SENTINEL, NPC_SENTINEL };
 })();

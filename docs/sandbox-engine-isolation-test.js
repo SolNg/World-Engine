@@ -7,8 +7,8 @@ const vm = require('vm');
 const root = path.resolve(__dirname, '..');
 const source = fs.readFileSync(path.join(root, 'world-engine.js'), 'utf8');
 
-async function testExecutionCrashDoesNotBlockMemory() {
-  let memoryInitCount = 0;
+async function testExecutionCrashDoesNotBlockNpc() {
+  let npcInitCount = 0;
   const errors = [];
   const sandbox = {
     console: { log() {}, warn() {}, error(...args) { errors.push(args); } },
@@ -32,14 +32,12 @@ async function testExecutionCrashDoesNotBlockMemory() {
       // Cố ý không expose WORLD_ENGINE_EVOLUTION: mô phỏng việc script bị crash lúc thực thi nhưng script.onload vẫn được kích hoạt.
       'world-engine-evolution.js': null,
       'world-engine-inject.js': ['WORLD_ENGINE_INJECT', { buildContext() { return ''; } }],
-      'memory-engine-settings.js': ['MEMORY_ENGINE_SETTINGS', { getSettings() { return {}; }, patchSettings() {} }],
-      'memory-engine-data.js': ['MEMORY_ENGINE_DATA', { loadState() { return { personal_memory: [] }; }, saveState() {} }],
-      'memory-engine-timeline.js': ['MEMORY_ENGINE_TIMELINE', { captureRange() { return []; }, auditRefs() { return { valid: true, refs: [] }; }, syncHidden() {} }],
-      'memory-engine-prompt.js': ['MEMORY_ENGINE_PROMPT', { buildUserPrompt() { return ''; } }],
-      'memory-engine-small-summary-prompt.js': ['MEMORY_ENGINE_SMALL_SUMMARY_PROMPT', { buildUserPrompt() { return ''; } }],
-      'memory-engine-big-summary-prompt.js': ['MEMORY_ENGINE_BIG_SUMMARY_PROMPT', { buildUserPrompt() { return ''; } }],
-      'memory-engine.js': ['MEMORY_ENGINE', {
-        init() { memoryInitCount++; }, applyInjection() {}, abort() {}, isRunning() { return false; }
+      'npc-engine-settings.js': ['NPC_ENGINE_SETTINGS', { getSettings() { return {}; }, patchSettings() { return {}; } }],
+      'npc-engine-data.js': ['NPC_ENGINE_DATA', { loadState() { return { npcs: [] }; }, saveState() {} }],
+      'npc-engine-prompt.js': ['NPC_ENGINE_PROMPT', { buildUserPrompt() { return ''; } }],
+      'npc-engine-offscreen.js': ['NPC_ENGINE_OFFSCREEN', { buildUserPrompt() { return ''; } }],
+      'npc-engine.js': ['NPC_ENGINE', {
+        init() { npcInitCount++; }, applyInjection() {}, abort() {}, isRunning() { return false; }
       }],
       'world-engine-diag.js': ['WORLD_ENGINE_DIAG', { collect() { return {}; }, download() {} }],
       'world-engine-ui.js': ['WORLD_ENGINE_UI', {
@@ -66,7 +64,7 @@ async function testExecutionCrashDoesNotBlockMemory() {
 
   vm.runInNewContext(source, sandbox, { filename: 'world-engine.js' });
   await new Promise(resolve => setTimeout(resolve, 30));
-  assert.strictEqual(memoryInitCount, 1, 'Sau khi module/giao diện thế giới lỗi, Memory Engine vẫn phải khởi tạo độc lập một lần');
+  assert.strictEqual(npcInitCount, 1, 'Sau khi module/giao diện thế giới lỗi, Công Cụ Nhân Vật vẫn phải khởi tạo độc lập một lần');
   assert.ok(errors.some(args => String(args[0]).includes('Hợp đồng giao diện') && String(args[0]).includes('không đầy đủ') || String(args[0]).includes('Tải module thất bại')),
     'Việc thiếu hợp đồng giao diện thế giới phải được ghi log rõ ràng');
 }
@@ -111,7 +109,7 @@ function testChatCacheOwnsChatLifecycle() {
 }
 
 (async () => {
-  await testExecutionCrashDoesNotBlockMemory();
+  await testExecutionCrashDoesNotBlockNpc();
   await testSharedEventGuardHandlesSyncAndAsyncErrors();
   testChatCacheOwnsChatLifecycle();
   console.log('✓ Kiểm thử cách ly lỗi giữa nhiều engine đã thông qua');

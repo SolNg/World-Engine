@@ -1,11 +1,10 @@
 {
   "display_name": "🌍 Thế Giới Dẫn Truyện",
   "author": "Disnight",
-  "description": "Cỗ máy suy diễn thế giới độc lập bằng API: tự động suy diễn trạng thái thế giới sau mỗi lượt hội thoại rồi chèn ngữ cảnh vào prompt; hỗ trợ lưu file lưu trữ theo từng cuộc trò chuyện trên Tavern, đồng bộ đa thiết bị và chống thất lạc dữ liệu lưu trữ; World Info hỗ trợ kích hoạt kiểu đèn giao thông (luôn bật/khớp từ khóa); hỗ trợ tái suy diễn hàng loạt (đẩy dần từ tầng AI đầu tiên đến tầng chỉ định); đã khắc phục các lỗi ổn định như phình bộ nhớ sau khi nâng cấp, nhiễu dữ liệu lưu trữ khi tái suy diễn hàng loạt lúc chuyển cuộc trò chuyện",
-  "version": "3.0.2",
+  "description": "Cỗ máy suy diễn thế giới độc lập bằng API: tự động suy diễn trạng thái thế giới sau mỗi lượt hội thoại rồi chèn ngữ cảnh vào prompt; hỗ trợ lưu file lưu trữ theo từng cuộc trò chuyện trên Tavern, đồng bộ đa thiết bị và chống thất lạc dữ liệu lưu trữ; World Info hỗ trợ kích hoạt kiểu đèn giao thông (luôn bật/khớp từ khóa); hỗ trợ tái suy diễn hàng loạt (đẩy dần từ tầng AI đầu tiên đến tầng chỉ định). Đi kèm Công Cụ Nhân Vật: theo dõi NPC trọng yếu theo sáu trục và cho họ hoạt động ngầm khi vắng mặt khỏi cảnh, rồi ràng buộc AI tôn trọng vị trí và tri thức của từng nhân vật",
+  "version": "4.0.0",
   "license": "MIT",
   "type": "extension",
   "js": "world-engine.js",
-  "generate_interceptor": "worldEngineMemoryGenerateInterceptor",
   "css": "style.css"
 }
