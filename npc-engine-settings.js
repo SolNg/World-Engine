@@ -44,6 +44,7 @@ window.NPC_ENGINE_SETTINGS = (function() {
     locationFogMode: 'fog',
     knowledgeInjectScope: 'in-scene',
     knowledgeInjectLimit: 5,
+    injectMaxChars: 2500,
 
     // ===== Di chuyển =====
     worldScale: 'auto',
@@ -109,6 +110,7 @@ window.NPC_ENGINE_SETTINGS = (function() {
       locationFogMode: pick(merged.locationFogMode, FOG_MODES, DEFAULTS.locationFogMode),
       knowledgeInjectScope: pick(merged.knowledgeInjectScope, KNOWLEDGE_SCOPES, DEFAULTS.knowledgeInjectScope),
       knowledgeInjectLimit: clampInt(merged.knowledgeInjectLimit, 0, 50, DEFAULTS.knowledgeInjectLimit),
+      injectMaxChars: clampInt(merged.injectMaxChars, 0, 100000, DEFAULTS.injectMaxChars),
 
       worldScale: pick(merged.worldScale, WORLD_SCALES, DEFAULTS.worldScale),
       worldEngineNpcLimit: clampInt(merged.worldEngineNpcLimit, 0, 50, DEFAULTS.worldEngineNpcLimit),

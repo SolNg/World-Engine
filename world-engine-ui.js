@@ -5704,7 +5704,9 @@ window.WORLD_ENGINE_UI = (function() {
           ['none', 'Tắt']
         ], 'Chi phí token tăng theo <i>số nhân vật × số sự kiện</i>. Chọn "trong cảnh" là đủ dùng vì chỉ người đang đối thoại mới có nguy cơ lỡ miệng. Chọn "toàn bộ" khi truyện có nhiều tuyến song song và bạn hay chuyển cảnh.')
       + num('we-npc-knowledge-limit', 'Số mục tối đa mỗi nhân vật', settings.knowledgeInjectLimit,
-        'Lấy các sự việc mới nhất trước. Để 3–5 là vừa; cao hơn thì prompt phình nhanh mà AI cũng khó nhớ hết.');
+        'Lấy các sự việc mới nhất trước. Để 3–5 là vừa; cao hơn thì prompt phình nhanh mà AI cũng khó nhớ hết.')
+      + num('we-npc-inject-max-chars', 'Giới hạn độ dài khối chèn (ký tự)', settings.injectMaxChars,
+        'Trần cứng cho toàn bộ phần gửi cho AI. Phần chèn của extension tính vào <b>prompt bắt buộc</b> của SillyTavern — vượt quá thì Tavern báo "Mandatory prompts exceed the context size" và <b>không gửi được lượt nào</b>. Hết ngân sách thì bỏ khối từ dưới lên: tin đồn trước, rồi ràng buộc tri thức, giữ lại ràng buộc vị trí và neo thời gian. Để 0 là không giới hạn.');
 
     const travelBody = select('we-npc-world-scale', 'Thế giới quan', settings.worldScale, [
         ['auto', 'Tự suy từ lorebook'], ['cổ trang', 'Cổ trang'], ['hiện đại', 'Hiện đại'],
@@ -5795,6 +5797,16 @@ window.WORLD_ENGINE_UI = (function() {
       + '</div>';
   }
 
+  // Độ dài khối chèn lần gần nhất so với trần cấu hình. Phần chèn của extension tính vào
+  // prompt bắt buộc của SillyTavern, nên đây là con số cần nhìn khi Tavern báo tràn ngữ cảnh.
+  function describeInjectionSize() {
+    const info = window.NPC_ENGINE?.getLastInjectionInfo?.() || {};
+    const length = info.length || 0;
+    if (!info.maxChars) return length + " ký tự (không giới hạn)";
+    const dropped = info.dropped ? " · đã bỏ " + info.dropped + " khối cho vừa trần" : "";
+    return length + " / " + info.maxChars + " ký tự" + dropped;
+  }
+
   function renderNpcDebug() {
     const debug = window.NPC_ENGINE?.getLastDebug?.() || {};
     const state = npcData()?.loadState?.() || {};
@@ -5808,7 +5820,8 @@ window.WORLD_ENGINE_UI = (function() {
       ['Trong kho', (state.archive || []).length],
       ['Sự thật công khai', (state.publicFacts || []).length],
       ['Tin đồn', (state.rumorQueue || []).length],
-      ['Tuyến đường đã biết', Object.keys(state.travelCache || {}).length]
+      ['Tuyến đường đã biết', Object.keys(state.travelCache || {}).length],
+      ['Độ dài khối chèn', describeInjectionSize()]
     ].map(([label, value]) => `<div class="we-npc-axis"><span class="we-npc-axis-key">${h(label)}</span><span>${h(String(value))}</span></div>`).join('');
 
     const block = (title, content) => content
@@ -5976,6 +5989,7 @@ window.WORLD_ENGINE_UI = (function() {
     bindNumber('we-npc-offscreen-max', 'offscreenMaxPerRound');
     bindNumber('we-npc-aggressiveness', 'offscreenAggressiveness');
     bindNumber('we-npc-knowledge-limit', 'knowledgeInjectLimit');
+    bindNumber('we-npc-inject-max-chars', 'injectMaxChars');
     bindNumber('we-npc-world-limit', 'worldEngineNpcLimit');
     bindToggle('we-npc-offscreen', 'offscreenEnabled');
     bindToggle('we-npc-inject', 'injectIntoPrompt');
@@ -6012,6 +6026,7 @@ window.WORLD_ENGINE_UI = (function() {
       'we-npc-inject-location': 'injectLocation', 'we-npc-inject-knowledge': 'injectKnowledge',
       'we-npc-inject-rumor': 'injectRumor', 'we-npc-fog': 'locationFogMode',
       'we-npc-knowledge-scope': 'knowledgeInjectScope', 'we-npc-knowledge-limit': 'knowledgeInjectLimit',
+      'we-npc-inject-max-chars': 'injectMaxChars',
       'we-npc-world-scale': 'worldScale', 'we-npc-travel-cache': 'travelCacheEnabled',
       'we-npc-tone-prompt': 'tonePrompt', 'we-npc-name-blacklist': 'nameBlacklist',
       'we-npc-filter-regex': 'filterRegex',

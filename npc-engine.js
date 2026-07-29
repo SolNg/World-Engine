@@ -6,6 +6,8 @@ window.NPC_ENGINE = (function() {
   let runningLabel = '';
   let abortController = null;
   let lastDebug = { prompt: '', apiResponse: '', parsed: null, error: '' };
+  // Số liệu khối chèn lần gần nhất, để tab Gỡ Lỗi cho biết đang tốn bao nhiêu ký tự.
+  let lastInjectionInfo = { length: 0, blocks: 0, dropped: 0, maxChars: 0 };
 
   // Chống chạy hai lần cho cùng một tin nhắn. Có hai đường dẫn tới cùng một luồng:
   // Công Cụ Thế Giới gọi sang sau khi suy diễn xong (đường chính), và bộ hẹn giờ riêng bên dưới
@@ -340,9 +342,10 @@ window.NPC_ENGINE = (function() {
       .filter(npc => npc.tier === 'core' && !npc.status.archived && npc.location.movingTo && npc.location.etaRounds > 0)
       .map(npc => `${npc.name} chưa thể có mặt ở ${describePath(npc.location.movingTo)} (còn ${npc.location.etaRounds} lượt)`);
 
-    let text = `【Vị trí nhân vật】\n${lines.join('\n')}`;
-    if (constraints.length) text += `\nRàng buộc bắt buộc: ${constraints.join('; ')}`;
-    return text;
+    // Ràng buộc cứng đặt NGAY SAU tiêu đề, không phải cuối khối: khi bị cắt cho vừa trần độ dài,
+    // phần cắt đi là từ dưới lên, nên thứ quan trọng nhất phải nằm trên cùng.
+    const head = constraints.length ? `\nRàng buộc bắt buộc: ${constraints.join('; ')}` : '';
+    return `【Vị trí nhân vật】${head}\n${lines.join('\n')}`;
   }
 
   function buildKnowledgeBlock(state, st) {
@@ -385,19 +388,72 @@ window.NPC_ENGINE = (function() {
     return `【Tin đồn đang lan】\n${rumors.map(text => '· ' + text).join('\n')}`;
   }
 
+  const INJECTION_HEADER = '【TRẠNG THÁI NHÂN VẬT NỀN】';
+  const INJECTION_FOOTER = 'Hãy tuân thủ đúng các ràng buộc trên. Không tự ý đổi vị trí nhân vật, không cho nhân vật biết điều họ chưa được biết.';
+
   function buildInjectionText(state, st, context) {
     if (!state || st.injectIntoPrompt === false) return '';
-    const blocks = [];
 
-    if (st.timeAnchorEnabled !== false) blocks.push(buildTimeAnchor(state, context));
-    if (st.injectLocation !== false) blocks.push(buildLocationBlock(state, st));
-    if (st.injectKnowledge !== false) blocks.push(buildKnowledgeBlock(state, st));
-    if (st.injectRumor !== false) blocks.push(buildRumorBlock(state, st));
+    // Xếp theo mức thiết yếu giảm dần: hết ngân sách thì bỏ từ dưới lên. Ràng buộc vị trí là thứ
+    // AI dễ vi phạm nhất nên đứng trên; tin đồn chỉ là chất liệu trang trí nên xuống cuối.
+    const ordered = [
+      st.timeAnchorEnabled !== false ? buildTimeAnchor(state, context) : '',
+      st.injectLocation !== false ? buildLocationBlock(state, st) : '',
+      st.injectKnowledge !== false ? buildKnowledgeBlock(state, st) : '',
+      st.injectRumor !== false ? buildRumorBlock(state, st) : ''
+    ].filter(Boolean);
 
-    const body = blocks.filter(Boolean).join('\n\n');
-    if (!body) return '';
+    if (!ordered.length) return '';
 
-    return `【TRẠNG THÁI NHÂN VẬT NỀN】\n${body}\n\nHãy tuân thủ đúng các ràng buộc trên. Không tự ý đổi vị trí nhân vật, không cho nhân vật biết điều họ chưa được biết.`;
+    // Không có trần thì khối này phình theo số nhân vật nhân số sự kiện, và SillyTavern sẽ báo
+    // "Mandatory prompts exceed the context size" vì phần chèn của extension tính vào prompt bắt buộc.
+    const maxChars = Math.max(0, parseInt(st.injectMaxChars) || 0);
+    const overhead = INJECTION_HEADER.length + INJECTION_FOOTER.length + 6;
+    const budget = maxChars > 0 ? Math.max(0, maxChars - overhead) : Infinity;
+
+    // Cắt một khối cho vừa chỗ trống, cắt theo ranh giới dòng để không đứt câu giữa chừng.
+    // Giữ nguyên dòng tiêu đề của khối, vì mất tiêu đề thì phần còn lại mất ngữ cảnh.
+    const fitBlock = (block, room) => {
+      const lines = block.split('\n');
+      const out = [];
+      let size = 0;
+      for (const line of lines) {
+        const cost = line.length + (out.length ? 1 : 0);
+        if (size + cost > room) break;
+        out.push(line);
+        size += cost;
+      }
+      return out.length > 1 ? out.join('\n') : '';
+    };
+
+    const kept = [];
+    let used = 0;
+    let dropped = 0;
+    for (let i = 0; i < ordered.length; i++) {
+      const block = ordered[i];
+      const gap = kept.length ? 2 : 0;
+      if (used + block.length + gap <= budget) {
+        kept.push(block);
+        used += block.length + gap;
+        continue;
+      }
+      // Không vừa: cắt bớt khối này rồi DỪNG HẲN. Không được nhảy sang khối sau, vì các khối
+      // xếp theo mức thiết yếu giảm dần — để tin đồn lọt vào trong khi ràng buộc vị trí bị bỏ
+      // là giữ phần trang trí mà mất phần quan trọng nhất.
+      const trimmed = fitBlock(block, Math.max(0, budget - used - gap));
+      if (trimmed) { kept.push(trimmed); used += trimmed.length + gap; }
+      dropped += ordered.length - i - (trimmed ? 0 : 1);
+      break;
+    }
+
+    // Ngân sách quá chặt tới mức không giữ nổi khối nào: giữ khối đầu và cắt cứng,
+    // vì mất ràng buộc hoàn toàn còn tệ hơn ràng buộc bị cắt cụt.
+    if (!kept.length) kept.push(ordered[0].slice(0, Math.max(0, budget)));
+
+    let text = `${INJECTION_HEADER}\n${kept.join('\n\n')}\n\n${INJECTION_FOOTER}`;
+    if (maxChars > 0 && text.length > maxChars) text = text.slice(0, maxChars);
+    lastInjectionInfo = { length: text.length, blocks: kept.length, dropped, maxChars };
+    return text;
   }
 
   // ================= Chèn =================
@@ -789,6 +845,7 @@ window.NPC_ENGINE = (function() {
     isRunning: () => running,
     getRunningLabel: () => runningLabel,
     getLastDebug: () => clone(lastDebug),
+    getLastInjectionInfo: () => clone(lastInjectionInfo),
     ingestWorldEvolution,
     buildWorldEngineContext,
     // Xuất ra để giao diện và kiểm thử dùng lại mà không phải gọi API.

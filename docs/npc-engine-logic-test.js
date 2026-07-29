@@ -279,6 +279,53 @@ const baseSettings = () => config.getSettings(true);
   check('trạng thái rỗng thì không chèn khung rỗng', empty === '');
 }
 
+// ===== Trần độ dài khối chèn =====
+// Phần chèn của extension tính vào "prompt bắt buộc" của SillyTavern. Không có trần thì khối này
+// phình theo số nhân vật nhân số sự kiện, và Tavern báo "Mandatory prompts exceed the context size"
+// — lúc đó KHÔNG gửi được lượt nào, không phải chỉ là chèn thiếu.
+{
+  const state = data.defaultState();
+  state.round = 9;
+  for (let i = 1; i <= 10; i++) {
+    const npc = data.upsertNpc(state, { name: 'Nhân Vật Số ' + i, tier: 'core', significance: 90 });
+    npc.location.path = ['Quốc Gia', 'Vùng Đất Rất Dài Tên', 'Thành Phố Số ' + i];
+    npc.location.userBelievesAt = 'Một nơi khác hẳn số ' + i;
+    npc.location.movingTo = ['Quốc Gia', 'Vùng Khác', 'Đích Đến Số ' + i];
+    npc.location.etaRounds = 4;
+    npc.offscreenLog.push({ layer: 9, action: 'Làm một việc dài dòng số ' + i });
+  }
+  state.scene = { layer: 9, location: [], presentIds: state.npcs.map(npc => npc.id) };
+  for (let i = 1; i <= 12; i++) engine.addPublicFact(state, 'Một sự thật công khai khá dài số ' + i, 9, 'sự kiện');
+  for (let i = 1; i <= 8; i++) state.rumorQueue.push({ text: 'Một tin đồn dài dòng số ' + i, layer: 9 });
+
+  const unlimited = engine.buildInjectionText(state, { ...baseSettings(), injectMaxChars: 0 }, {});
+  check('không giới hạn thì khối chèn rất dài', unlimited.length > 1500);
+
+  const capped = engine.buildInjectionText(state, { ...baseSettings(), injectMaxChars: 600 }, {});
+  check('có trần thì không vượt quá trần', capped.length <= 600);
+  check('vẫn giữ được tiêu đề', capped.includes('TRẠNG THÁI NHÂN VẬT NỀN'));
+  // Bỏ từ dưới lên: tin đồn là chất liệu trang trí, ràng buộc vị trí là thứ AI dễ vi phạm nhất.
+  check('ưu tiên giữ ràng buộc vị trí hơn tin đồn',
+    capped.includes('Vị trí nhân vật') || !capped.includes('Tin đồn đang lan'));
+
+  // Cắt là cắt từ dưới lên, nên ràng buộc cứng phải nằm trên cùng khối vị trí mới sống sót.
+  check('ràng buộc cứng sống sót qua phép cắt',
+    !capped.includes('Vị trí nhân vật') || capped.includes('Ràng buộc bắt buộc'));
+  check('cắt theo ranh giới dòng, không đứt giữa câu',
+    capped.split('\n').every(line => !line.endsWith(' ')));
+
+  const info = engine.getLastInjectionInfo();
+  check('báo cáo độ dài thực tế', info.length === capped.length);
+  check('báo cáo trần đang áp dụng', info.maxChars === 600);
+  check('báo cáo số khối đã bỏ', info.dropped > 0);
+
+  // Trần chặt tới mức không giữ nổi khối nào thì vẫn phải trả về thứ gì đó, không được trả rỗng:
+  // mất ràng buộc hoàn toàn tệ hơn ràng buộc bị cắt cụt.
+  const tiny = engine.buildInjectionText(state, { ...baseSettings(), injectMaxChars: 120 }, {});
+  check('trần cực chặt vẫn không trả về rỗng', tiny.length > 0);
+  check('trần cực chặt vẫn tôn trọng trần', tiny.length <= 120);
+}
+
 // ===== Nối ngược sang Công Cụ Thế Giới =====
 {
   const state = data.defaultState();
