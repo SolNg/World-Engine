@@ -14,6 +14,8 @@ window.WORLD_ENGINE_UI = (function() {
   let _npcView = 'home';
   let _npcSelectedNavView = null;
   const _npcExpanded = new Set();
+  let _npcEditingId = null;      // id nhân vật đang mở trình soạn; chuỗi rỗng = đang thêm mới
+  let _npcExpandScope = '';      // chat nào đang mở: đổi chat thì quên hết trạng thái gập/mở cũ
   let _panelFlipping = false;
   let isEvolving = false;
   let editingEvent = null;
@@ -5504,6 +5506,143 @@ window.WORLD_ENGINE_UI = (function() {
       + '</div>';
   }
 
+  // ===== Trình soạn hồ sơ nhân vật =====
+  // Mô hình chấm sai thì phải có đường chữa: sửa tên, bậc, vị trí, mục tiêu, tri thức, hoặc xoá hẳn
+  // nhân vật bị nhận nhầm. Danh sách dùng ô nhiều dòng, mỗi dòng một mục — ít mã hơn kiểu từng hàng
+  // riêng mà vẫn sửa hàng loạt được bằng dán đè.
+  function npcListToText(list, format) {
+    return (Array.isArray(list) ? list : []).map(format).filter(Boolean).join('\n');
+  }
+
+  function npcTextToGoals(text) {
+    return String(text || '').split('\n').map(line => line.trim()).filter(Boolean).map(line => {
+      const [goal, progress] = line.split('|').map(part => (part || '').trim());
+      return { text: goal, progress: progress || 'đang tiến hành' };
+    });
+  }
+
+  function npcTextToKnowledge(text, existing) {
+    const known = new Map((Array.isArray(existing) ? existing : []).map(item => [String(item.fact || '').trim(), item]));
+    return String(text || '').split('\n').map(line => line.trim()).filter(Boolean).map(line => {
+      const [fact, source, certainty] = line.split('|').map(part => (part || '').trim());
+      // Giữ nguyên layer và factId của mục cũ, nếu không thì phép lùi tầng và ràng buộc tri thức hỏng.
+      const old = known.get(fact);
+      return {
+        fact,
+        source: source || old?.source || 'chứng kiến',
+        certainty: certainty || old?.certainty || 'chắc chắn',
+        layer: old?.layer ?? null,
+        factId: old?.factId ?? null
+      };
+    });
+  }
+
+  function renderNpcEditor(npc, isNew) {
+    const location = npc.location || {};
+    const faction = npc.faction || {};
+    const user = npc.relations?.user || {};
+    const status = npc.status || {};
+    const row = inner => `<div class="we-input-group">${inner}</div>`;
+    const field = (label, inner, note) => row(`<label>${h(label)}</label>${inner}`
+      + (note ? `<div class="we-hint">${h(note)}</div>` : ''));
+
+    return `<div class="we-npc-editor" data-npc-editor="${h(npc.id || '')}">
+      ${field('Tên Và Biệt Danh (phân cách bằng /)',
+        `<input class="we-npc-f-names" type="text" value="${u([npc.name, ...(npc.aliases || [])].filter(Boolean).join(' / '))}" placeholder="Lý Mộ Bạch / Lý đại hiệp" style="width:100%;">`,
+        'Tên đầu tiên là tên chính, phần còn lại là biệt danh dùng để nhận diện.')}
+      <div style="display:flex;gap:6px;">
+        <div style="flex:1;">${field('Bậc',
+          `<select class="we-npc-f-tier" style="width:100%;">
+            <option value="core" ${npc.tier === 'core' ? 'selected' : ''}>Trọng yếu</option>
+            <option value="peripheral" ${npc.tier !== 'core' ? 'selected' : ''}>Ngoại vi</option>
+          </select>`)}</div>
+        <div style="flex:1;">${field('Điểm thiết yếu',
+          `<input class="we-npc-f-significance" type="number" min="0" max="100" value="${h(String(npc.significance || 0))}" style="width:100%;">`)}</div>
+      </div>
+      ${row(`<label class="we-switch-row"><input class="we-npc-f-pinned" type="checkbox" ${npc.pinned ? 'checked' : ''}> Ghim bậc (mô hình không đổi được)</label>`)}
+      ${field('Vị trí (phân cấp, ngăn bằng ›)',
+        `<input class="we-npc-f-path" type="text" value="${u(npcPath(location.path) === 'chưa rõ' ? '' : npcPath(location.path))}" placeholder="Đại Chu › Giang Nam › Dương Châu" style="width:100%;">`,
+        'Từ lớn tới nhỏ: quốc gia › vùng › thành › địa điểm. Độ gần giữa hai nhân vật suy ra từ đây.')}
+      ${field('Chỗ người chơi tưởng nhân vật đang ở',
+        `<input class="we-npc-f-believes" type="text" value="${u(location.userBelievesAt || '')}" placeholder="Bỏ trống nếu trùng vị trí thật" style="width:100%;">`,
+        'Khác vị trí thật thì chế độ che sương mù sẽ chỉ nói chỗ này cho AI.')}
+      <div style="display:flex;gap:6px;">
+        <div style="flex:2;">${field('Đang trên đường tới',
+          `<input class="we-npc-f-moving" type="text" value="${u(location.movingTo ? npcPath(location.movingTo) : '')}" placeholder="Bỏ trống nếu đang đứng yên" style="width:100%;">`)}</div>
+        <div style="flex:1;">${field('Còn (lượt)',
+          `<input class="we-npc-f-eta" type="number" min="0" value="${h(String(location.etaRounds || 0))}" style="width:100%;">`)}</div>
+      </div>
+      <div style="display:flex;gap:6px;">
+        <div style="flex:1;">${field('Thế lực', `<input class="we-npc-f-faction" type="text" value="${u(faction.name || '')}" style="width:100%;">`)}</div>
+        <div style="flex:1;">${field('Vai trò', `<input class="we-npc-f-role" type="text" value="${u(faction.role || '')}" style="width:100%;">`)}</div>
+      </div>
+      <div style="display:flex;gap:6px;">
+        <div style="flex:2;">${field('Thái độ với người chơi', `<input class="we-npc-f-attitude" type="text" value="${u(user.attitude || '')}" style="width:100%;">`)}</div>
+        <div style="flex:1;">${field('Tin cậy', `<input class="we-npc-f-trust" type="number" value="${h(String(user.trust || 0))}" style="width:100%;">`)}</div>
+      </div>
+      <div style="display:flex;gap:6px;">
+        <div style="flex:1;">${field('Tình trạng', `<input class="we-npc-f-condition" type="text" value="${u(status.condition || '')}" style="width:100%;">`)}</div>
+        <div style="flex:1;">${field('Tài nguyên', `<input class="we-npc-f-resources" type="text" value="${u(status.resources || '')}" style="width:100%;">`)}</div>
+      </div>
+      ${row(`<label class="we-switch-row"><input class="we-npc-f-alive" type="checkbox" ${status.alive !== false ? 'checked' : ''}> Còn sống</label>`)}
+      ${field('Mục tiêu (mỗi dòng một mục: nội dung | tiến triển)',
+        `<textarea class="we-npc-f-goals" rows="3" style="width:100%;">${h(npcListToText(npc.goals, g => g.text ? `${g.text} | ${g.progress || 'đang tiến hành'}` : ''))}</textarea>`)}
+      ${field('Tri thức (mỗi dòng: điều đã biết | nguồn | độ chắc)',
+        `<textarea class="we-npc-f-knowledge" rows="4" style="width:100%;">${h(npcListToText(npc.knowledge, k => k.fact ? `${k.fact} | ${k.source || ''} | ${k.certainty || ''}`.replace(/\s*\|\s*$/, '') : ''))}</textarea>`,
+        'Nguồn: chứng kiến / nghe đồn / suy đoán. Đây là thứ quyết định nhân vật được phép nhắc tới điều gì.')}
+      <div class="we-npc-editor-actions">
+        <button class="we-btn we-npc-cancel-edit" type="button">Huỷ</button>
+        ${isNew ? '' : '<button class="we-btn we-btn-danger we-npc-delete" type="button">Xoá hẳn</button>'}
+        <button class="we-btn we-btn-primary we-npc-save" type="button">Lưu</button>
+      </div>
+    </div>`;
+  }
+
+  // Đọc ngược từ ô nhập về đối tượng nhân vật. Giữ nguyên những trường trình soạn không đụng tới
+  // (offscreenLog, pendingIntent, travelMode, fogSince, quan hệ với NPC khác).
+  function readNpcEditor(root, base) {
+    const value = selector => (root.querySelector(selector)?.value || '').trim();
+    const checked = selector => root.querySelector(selector)?.checked === true;
+    const splitPath = text => text.split(/[›>\/]/).map(part => part.trim()).filter(Boolean);
+
+    const names = value('.we-npc-f-names').split('/').map(part => part.trim()).filter(Boolean);
+    const moving = splitPath(value('.we-npc-f-moving'));
+    const eta = Math.max(0, parseInt(value('.we-npc-f-eta')) || 0);
+
+    return {
+      ...base,
+      name: names[0] || base.name,
+      aliases: names.slice(1),
+      tier: value('.we-npc-f-tier') === 'core' ? 'core' : 'peripheral',
+      significance: Math.min(100, Math.max(0, parseInt(value('.we-npc-f-significance')) || 0)),
+      pinned: checked('.we-npc-f-pinned'),
+      location: {
+        ...(base.location || {}),
+        path: splitPath(value('.we-npc-f-path')),
+        userBelievesAt: value('.we-npc-f-believes'),
+        movingTo: moving.length ? moving : null,
+        etaRounds: moving.length ? eta : 0
+      },
+      faction: { ...(base.faction || {}), name: value('.we-npc-f-faction'), role: value('.we-npc-f-role') },
+      relations: {
+        ...(base.relations || {}),
+        user: {
+          ...((base.relations || {}).user || {}),
+          attitude: value('.we-npc-f-attitude'),
+          trust: parseInt(value('.we-npc-f-trust')) || 0
+        }
+      },
+      status: {
+        ...(base.status || {}),
+        condition: value('.we-npc-f-condition'),
+        resources: value('.we-npc-f-resources'),
+        alive: checked('.we-npc-f-alive')
+      },
+      goals: npcTextToGoals(value('.we-npc-f-goals')),
+      knowledge: npcTextToKnowledge(value('.we-npc-f-knowledge'), base.knowledge)
+    };
+  }
+
   function renderNpcCard(npc, options) {
     const key = String(npc.id || npc.name);
     const collapsed = !_npcExpanded.has(key);
@@ -5552,10 +5691,20 @@ window.WORLD_ENGINE_UI = (function() {
       .map(entry => `<div class="we-npc-log-row"><span class="we-npc-log-layer">tầng ${entry.layer ?? '?'}</span>${h(entry.action || '')}</div>`).join('');
 
     const actions = options?.archived
-      ? `<button class="we-btn we-btn-sm we-npc-revive" data-npc-id="${h(key)}">Đưa trở lại</button>`
-      : `<button class="we-btn we-btn-sm we-npc-pin" data-npc-id="${h(key)}">${npc.pinned ? 'Bỏ ghim' : 'Ghim'}</button>
+      ? `<button class="we-btn we-btn-sm we-npc-edit" data-npc-id="${h(key)}">Sửa</button>
+         <button class="we-btn we-btn-sm we-npc-revive" data-npc-id="${h(key)}">Đưa trở lại</button>`
+      : `<button class="we-btn we-btn-sm we-npc-edit" data-npc-id="${h(key)}">Sửa</button>
+         <button class="we-btn we-btn-sm we-npc-pin" data-npc-id="${h(key)}">${npc.pinned ? 'Bỏ ghim' : 'Ghim'}</button>
          <button class="we-btn we-btn-sm we-npc-tier" data-npc-id="${h(key)}">${npc.tier === 'core' ? 'Hạ xuống ngoại vi' : 'Nâng lên trọng yếu'}</button>
          <button class="we-btn we-btn-sm we-npc-archive" data-npc-id="${h(key)}">Đưa vào kho</button>`;
+
+    // Đang sửa thì thay toàn bộ phần thân bằng trình soạn, giữ lại phần đầu để còn biết đang sửa ai.
+    if (_npcEditingId === key) {
+      return `<div class="we-npc-card">
+        <div class="we-npc-card-head"><div class="we-npc-name">${h(npc.name || 'không tên')}</div></div>
+        <div class="we-npc-card-body">${renderNpcEditor(npc, false)}</div>
+      </div>`;
+    }
 
     return `<div class="we-npc-card${collapsed ? ' is-collapsed' : ''}">
       <div class="we-npc-card-head" data-npc-toggle="${h(key)}">
@@ -5573,6 +5722,14 @@ window.WORLD_ENGINE_UI = (function() {
   }
 
   function renderNpcSubView(view) {
+    // Đổi cuộc trò chuyện thì quên hết trạng thái gập/mở và trình soạn đang mở của chat cũ,
+    // nếu không khoá của chat trước dồn lại mãi và có thể mở nhầm hồ sơ.
+    const scope = String(window.WORLD_ENGINE_CORE?.getChatId?.() || 'default');
+    if (_npcExpandScope !== scope) {
+      _npcExpandScope = scope;
+      _npcExpanded.clear();
+      _npcEditingId = null;
+    }
     const state = npcData()?.loadState?.() || {};
     const meta = NPC_VIEW_META[view] || { title: 'Nhân Vật', poem: '' };
     let body = '';
@@ -5586,9 +5743,15 @@ window.WORLD_ENGINE_UI = (function() {
       const source = view === 'archive'
         ? (Array.isArray(state.archive) ? state.archive : [])
         : (Array.isArray(state.npcs) ? state.npcs : []).filter(npc => view === 'core' ? npc.tier === 'core' : npc.tier !== 'core');
-      body = source.length
+      // Thêm tay: mô hình bỏ sót ai thì tự nhập, không phải chờ nó nhận ra.
+      const adding = _npcEditingId === ''
+        ? `<div class="we-npc-card"><div class="we-npc-card-head"><div class="we-npc-name">Nhân vật mới</div></div>
+             <div class="we-npc-card-body">${renderNpcEditor(
+               npcData().newNpc({ tier: view === 'core' ? 'core' : 'peripheral' }), true)}</div></div>`
+        : `<button class="we-btn we-npc-add" type="button" style="width:100%;margin-bottom:8px;"><i class="fa-solid fa-plus"></i> Thêm Nhân Vật</button>`;
+      body = adding + (source.length
         ? source.map(npc => renderNpcCard(npc, { archived: view === 'archive' })).join('')
-        : '<div class="we-empty">Chưa có nhân vật nào ở mục này</div>';
+        : '<div class="we-empty">Chưa có nhân vật nào ở mục này</div>');
     }
 
     return `<div class="we-sub-topbar">
@@ -5922,6 +6085,61 @@ window.WORLD_ENGINE_UI = (function() {
       button.onclick = () => mutate(button.dataset.npcId, (npc, state) => {
         npcData().reviveNpc(state, npc.id);
       });
+    });
+
+    // ===== Trình soạn hồ sơ =====
+    document.querySelectorAll('.we-npc-edit').forEach(button => {
+      button.onclick = () => { _npcEditingId = button.dataset.npcId; refresh(); };
+    });
+    const addButton = document.querySelector('.we-npc-add');
+    if (addButton) addButton.onclick = () => { _npcEditingId = ''; refresh(); };
+    document.querySelectorAll('.we-npc-cancel-edit').forEach(button => {
+      button.onclick = () => { _npcEditingId = null; refresh(); };
+    });
+
+    document.querySelectorAll('.we-npc-save').forEach(button => {
+      button.onclick = () => {
+        const root = button.closest('[data-npc-editor]');
+        if (!root) return;
+        const state = npcData()?.loadState?.();
+        if (!state) return;
+        const id = root.dataset.npcEditor;
+        const existing = id ? npcData().findNpc(state, id) : null;
+        const draft = readNpcEditor(root, existing || npcData().newNpc({}));
+        if (!draft.name) { showToast('Nhân vật phải có tên', true); return; }
+
+        if (existing) {
+          Object.assign(existing, npcData().newNpc({ ...draft, id: existing.id }));
+        } else {
+          // Trùng tên với người đã có thì gộp vào người đó, tránh đẻ ra bản sao.
+          const clash = npcData().findNpc(state, draft.name);
+          if (clash) { showToast(`Đã có nhân vật tên "${draft.name}"`, true); return; }
+          npcData().upsertNpc(state, draft);
+        }
+        npcData().saveState(state);
+        window.NPC_ENGINE?.applyInjection?.();
+        _npcEditingId = null;
+        showToast(existing ? 'Đã lưu hồ sơ' : 'Đã thêm nhân vật');
+        refresh();
+      };
+    });
+
+    document.querySelectorAll('.we-npc-delete').forEach(button => {
+      button.onclick = () => {
+        const root = button.closest('[data-npc-editor]');
+        const id = root?.dataset.npcEditor;
+        if (!id) return;
+        const state = npcData()?.loadState?.();
+        const npc = state && npcData().findNpc(state, id);
+        if (!npc) return;
+        if (!confirm(`Xoá hẳn "${npc.name}" khỏi hồ sơ?\n\nKhác với "Đưa vào kho": xoá hẳn thì mất luôn nhật ký và tri thức của nhân vật này. Dùng khi mô hình nhận nhầm một người không có thật.`)) return;
+        npcData().removeNpc(state, id);
+        npcData().saveState(state);
+        window.NPC_ENGINE?.applyInjection?.();
+        _npcEditingId = null;
+        showToast(`Đã xoá "${npc.name}"`);
+        refresh();
+      };
     });
 
     const patch = patchValue => window.NPC_ENGINE_SETTINGS?.patchSettings(patchValue);

@@ -3869,3 +3869,29 @@
 .we-npc-about p:last-child { margin-bottom: 0; }
 .we-npc-about strong { color: var(--we-text); }
 .we-npc-about em { color: var(--we-accent); font-style: normal; }
+
+/* ---- Trình soạn hồ sơ ---- */
+.we-npc-editor { padding: 4px 0; }
+.we-npc-editor .we-input-group { margin-bottom: 8px; }
+.we-npc-editor label { display: block; margin-bottom: 3px; font-size: 11px; color: var(--we-text3); }
+.we-npc-editor .we-switch-row { display: flex; align-items: center; gap: 8px; margin-bottom: 0; }
+.we-npc-editor input[type="text"],
+.we-npc-editor input[type="number"],
+.we-npc-editor select,
+.we-npc-editor textarea {
+  padding: 5px 8px;
+  font-size: 12px;
+  color: var(--we-text);
+  background: var(--we-bg2);
+  border: 1px solid var(--we-border);
+  border-radius: 6px;
+}
+.we-npc-editor textarea { resize: vertical; line-height: 1.5; font-family: inherit; }
+.we-npc-editor-actions {
+  display: flex;
+  gap: 6px;
+  justify-content: flex-end;
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--we-hairline);
+}

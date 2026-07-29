@@ -166,6 +166,51 @@ for (const [id, key] of settingsBindings) {
 check('ba nấc che vị trí đều có trong ô chọn',
   /'off', 'Tắt[\s\S]{0,200}'fog', 'Sương mù[\s\S]{0,200}'strict', 'Nghiêm ngặt/.test(ui));
 
+// ===== Trình soạn hồ sơ =====
+// Bản đầu chỉ có 4 nút ghim/nâng-hạ/vào kho/ra kho: không có cách nào chữa khi mô hình chấm sai,
+// thêm nhân vật bị bỏ sót, hay xoá người bị nhận nhầm.
+{
+  check('có hàm dựng trình soạn', ui.includes('function renderNpcEditor('));
+  check('có hàm đọc ngược từ ô nhập', ui.includes('function readNpcEditor('));
+  check('có nút Sửa trên thẻ nhân vật', ui.includes('we-npc-edit'));
+  check('có nút Thêm Nhân Vật', ui.includes('we-npc-add'));
+  check('có nút Xoá hẳn', ui.includes('we-npc-delete'));
+  check('tầng dữ liệu có hàm xoá', fs.readFileSync(path.join(root, 'npc-engine-data.js'), 'utf8').includes('function removeNpc('));
+
+  // Sửa được đủ sáu trục, nếu không thì vẫn có trục chữa không nổi.
+  for (const [truc, field] of [['vị trí', 'we-npc-f-path'], ['mục tiêu', 'we-npc-f-goals'],
+                               ['thế lực', 'we-npc-f-faction'], ['quan hệ', 'we-npc-f-attitude'],
+                               ['tri thức', 'we-npc-f-knowledge'], ['trạng thái', 'we-npc-f-condition']]) {
+    check(`trình soạn sửa được trục ${truc}`, ui.includes(field));
+  }
+  check('sửa được cả chỗ người chơi tưởng', ui.includes('we-npc-f-believes'));
+  check('sửa được bậc và điểm', ui.includes('we-npc-f-tier') && ui.includes('we-npc-f-significance'));
+  check('ghim được ngay trong trình soạn', ui.includes('we-npc-f-pinned'));
+
+  // Sửa tri thức mà mất dấu tầng thì phép lùi tầng và ràng buộc tri thức hỏng theo.
+  check('giữ nguyên dấu tầng của tri thức cũ khi sửa',
+    /npcTextToKnowledge[\s\S]{0,700}layer: old\?\.layer/.test(ui));
+  check('giữ nguyên factId để ràng buộc tri thức còn khớp',
+    /npcTextToKnowledge[\s\S]{0,700}factId: old\?\.factId/.test(ui));
+  // Những trường trình soạn không đụng tới (nhật ký hoạt động ngầm, dự định đang treo, phương tiện
+  // di chuyển, quan hệ với NPC khác) phải còn nguyên — nên đối tượng trả về phải trải base ra trước.
+  {
+    const from = ui.indexOf('function readNpcEditor(');
+    const body = from >= 0 ? ui.slice(from, ui.indexOf('\n  }', from)) : '';
+    check('cắt được thân hàm readNpcEditor', body.length > 200);
+    check('giữ nguyên các trường không sửa tới', /return \{\s*\r?\n\s*\.\.\.base,/.test(body));
+    check('giữ nguyên phần vị trí không sửa tới', /\.\.\.\(base\.location \|\| \{\}\)/.test(body));
+  }
+
+  check('xoá hẳn có hỏi xác nhận', /we-npc-delete[\s\S]{0,900}confirm\(/.test(ui));
+  check('thêm mới chặn trùng tên', /const clash = npcData\(\)\.findNpc\(state, draft\.name\)/.test(ui));
+  check('lưu xong thì chèn lại prompt', /_npcEditingId = null;[\s\S]{0,120}refresh\(\)/.test(ui));
+
+  // Đổi chat phải quên trạng thái cũ, nếu không khoá của chat trước dồn lại mãi.
+  check('đổi chat thì xoá trạng thái gập/mở', /_npcExpandScope !== scope[\s\S]{0,160}_npcExpanded\.clear\(\)/.test(ui));
+  check('đổi chat thì đóng trình soạn đang mở', /_npcExpandScope !== scope[\s\S]{0,200}_npcEditingId = null/.test(ui));
+}
+
 // ===== Lưu / Đặt lại =====
 {
   check('có nút Lưu Cài Đặt', ui.includes('we-npc-save-settings'));
@@ -250,13 +295,17 @@ for (const cls of ['we-hint', 'we-btn-sm', 'we-switch-row']) {
 {
   const HOOK_ONLY = new Set([
     'we-npc-pin', 'we-npc-tier', 'we-npc-archive', 'we-npc-revive',
-    'we-npc-nav-row', 'we-npc-nav-list'
+    'we-npc-nav-row', 'we-npc-nav-list',
+    // Nút của trình soạn: kiểu dáng lấy từ .we-btn, lớp riêng chỉ để gắn sự kiện.
+    'we-npc-edit', 'we-npc-add', 'we-npc-save', 'we-npc-delete', 'we-npc-cancel-edit'
   ]);
   const used = new Set();
   for (const attribute of ui.match(/class="[^"]*"/g) || []) {
     for (const cls of attribute.match(/we-npc-[a-z-]+/g) || []) used.add(cls);
   }
-  const missing = [...used].filter(cls => !HOOK_ONLY.has(cls) && !css.includes('.' + cls));
+  // we-npc-f-* là móc đọc giá trị từng ô nhập; kiểu dáng đã có qua .we-npc-editor input/select/textarea.
+  const missing = [...used].filter(cls =>
+    !HOOK_ONLY.has(cls) && !cls.startsWith('we-npc-f-') && !css.includes('.' + cls));
   check(`mọi lớp trình bày we-npc-* đều có CSS (thiếu: ${missing.join(', ') || 'không'})`, missing.length === 0);
   check('có xét được lớp nào đó (bộ trích không rỗng)', used.size >= 8);
 }

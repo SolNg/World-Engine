@@ -244,6 +244,22 @@ window.NPC_ENGINE_DATA = (function() {
     return npc;
   }
 
+  // Xoá hẳn khỏi cả danh sách hoạt động lẫn kho. Dùng khi mô hình nhận nhầm một nhân vật không
+  // có thật, hoặc gộp nhầm hai người thành một — khác với archiveNpc là "đã chết nhưng vẫn tính".
+  function removeNpc(state, idOrName) {
+    const npc = findNpc(state, idOrName);
+    if (!npc) return null;
+    state.npcs = state.npcs.filter(item => item.id !== npc.id);
+    state.archive = state.archive.filter(item => item.id !== npc.id);
+    state.scene.presentIds = asArray(state.scene?.presentIds).filter(id => id !== npc.id);
+    // Gỡ luôn khỏi quan hệ của người khác, nếu không sẽ còn trỏ tới người không tồn tại.
+    for (const other of [...state.npcs, ...state.archive]) {
+      other.relations.npcs = asArray(other.relations?.npcs)
+        .filter(link => normalized(link?.id) !== normalized(npc.id) && normalized(link?.name) !== normalized(npc.name));
+    }
+    return npc;
+  }
+
   function reviveNpc(state, idOrName) {
     const npc = findNpc(state, idOrName);
     if (!npc) return null;
@@ -342,6 +358,7 @@ window.NPC_ENGINE_DATA = (function() {
     upsertNpc,
     archiveNpc,
     reviveNpc,
+    removeNpc,
     enforceCoreLimit,
     proximity,
     travelKey,
