@@ -51,10 +51,12 @@ check('ngữ cảnh xuyên engine được cách ly lỗi',
   /buildWorldEngineContext[\s\S]{0,200}catch \(error\)/.test(evolution));
 
 // ===== Lối vào thủ công =====
-check('có hàm manualNpcLink', world.includes('async function manualNpcLink()'));
+// Nhận tham số chế độ: 'redo' thì ghi đè từ điểm lưu, còn lại thì nối thêm.
+check('có hàm manualNpcLink', /async function manualNpcLink\(mode\)/.test(world));
 check('manualNpcLink được xuất ra window.WORLD_ENGINE',
   /window\.WORLD_ENGINE = \{[\s\S]*?manualNpcLink[,\s}]/.test(world));
-check('manualNpcLink chặn khi engine đang chạy', /manualNpcLink\(\)[\s\S]{0,400}NPC_ENGINE\?\.isRunning/.test(world));
+check('manualNpcLink chặn khi engine đang chạy',
+  /manualNpcLink\(mode\)[\s\S]{0,300}NPC_ENGINE\?\.isRunning/.test(world));
 
 // ===== Công cụ bỏ ẩn cứu hộ =====
 check('có hàm unhideAllMessages', world.includes('async function unhideAllMessages()'));

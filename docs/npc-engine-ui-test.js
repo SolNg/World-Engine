@@ -23,6 +23,49 @@ check('mặt npc nối vào công tắc tổng của engine',
 check('mặt npc báo trạng thái đang chạy',
   /id: 'npc'[\s\S]{0,900}NPC_ENGINE\?\.isRunning/.test(ui));
 
+// Nút vệ tinh trên quả cầu là giao diện dùng chung; mặt nào thiếu hook thì nút của mặt đó
+// bấm không ra gì cả — callEngineFaceAction trả về lặng lẽ, không báo lỗi, không toast.
+// Mặt npc từng thiếu hẳn hook redo nên nút "Diễn Biến Lại" chết câm.
+{
+  // Cắt trọn khối khai báo của một mặt engine: từ dòng id tới dấu đóng registerEngineFace.
+  // Cắt theo độ dài cố định là hụt, vì khối này dài ra mỗi lần thêm hook hoặc chú thích.
+  const faceBlock = id => {
+    const from = ui.indexOf(`id: '${id}'`);
+    if (from < 0) return '';
+    const to = ui.indexOf('\n    });', from);
+    return to < 0 ? ui.slice(from) : ui.slice(from, to);
+  };
+
+  const face = faceBlock('npc');
+  check('cắt được khối khai báo mặt npc', face.length > 200);
+  for (const hook of ['render', 'bind', 'forward', 'redo', 'abort', 'setEnabled', 'getSettings']) {
+    check(`mặt npc khai hook ${hook}`, new RegExp(`\\b${hook}:`).test(face));
+  }
+  check('forward và redo là hai chế độ khác nhau',
+    /forward: \(\) => runNpcLink\('forward'\)/.test(face) && /redo: \(\) => runNpcLink\('redo'\)/.test(face));
+  check('runNpcLink truyền chế độ xuống lối vào thủ công',
+    /manualNpcLink\?\.\(mode\)/.test(ui));
+
+  // Mọi hook mà mặt world khai và có nút tương ứng trên quả cầu thì mặt npc cũng phải khai,
+  // nếu không nút đó bấm không ra gì mà cũng không báo lỗi.
+  const worldFace = faceBlock('world');
+  const ballHooks = ['forward', 'redo', 'abort'].filter(hook => new RegExp(`\\b${hook}:`).test(worldFace));
+  const missing = ballHooks.filter(hook => !new RegExp(`\\b${hook}:`).test(face));
+  check(`mặt npc không thiếu hook nút quả cầu nào (thiếu: ${missing.join(', ') || 'không'})`, missing.length === 0);
+}
+
+// Lối vào thủ công không được đòi hỏi Công Cụ Thế Giới đã chạy: trích xuất nhân vật chỉ cần hội thoại.
+{
+  const world = fs.readFileSync(path.join(root, 'world-engine.js'), 'utf8');
+  const from = world.indexOf('async function manualNpcLink(');
+  const block = from >= 0 ? world.slice(from, from + 2000) : '';
+  check('manualNpcLink nhận tham số chế độ', /async function manualNpcLink\(mode\)/.test(world));
+  check('chế độ redo thì ghi đè từ điểm lưu', /replace: redo/.test(block));
+  check('không chặn khi chưa có tóm tắt thế giới', !/if \(!digest\)/.test(block));
+  check('chặn khi chưa có hội thoại', /if \(!dialogue\.trim\(\)\)/.test(block));
+  check('bỏ qua được báo là bỏ qua, không phải lỗi', /if \(result\.skipped\)/.test(block));
+}
+
 // ===== Các hàm dựng view =====
 for (const fn of ['renderNpcView', 'renderNpcHomeView', 'renderNpcSubView', 'renderNpcSettingsView',
                   'renderNpcCard', 'bindNpcView']) {

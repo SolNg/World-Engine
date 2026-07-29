@@ -636,35 +636,43 @@
 
       // Đẩy tay tóm tắt thế giới hiện có sang Công Cụ Nhân Vật, dùng khi muốn dựng lại hồ sơ NPC
       // mà không phải chờ lượt hội thoại kế tiếp.
-      async function manualNpcLink() {
-        if (isEvolving) { setStatus('Công Cụ Thế Giới hoặc tác vụ liên kết đang chạy...'); return false; }
+      // mode 'redo'  → dựng lại từ điểm lưu rồi làm lại tầng hiện tại (ghi đè kết quả cũ)
+      // mode khác    → xử lý tầng hiện tại và nối thêm vào hồ sơ
+      async function manualNpcLink(mode) {
         if (window.NPC_ENGINE?.isRunning?.()) { setStatus('Công Cụ Nhân Vật đã có tác vụ đang chạy...'); return false; }
+        const redo = mode === 'redo';
         const state = core.loadState();
+        // Tóm tắt thế giới chỉ là ngữ cảnh phụ. Trước đây thiếu nó là chặn luôn, khiến người dùng
+        // không cập nhật được hồ sơ khi Công Cụ Thế Giới chưa chạy hoặc đang tắt — mà việc trích
+        // xuất nhân vật vốn chỉ cần hội thoại.
         const digest = String(state?.worldDigest || '').trim();
-        if (!digest) { setStatus('Hiện không có tóm tắt thế giới nào để liên kết', true); return false; }
-        isEvolving = true;
         try {
-          setStatus('Đang liên kết thủ công với Công Cụ Nhân Vật...');
+          setStatus(redo ? 'Đang diễn biến lại hồ sơ nhân vật...' : 'Đang cập nhật hồ sơ nhân vật...');
           const settings = api.getSettings(true);
           const chat = SillyTavern.getContext()?.chat || [];
+          const dialogue = buildDialogueText(chat, settings.manualReadRounds, settings);
+          if (!dialogue.trim()) { setStatus('Chưa có hội thoại nào để trích xuất', true); return false; }
+
           const result = await window.NPC_ENGINE?.ingestWorldEvolution?.({
             layer: core.getChatLayer(),
             worldRound: state.round,
             worldDigest: digest,
             worldUpdate: state.lastEvolveResult || state,
-            dialogue: buildDialogueText(chat, settings.manualReadRounds, settings),
-            replace: true
+            dialogue,
+            replace: redo
           });
-          if (!result || result.skipped) throw new Error('Công Cụ Nhân Vật chưa thực hiện liên kết');
-          setStatus('Liên kết thủ công hoàn tất, hồ sơ nhân vật đã được cập nhật');
+
+          if (!result) { setStatus('Công Cụ Nhân Vật chưa sẵn sàng', true); return false; }
+          // Bỏ qua khác thất bại: engine đang tắt hoặc đang bận thì báo đúng lý do, không báo lỗi.
+          if (result.skipped) { setStatus(result.message || 'Công Cụ Nhân Vật đã bỏ qua lượt này'); return false; }
+
+          setStatus((redo ? 'Diễn biến lại hoàn tất — ' : 'Cập nhật hoàn tất — ') + (result.message || ''));
           if (ui?.refresh) ui.refresh(true);
           return true;
         } catch (error) {
-          console.error('[Công Cụ Thế Giới] Liên kết thủ công với Công Cụ Nhân Vật thất bại', error);
-          setStatus('Liên kết thủ công thất bại: ' + (error?.message || error), true);
+          console.error('[Công Cụ Thế Giới] Thao tác thủ công với Công Cụ Nhân Vật thất bại', error);
+          setStatus('Thao tác thất bại: ' + (error?.message || error), true);
           return false;
-        } finally {
-          isEvolving = false;
         }
       }
 

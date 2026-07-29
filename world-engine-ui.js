@@ -118,7 +118,10 @@ window.WORLD_ENGINE_UI = (function() {
       refreshDebug: () => refreshNpcDebugRender(),
       showForward: true,
       forwardTitle: 'Cập Nhật Hồ Sơ Nhân Vật Thủ Công',
-      forward: () => runNpcLink(),
+      forward: () => runNpcLink('forward'),
+      // Thiếu hook này thì nút "Diễn Biến Lại" trên quả cầu bấm không ra gì cả:
+      // callEngineFaceAction trả về lặng lẽ khi hook không phải hàm, không báo lỗi.
+      redo: () => runNpcLink('redo'),
       abort: () => window.NPC_ENGINE?.abort?.()
     });
   }
@@ -5843,17 +5846,20 @@ window.WORLD_ENGINE_UI = (function() {
     bindPromptSegToggle(target.querySelector('.we-prompt-debug'));
   }
 
-  async function runNpcLink() {
+  async function runNpcLink(mode) {
     // Đang chạy thì đây là "bỏ qua", không phải "thất bại" — báo nhầm khiến người dùng tưởng bị ngắt.
     if (window.NPC_ENGINE?.isRunning?.()) {
       showToast(`Đang ${window.NPC_ENGINE?.getRunningLabel?.() || 'chạy'}, vui lòng đợi hoàn tất`);
       return;
     }
+    const redo = mode === 'redo';
     try {
-      const ok = await window.WORLD_ENGINE?.manualNpcLink?.();
-      showToast(ok ? 'Đã cập nhật hồ sơ nhân vật' : 'Chưa cập nhật được hồ sơ nhân vật', !ok);
+      const ok = await window.WORLD_ENGINE?.manualNpcLink?.(mode);
+      if (ok) showToast(redo ? 'Đã diễn biến lại hồ sơ nhân vật' : 'Đã cập nhật hồ sơ nhân vật');
+      // Thất bại hay bỏ qua đều đã được manualNpcLink báo qua thanh trạng thái kèm lý do cụ thể,
+      // nên ở đây không chồng thêm toast chung chung nữa.
     } catch (error) {
-      showToast('Cập nhật thất bại: ' + (error?.message || error), true);
+      showToast('Thao tác thất bại: ' + (error?.message || error), true);
     }
     refresh();
   }
