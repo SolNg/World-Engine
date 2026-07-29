@@ -788,6 +788,114 @@ window.NPC_ENGINE = (function() {
     autoTimer = setTimeout(() => runAutoExtraction(key), AUTO_DELAY_MS);
   }
 
+  // ================= Điền lại hàng loạt =================
+  // Cài extension giữa chừng một cuộc trò chuyện dài thì toàn bộ quá khứ nằm ngoài tầm với:
+  // engine chỉ đi tới từ lúc bật. Hàm này quét ngược từ tầng đầu, chia đợt gọi API để dựng hồ sơ.
+  // Chỉ chạy pha trích xuất, không sinh hoạt động ngầm — quá khứ đã có chính văn rồi, bịa thêm
+  // diễn biến nền vào đó chỉ tạo mâu thuẫn với những gì thật sự đã xảy ra.
+
+  let backfillRunning = false;
+  let backfillStatus = { running: false, current: 0, total: 0, message: '' };
+
+  function setBackfillStatus(current, total, message) {
+    backfillStatus = { running: backfillRunning, current, total, message };
+    // Chuỗi "Đang điền lại i/M" là thứ quả cầu nổi nhận ra để vẽ vòng tiến độ.
+    setStatus(total ? `Đang điền lại ${current}/${total} · ${message}` : message);
+  }
+
+  function formatRange(chat, from, to) {
+    return asArray(chat).slice(from, to + 1)
+      .map(message => `${message?.is_user ? 'Người chơi' : (clean(message?.name) || 'Nhân vật')}: ${clean(message?.mes)}`)
+      .filter(line => line.split(': ').slice(1).join(': ').length > 0)
+      .join('\n');
+  }
+
+  function stopBackfill() {
+    if (!backfillRunning) return false;
+    backfillRunning = false;
+    setStatus('Đã yêu cầu dừng điền lại');
+    return true;
+  }
+
+  async function backfill() {
+    const st = settings(true);
+    if (st.engineEnabled === false) throw new Error('Công Cụ Nhân Vật đang tắt');
+    if (backfillRunning || running) return { skipped: true, reason: 'running' };
+
+    const chat = window.SillyTavern?.getContext?.()?.chat || [];
+    const configuredEnd = Math.max(0, parseInt(st.backfillEndLayer) || 0);
+    const end = Math.min(chat.length - 1, configuredEnd || chat.length - 1);
+    const skipOpening = st.firstLayerIsAiOpening !== false;
+    const aiLayers = chat
+      .map((message, index) => (!message?.is_user && index <= end && !(skipOpening && index === 0) ? index : -1))
+      .filter(index => index >= 0);
+
+    const size = Math.max(1, parseInt(st.backfillBatchSize) || 5);
+    const batches = [];
+    for (let i = 0; i < aiLayers.length; i += size) batches.push(aiLayers.slice(i, i + size));
+    if (!batches.length) { setBackfillStatus(0, 0, 'Không có tầng AI nào để điền lại'); return { skipped: true, reason: 'empty' }; }
+
+    backfillRunning = true;
+    notifyBusyChanged();
+    abortController = new AbortController();
+
+    // Sao lưu trước khi xoá: điền lại là thao tác ghi đè toàn bộ, không có đường lùi nào khác.
+    try { window.WORLD_ENGINE_CHATCACHE?.forScope?.('npc')?.createSnapshot?.('Tự động trước khi điền lại'); }
+    catch (error) { console.warn('[Công Cụ Nhân Vật] Không tạo được bản lưu trước khi điền lại', error); }
+
+    const original = data().loadState();
+    data().saveCheckpoint(original);
+    // Giữ lại bộ nhớ đệm tuyến đường: đó là hiểu biết về địa lý thế giới, không phải trạng thái chat.
+    data().saveState({
+      ...data().defaultState(),
+      travelCache: original.travelCache
+    });
+
+    try {
+      const storyDay = core()?.getLastStoryDay?.();
+      for (let i = 0; i < batches.length && backfillRunning; i++) {
+        const layers = batches[i];
+        const from = Math.max(0, layers[0] - 1);
+        const to = layers[layers.length - 1];
+        setBackfillStatus(i + 1, batches.length, `tầng ${from}-${to}`);
+
+        const state = data().loadState();
+        const dialogue = formatRange(chat, from, to);
+        if (!dialogue) continue;
+
+        const parsed = await callModel(window.NPC_ENGINE_PROMPT.buildPrompt({
+          npcs: state.npcs,
+          knownLimit: st.npcCoreLimit * 2,
+          dialogue,
+          worldbook: await buildWorldbookSection(dialogue, st),
+          tonePrompt: st.tonePrompt,
+          nameBlacklist: st.nameBlacklist,
+          storyDay
+        }), st);
+
+        state.round += 1;
+        state.chatLayer = to;
+        mergeExtraction(state, parsed, to);
+        data().saveState(state);
+      }
+
+      const finished = backfillRunning;
+      setBackfillStatus(batches.length, batches.length, finished ? 'hoàn tất' : 'đã dừng');
+      setStatus(finished ? 'Điền lại hoàn tất' : 'Điền lại đã dừng giữa chừng');
+      return { skipped: false, batches: batches.length, finished };
+    } catch (error) {
+      setStatus('Điền lại thất bại: ' + (error?.message || error), true);
+      throw error;
+    } finally {
+      backfillRunning = false;
+      backfillStatus.running = false;
+      abortController = null;
+      applyInjection();
+      notifyBusyChanged();
+      try { window.WORLD_ENGINE_UI?.refresh?.(true); } catch (error) { /* không có UI thì thôi */ }
+    }
+  }
+
   // ================= Sự kiện =================
 
   function onGenerationStarted(type, _opts, dryRun) {
@@ -843,6 +951,7 @@ window.NPC_ENGINE = (function() {
 
   function abort() {
     if (abortController) abortController.abort();
+    backfillRunning = false;
     running = false;
     runningLabel = '';
     setStatus('Đã gửi tín hiệu dừng');
@@ -853,11 +962,14 @@ window.NPC_ENGINE = (function() {
     init,
     applyInjection,
     abort,
-    isRunning: () => running,
-    getRunningLabel: () => runningLabel,
+    isRunning: () => running || backfillRunning,
+    getRunningLabel: () => backfillRunning ? 'Điền lại hàng loạt' : runningLabel,
     getLastDebug: () => clone(lastDebug),
     getLastInjectionInfo: () => clone(lastInjectionInfo),
     ingestWorldEvolution,
+    backfill,
+    stopBackfill,
+    getBackfillStatus: () => clone(backfillStatus),
     buildWorldEngineContext,
     // Xuất ra để giao diện và kiểm thử dùng lại mà không phải gọi API.
     buildInjectionText,

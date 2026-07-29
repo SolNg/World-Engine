@@ -574,6 +574,69 @@ const baseSettings = () => config.getSettings(true);
     config.patchSettings({ engineEnabled: true });
   }
 
+  // ===== Điền lại hàng loạt =====
+  // Cài extension giữa chừng chat dài thì quá khứ nằm ngoài tầm với: engine chỉ đi tới từ lúc bật.
+  {
+    const chat = [];
+    chat.push({ is_user: false, name: 'Nhân vật', mes: 'Lời mở đầu do thẻ nhân vật viết sẵn.' });
+    for (let i = 1; i <= 6; i++) {
+      chat.push({ is_user: true, name: 'Người chơi', mes: 'Người chơi nói câu số ' + i });
+      chat.push({ is_user: false, name: 'Nhân vật', mes: 'Nhân vật đáp câu số ' + i });
+    }
+    global.SillyTavern = {
+      getContext: () => ({ chat, eventSource: { on() {} }, event_types: {}, setExtensionPrompt(_n, c) { injected = c; } })
+    };
+
+    const prompts = [];
+    global.WORLD_ENGINE_API.callApi = async prompt => {
+      prompts.push(prompt);
+      return JSON.stringify({
+        scene: { presentNames: [] },
+        npcs: [{ name: 'Nhân Vật Quá Khứ ' + prompts.length, tier: 'core', significance: 80, present: true }]
+      });
+    };
+    global.WORLD_ENGINE_WORLDBOOK = { buildPromptSection: async () => '' };
+
+    storage.clear();
+    config.patchSettings({
+      engineEnabled: true, backfillBatchSize: 2, backfillEndLayer: 0,
+      firstLayerIsAiOpening: true, significanceThreshold: 60
+    });
+
+    // Có sẵn dữ liệu cũ để kiểm chứng việc dựng lại từ đầu.
+    const before = data.defaultState();
+    data.upsertNpc(before, { name: 'Nhân Vật Cũ', tier: 'core', significance: 90 });
+    data.setTravel(before, 'A', 'B', { etaRounds: 7, travelMode: 'ngựa' });
+    data.saveState(before);
+
+    const result = await engine.backfill();
+    check('điền lại chạy được', result && result.skipped !== true);
+    check('điền lại chạy tới cùng', result.finished === true);
+    // 6 tầng AI (bỏ tầng 0 vì là lời mở đầu), mỗi đợt 2 tầng → 3 đợt.
+    check('chia đúng số đợt theo cấu hình', result.batches === 3);
+    check('mỗi đợt một lượt gọi API', prompts.length === 3);
+
+    const after = data.loadState();
+    check('hồ sơ cũ bị xoá sạch trước khi dựng lại',
+      data.findNpc(after, 'Nhân Vật Cũ') === null);
+    check('dựng được nhân vật từ quá khứ', after.npcs.length === 3);
+    // Bộ nhớ đệm tuyến đường là hiểu biết về địa lý, không phải trạng thái chat — phải giữ lại.
+    check('giữ lại bộ nhớ đệm tuyến đường', data.getTravel(after, 'A', 'B')?.etaRounds === 7);
+    check('lưu điểm lưu trước khi xoá',
+      data.findNpc(data.loadCheckpoint(), 'Nhân Vật Cũ') !== null);
+
+    const status = engine.getBackfillStatus();
+    check('báo cáo tiến độ đầy đủ', status.current === 3 && status.total === 3);
+    check('báo cáo đã dừng chạy', status.running === false);
+
+    // Không có tầng AI nào thì báo rõ, không chạy suông.
+    global.SillyTavern = {
+      getContext: () => ({ chat: [{ is_user: true, mes: 'chỉ có người chơi' }], eventSource: { on() {} }, event_types: {}, setExtensionPrompt() {} })
+    };
+    const empty = await engine.backfill();
+    check('không có tầng AI thì báo bỏ qua', empty.skipped === true && empty.reason === 'empty');
+  }
+
   if (failures > 0) {
     console.error(`npc-engine logic tests FAILED (${failures} lỗi)`);
     process.exit(1);

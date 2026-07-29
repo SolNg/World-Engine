@@ -5983,6 +5983,18 @@ window.WORLD_ENGINE_UI = (function() {
         + axis('Trong kho', (checkpoint.archive || []).length)
         + hint('Reroll sẽ chèn bản này thay vì trạng thái hiện tại, để lần sinh mới không thấy hệ quả của lần sinh cũ.');
 
+    // Điền lại hàng loạt: dựng hồ sơ cho phần quá khứ nằm ngoài tầm với của engine.
+    const backfillBody = num('we-npc-backfill-end', 'Điền lại tới tầng (0 = tới hết)', settings.backfillEndLayer,
+        'Số tầng hội thoại làm mốc dừng. Để 0 thì quét hết cuộc trò chuyện.')
+      + num('we-npc-backfill-batch', 'Số tầng mỗi đợt', settings.backfillBatchSize,
+        'Mỗi đợt là một lượt gọi API. Đợt lớn thì nhanh và rẻ hơn nhưng mô hình dễ bỏ sót; 3–5 là vừa.')
+      + num('we-npc-backfill-retries', 'Số lần thử lại mỗi đợt', settings.backfillRetries)
+      + `<div style="display:flex;gap:6px;flex-wrap:wrap;">
+          <button class="we-btn we-btn-primary" id="we-npc-backfill-start">Bắt Đầu Điền Lại</button>
+          <button class="we-btn we-btn-danger" id="we-npc-backfill-stop">Dừng</button>
+        </div>`
+      + hint('Quét từ tầng đầu cuộc trò chuyện, chia đợt gọi API để dựng lại hồ sơ nhân vật cho phần quá khứ. Dùng khi mới cài extension giữa chừng một cuộc trò chuyện đã dài. <b>Thao tác này xoá sạch hồ sơ hiện tại rồi dựng lại từ đầu</b> — một bản lưu tự động được tạo trước khi chạy. Chỉ trích xuất nhân vật, không sinh hoạt động ngầm cho quá khứ, vì phần đó đã có chính văn rồi.');
+
     const maintainBody = `<button class="we-btn" id="we-npc-unhide-all" style="width:100%;margin-bottom:4px;">Bỏ Ẩn Toàn Bộ Tin Nhắn</button>`
       + hint('Công cụ cứu hộ cho người dùng bản cũ. Bộ Nhớ Ký Ức trước đây có tính năng ẩn chính văn đã được tóm tắt bao phủ; nay engine đó đã bị gỡ nên không còn ai bỏ ẩn nữa. Nút này quét cuộc trò chuyện hiện tại và gỡ mọi cờ ẩn còn sót. <b>Chạy một lần cho mỗi cuộc trò chuyện cũ là đủ.</b>');
 
@@ -6016,6 +6028,7 @@ window.WORLD_ENGINE_UI = (function() {
                  + sec('set-npc-snapshot', 'Bản Lưu Theo Cuộc Trò Chuyện', snapshotBody)
                  + sec('set-npc-data', 'Nhập/Xuất Dữ Liệu', dataBody)
                  + sec('set-npc-checkpoint', 'Điểm Lưu Hiện Tại', checkpointBody)
+                 + sec('set-npc-backfill', 'Điền Lại Hàng Loạt', backfillBody)
                  + sec('set-npc-maintain', 'Bảo Trì', maintainBody),
       worldbook: shared.worldbook,
       debug:     sec('set-npc-debug', 'Gỡ Lỗi', debugBody),
@@ -6339,6 +6352,8 @@ window.WORLD_ENGINE_UI = (function() {
       'we-npc-inject-rumor': 'injectRumor', 'we-npc-fog': 'locationFogMode',
       'we-npc-knowledge-scope': 'knowledgeInjectScope', 'we-npc-knowledge-limit': 'knowledgeInjectLimit',
       'we-npc-inject-max-chars': 'injectMaxChars',
+      'we-npc-backfill-end': 'backfillEndLayer', 'we-npc-backfill-batch': 'backfillBatchSize',
+      'we-npc-backfill-retries': 'backfillRetries',
       'we-npc-world-scale': 'worldScale', 'we-npc-travel-cache': 'travelCacheEnabled',
       'we-npc-tone-prompt': 'tonePrompt', 'we-npc-name-blacklist': 'nameBlacklist',
       'we-npc-filter-regex': 'filterRegex',
@@ -6378,6 +6393,38 @@ window.WORLD_ENGINE_UI = (function() {
         window.NPC_ENGINE?.applyInjection?.();
         showToast('Đã đặt lại cài đặt về mặc định');
         refresh();
+      };
+    }
+
+    // ===== Điền lại hàng loạt =====
+    bindNumber('we-npc-backfill-end', 'backfillEndLayer');
+    bindNumber('we-npc-backfill-batch', 'backfillBatchSize');
+    bindNumber('we-npc-backfill-retries', 'backfillRetries');
+
+    const backfillStart = document.getElementById('we-npc-backfill-start');
+    if (backfillStart) {
+      backfillStart.onclick = async () => {
+        if (window.NPC_ENGINE?.isRunning?.()) { showToast('Đang có tác vụ chạy, vui lòng đợi'); return; }
+        const count = (window.SillyTavern?.getContext?.()?.chat || []).length;
+        if (!confirm(`Điền lại hồ sơ nhân vật từ đầu cuộc trò chuyện (${count} tầng)?\n\nHồ sơ hiện tại sẽ bị XOÁ SẠCH rồi dựng lại. Một bản lưu tự động được tạo trước khi chạy.\n\nQuá trình này tốn nhiều lượt gọi API và có thể mất vài phút.`)) return;
+        backfillStart.disabled = true;
+        try {
+          const result = await window.NPC_ENGINE?.backfill?.();
+          if (result?.skipped) showToast(result.reason === 'empty' ? 'Không có tầng AI nào để điền lại' : 'Đang bận, chưa chạy được', true);
+        } catch (error) {
+          showToast('Điền lại thất bại: ' + (error?.message || error), true);
+        } finally {
+          backfillStart.disabled = false;
+          refresh();
+        }
+      };
+    }
+
+    const backfillStop = document.getElementById('we-npc-backfill-stop');
+    if (backfillStop) {
+      backfillStop.onclick = () => {
+        const stopped = window.NPC_ENGINE?.stopBackfill?.();
+        showToast(stopped ? 'Sẽ dừng sau khi xong đợt hiện tại' : 'Hiện không có tác vụ điền lại nào đang chạy');
       };
     }
 
