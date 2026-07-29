@@ -7,6 +7,16 @@ window.NPC_ENGINE = (function() {
   let abortController = null;
   let lastDebug = { prompt: '', apiResponse: '', parsed: null, error: '' };
 
+  // Chống chạy hai lần cho cùng một tin nhắn. Có hai đường dẫn tới cùng một luồng:
+  // Công Cụ Thế Giới gọi sang sau khi suy diễn xong (đường chính), và bộ hẹn giờ riêng bên dưới
+  // (đường dự phòng). Đường nào chạy trước thì ghi khoá tin nhắn vào đây, đường kia thấy trùng là bỏ qua.
+  let lastProcessedKey = '';
+  let autoTimer = null;
+  let autoRetries = 0;
+  const AUTO_DELAY_MS = 3000;      // đủ dài để Công Cụ Thế Giới (1500ms) khởi động trước
+  const AUTO_RETRY_MS = 2500;
+  const AUTO_MAX_RETRIES = 12;     // ~30 giây chờ Công Cụ Thế Giới gọi API xong
+
   const data = () => window.NPC_ENGINE_DATA;
   const settings = force => window.NPC_ENGINE_SETTINGS?.getSettings(force) || {};
   const core = () => window.WORLD_ENGINE_CORE;
@@ -560,6 +570,19 @@ window.NPC_ENGINE = (function() {
       data().saveState(state);
       applyInjection(state);
 
+      // Đánh dấu tin nhắn này đã xử lý, để đường chạy còn lại không làm lại lần nữa.
+      {
+        const ctx = window.SillyTavern?.getContext?.();
+        const chat = ctx?.chat || [];
+        const lastMsg = chat[chat.length - 1];
+        if (ctx && lastMsg && !lastMsg.is_user) lastProcessedKey = messageKeyOf(ctx, chat, lastMsg);
+      }
+      clearAutoTimer();
+
+      // Làm mới bảng điều khiển ngay, nếu không người dùng phải đóng rồi mở lại mới thấy kết quả.
+      try { window.WORLD_ENGINE_UI?.refresh?.(true); }
+      catch (error) { console.warn('[Công Cụ Nhân Vật] Làm mới giao diện thất bại (đã cách ly)', error); }
+
       return {
         skipped: false,
         arrived,
@@ -574,6 +597,82 @@ window.NPC_ENGINE = (function() {
       runningLabel = '';
       abortController = null;
     }
+  }
+
+  // ================= Chạy tự động độc lập =================
+  // Trước đây engine này không có lịch chạy riêng, chỉ bám vào performEvolution của Công Cụ Thế Giới.
+  // Hệ quả: Thế Giới để chế độ thủ công, hoặc suy diễn cách quãng, hoặc bị tắt, hoặc lượt đó suy diễn
+  // thất bại — thì hồ sơ nhân vật đứng im mà không báo gì. Nay có bộ hẹn giờ riêng làm đường dự phòng.
+
+  function messageKeyOf(ctx, chat, message) {
+    const messageId = message?.mesId ?? message?.message_id ?? message?.send_date ?? (chat.length - 1);
+    const swipeId = message?.swipe_id ?? message?.swipeId ?? '';
+    return [core()?.getChatId?.() || 'default', chat.length - 1, messageId, swipeId].join('|');
+  }
+
+  function clearAutoTimer() {
+    if (autoTimer) { clearTimeout(autoTimer); autoTimer = null; }
+  }
+
+  // Ghép hội thoại gần nhất để trích xuất. Lấy từ cuối chat ngược lên, bỏ tin nhắn rỗng.
+  function buildDialogueText(chat, rounds) {
+    const wanted = Math.max(1, parseInt(rounds) || 1) * 2;
+    return asArray(chat).slice(-wanted)
+      .map(message => `${message?.is_user ? 'Người chơi' : (clean(message?.name) || 'Nhân vật')}: ${clean(message?.mes)}`)
+      .filter(line => line.split(': ').slice(1).join(': ').length > 0)
+      .join('\n');
+  }
+
+  async function runAutoExtraction(expectedKey) {
+    autoTimer = null;
+    const st = settings(true);
+    if (st.engineEnabled === false || st.evolveMode === 'manual') return;
+    if (running) return;
+
+    const ctx = window.SillyTavern?.getContext?.();
+    const chat = ctx?.chat || [];
+    const lastMsg = chat[chat.length - 1];
+    if (!ctx || !lastMsg || lastMsg.is_user || !clean(lastMsg.mes)) return;
+    if (messageKeyOf(ctx, chat, lastMsg) !== expectedKey) return;
+
+    // Đường chính đã xử lý tin nhắn này rồi thì thôi.
+    if (lastProcessedKey === expectedKey) return;
+
+    // Công Cụ Thế Giới đang gọi API: chờ nó xong đã, vì hoạt động ngầm cần worldDigest của lượt này.
+    // Hết số lần chờ mà nó vẫn chạy thì tự chạy luôn với tóm tắt cũ, còn hơn là đứng im.
+    const worldBusy = window.WORLD_ENGINE_EVOLUTION?.isRunning?.() === true;
+    if (worldBusy && autoRetries < AUTO_MAX_RETRIES) {
+      autoRetries += 1;
+      autoTimer = setTimeout(() => runAutoExtraction(expectedKey), AUTO_RETRY_MS);
+      return;
+    }
+    autoRetries = 0;
+
+    const worldState = core()?.loadState?.() || {};
+    try {
+      await ingestWorldEvolution({
+        layer: core()?.getChatLayer?.(),
+        worldRound: worldState.round,
+        worldDigest: worldState.worldDigest,
+        worldUpdate: worldState.lastEvolveResult,
+        dialogue: buildDialogueText(chat, st.evolveReadRounds),
+        replace: false
+      });
+    } catch (error) {
+      console.error('[Công Cụ Nhân Vật] Chạy tự động thất bại', error);
+    }
+  }
+
+  function onMessageReceived() {
+    clearAutoTimer();
+    autoRetries = 0;
+    const ctx = window.SillyTavern?.getContext?.();
+    const chat = ctx?.chat || [];
+    const lastMsg = chat[chat.length - 1];
+    if (!ctx || !lastMsg || lastMsg.is_user || !clean(lastMsg.mes)) return;
+    const key = messageKeyOf(ctx, chat, lastMsg);
+    if (lastProcessedKey === key) return;
+    autoTimer = setTimeout(() => runAutoExtraction(key), AUTO_DELAY_MS);
   }
 
   // ================= Sự kiện =================
@@ -621,6 +720,9 @@ window.NPC_ENGINE = (function() {
       guard('Công Cụ Nhân Vật', 'Vuốt Tái Sinh', onMessageSwiped));
     ctx.eventSource.on(types.MESSAGE_DELETED || 'message_deleted',
       guard('Công Cụ Nhân Vật', 'Xóa Tin Nhắn', onMessageDeleted));
+    // Lịch chạy riêng: không phụ thuộc việc Công Cụ Thế Giới có suy diễn lượt này hay không.
+    ctx.eventSource.on(types.GENERATION_ENDED || types.MESSAGE_RECEIVED || 'message_received',
+      guard('Công Cụ Nhân Vật', 'Sinh Xong', onMessageReceived));
 
     applyInjection();
     return true;

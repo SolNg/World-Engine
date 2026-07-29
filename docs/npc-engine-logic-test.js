@@ -445,6 +445,33 @@ const baseSettings = () => config.getSettings(true);
   } catch (error) { threw = String(error?.message || error); }
   check('luồng chính không ném lỗi khi prompt hợp lệ', threw === '');
 
+  // ===== Lịch chạy độc lập =====
+  // Lỗi đã gặp thật: engine không có bộ hẹn giờ riêng, chỉ bám vào performEvolution của Công Cụ
+  // Thế Giới. Thế Giới để chế độ thủ công hoặc bị tắt là hồ sơ nhân vật đứng im mà không báo gì.
+  {
+    const source = fs.readFileSync(path.join(root, 'npc-engine.js'), 'utf8');
+    check('có bộ hẹn giờ chạy tự động riêng', source.includes('function runAutoExtraction('));
+    check('có bám sự kiện sinh xong của Tavern',
+      /GENERATION_ENDED \|\| types\.MESSAGE_RECEIVED/.test(source));
+    check('tôn trọng chế độ thủ công', /st\.evolveMode === 'manual'/.test(source));
+    check('tự dựng được hội thoại khi chạy độc lập', source.includes('function buildDialogueText('));
+
+    // Hai đường dẫn tới cùng một luồng, phải chống chạy hai lần cho cùng một tin nhắn.
+    check('có khoá tin nhắn chống chạy trùng', source.includes('lastProcessedKey'));
+    check('luồng chính ghi khoá sau khi chạy xong',
+      /lastProcessedKey = messageKeyOf\(ctx, chat, lastMsg\)/.test(source));
+    check('bộ hẹn giờ bỏ qua tin nhắn đã xử lý',
+      /if \(lastProcessedKey === expectedKey\) return;/.test(source));
+    // Hoạt động ngầm cần worldDigest của lượt này, nên phải chờ Thế Giới gọi API xong đã.
+    check('chờ Công Cụ Thế Giới chạy xong trước khi tự chạy',
+      /WORLD_ENGINE_EVOLUTION\?\.isRunning\?\.\(\) === true/.test(source));
+    check('chờ có giới hạn, hết hạn thì vẫn chạy', /autoRetries < AUTO_MAX_RETRIES/.test(source));
+
+    // Triệu chứng "phải đóng bảng đi mới thấy": chạy xong không làm mới giao diện.
+    check('chạy xong thì làm mới bảng điều khiển',
+      /WORLD_ENGINE_UI\?\.refresh\?\.\(true\)/.test(source));
+  }
+
   if (failures > 0) {
     console.error(`npc-engine logic tests FAILED (${failures} lỗi)`);
     process.exit(1);
