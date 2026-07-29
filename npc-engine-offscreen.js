@@ -123,6 +123,12 @@ Không nhân vật nào có hành động đáng kể thì trả "activities": [
       sections.push(`【THỜI GIAN TRUYỆN】\nĐã trôi qua ${Number(opts.storyDay)} ngày kể từ đầu truyện.`);
     }
 
+    // Tư liệu nền đặt trước diễn biến: nhân vật hành động trong một thế giới có sẵn luật lệ, thế lực
+    // và địa lý riêng. Thiếu phần này thì hoạt động ngầm sinh ra sẽ chung chung, không ăn nhập với truyện.
+    if (clean(opts.worldbook)) {
+      sections.push(`【TƯ LIỆU SỔ TAY THẾ GIỚI】\n${clean(opts.worldbook)}\n\nHành động của nhân vật phải phù hợp với các thiết lập trên: đúng thế lực họ thuộc về, đúng địa lý, đúng luật lệ và trình độ kỹ thuật của thế giới này. Không được mâu thuẫn với tư liệu đã cho.`);
+    }
+
     if (clean(opts.worldDigest)) {
       sections.push(`【DIỄN BIẾN THẾ GIỚI VỪA XẢY RA】\n${clean(opts.worldDigest)}`);
     }

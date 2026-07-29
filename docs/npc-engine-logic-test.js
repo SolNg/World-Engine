@@ -329,6 +329,62 @@ const baseSettings = () => config.getSettings(true);
   check('nhân vật trích xuất được ghi vào trạng thái',
     data.findNpc(data.loadState(), 'Lý Mộ Bạch') !== null);
 
+  // ===== Sổ Tay Thế Giới phải tới được CẢ HAI pha =====
+  // Bản trước chỉ đưa vào pha trích xuất. Nhưng pha sinh hoạt động ngầm mới là nơi cần nó nhất:
+  // nhân vật quyết định làm gì thì phải biết luật lệ, thế lực và địa lý của thế giới này.
+  {
+    const scans = [];
+    global.WORLD_ENGINE_WORLDBOOK = {
+      buildPromptSection: async (scanText, scope) => {
+        scans.push({ scanText, scope });
+        return 'Trường An là kinh đô của Đại Chu, do Thanh Long hội nắm phần ngầm.';
+      }
+    };
+
+    const prompts = [];
+    global.WORLD_ENGINE_API.callApi = async prompt => {
+      prompts.push(prompt);
+      return JSON.stringify(prompts.length === 1
+        ? {
+            scene: { location: ['Đại Chu', 'Giang Nam', 'Dương Châu'], presentNames: [] },
+            npcs: [{
+              name: 'Lý Mộ Bạch', tier: 'core', significance: 90, present: false,
+              location: { path: ['Đại Chu', 'Quan Trung', 'Trường An'] },
+              faction: { name: 'Thanh Long hội', role: 'đường chủ' },
+              goals: [{ text: 'Chiêu mộ tử sĩ', progress: 'đang tiến hành' }]
+            }]
+          }
+        : { activities: [] });
+    };
+
+    storage.clear();
+    config.patchSettings({ worldbookEnabled: true, offscreenEnabled: true });
+
+    await engine.ingestWorldEvolution({ layer: 30, worldDigest: 'Kinh đô giới nghiêm', dialogue: 'Người chơi rời quán trọ.' });
+
+    check('đọc Sổ Tay Thế Giới hai lần, mỗi pha một lần', scans.length === 2);
+    check('luôn dùng phạm vi npc', scans.every(scan => scan.scope === 'npc'));
+    check('pha trích xuất quét theo hội thoại', scans[0]?.scanText.includes('Người chơi rời quán trọ.'));
+    // Hội thoại gần như vô dụng cho pha hai vì nhân vật đang vắng mặt — phải quét theo hồ sơ của họ,
+    // nếu không thì mục lorebook về nơi họ đang tới sẽ không bao giờ được kích hoạt.
+    check('pha hoạt động ngầm quét theo tên nhân vật vắng mặt', scans[1]?.scanText.includes('Lý Mộ Bạch'));
+    check('pha hoạt động ngầm quét theo nơi nhân vật đang ở', scans[1]?.scanText.includes('Trường An'));
+    check('pha hoạt động ngầm quét theo thế lực', scans[1]?.scanText.includes('Thanh Long hội'));
+    check('pha hoạt động ngầm quét theo mục tiêu', scans[1]?.scanText.includes('Chiêu mộ tử sĩ'));
+
+    check('tư liệu vào được prompt trích xuất', prompts[0]?.includes('Trường An là kinh đô của Đại Chu'));
+    check('tư liệu vào được prompt hoạt động ngầm', prompts[1]?.includes('Trường An là kinh đô của Đại Chu'));
+    check('prompt hoạt động ngầm buộc hành động phải khớp tư liệu',
+      prompts[1]?.includes('Không được mâu thuẫn với tư liệu đã cho'));
+
+    // Tắt công tắc thì không đọc nữa.
+    scans.length = 0;
+    config.patchSettings({ worldbookEnabled: false });
+    await engine.ingestWorldEvolution({ layer: 31, worldDigest: 'x', dialogue: 'y' });
+    check('tắt worldbookEnabled thì không đọc lorebook', scans.length === 0);
+    config.patchSettings({ worldbookEnabled: true });
+  }
+
   // Chốt ở tầng dưới cùng: nơi gọi có sai kiểu thì phải ném lỗi rõ ràng ngay,
   // thay vì để API trả HTTP 400 khó lần ra nguyên nhân.
   let threw = '';

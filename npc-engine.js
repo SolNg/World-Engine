@@ -430,6 +430,36 @@ window.NPC_ENGINE = (function() {
     throw new Error('Yêu cầu API nhân vật thất bại');
   }
 
+  // Đọc các mục Sổ Tay Thế Giới đã chọn, theo phạm vi riêng 'npc'.
+  // Mục 🔵 thường trực thì luôn vào; mục 🟢 từ khoá chỉ vào khi văn bản quét có nhắc tới —
+  // nên gọi hàm này với văn bản quét khác nhau ở mỗi pha sẽ ra tư liệu khác nhau, đúng như mong muốn.
+  async function buildWorldbookSection(scanText, st) {
+    if (st.worldbookEnabled === false) return '';
+    try {
+      return await window.WORLD_ENGINE_WORLDBOOK?.buildPromptSection?.(clean(scanText), 'npc') || '';
+    } catch (error) {
+      console.error('[Công Cụ Nhân Vật] Đọc Sổ Tay Thế Giới thất bại (đã cách ly)', error);
+      return '';
+    }
+  }
+
+  // Văn bản quét cho pha hoạt động ngầm. Hội thoại lượt này gần như vô dụng ở đây: NPC đang vắng mặt
+  // nên tên họ, nơi họ ở và mục tiêu họ đuổi theo mới là thứ cần khớp từ khoá. Nhờ vậy nhân vật đang
+  // trên đường tới Trường An sẽ kéo được mục lorebook về Trường An, dù cả lượt không ai nhắc tới nó.
+  function offscreenScanText(absent, worldDigest) {
+    const parts = [clean(worldDigest)];
+    for (const npc of absent) {
+      parts.push(clean(npc.name));
+      parts.push(...asArray(npc.aliases).map(clean));
+      parts.push(describePath(npc.location?.path));
+      if (npc.location?.movingTo) parts.push(describePath(npc.location.movingTo));
+      if (npc.faction?.name) parts.push(clean(npc.faction.name));
+      for (const goal of asArray(npc.goals)) parts.push(clean(goal?.text));
+      if (npc.pendingIntent?.action) parts.push(clean(npc.pendingIntent.action));
+    }
+    return parts.filter(Boolean).join('\n');
+  }
+
   // ================= Luồng chính =================
   // Gọi từ world-engine.js sau khi suy diễn thế giới hoàn tất. Thứ tự: thế giới xong → nhân vật chạy,
   // nên hoạt động ngầm của lượt này phản ứng được với diễn biến thế giới vừa sinh ra trong chính lượt này.
@@ -463,18 +493,11 @@ window.NPC_ENGINE = (function() {
       const storyDay = core()?.getLastStoryDay?.();
 
       // Sổ Tay Thế Giới: các mục người dùng đã chọn ở tab Worldbook, phạm vi lưu riêng của engine này.
-      // Quét theo hội thoại lượt hiện tại nên mục kiểu từ khoá chỉ bật khi thật sự được nhắc tới.
-      // Cách ly lỗi: lorebook hỏng thì trích xuất nhân vật vẫn phải chạy.
-      let worldbook = '';
-      if (st.worldbookEnabled !== false) {
-        try {
-          worldbook = await window.WORLD_ENGINE_WORLDBOOK?.buildPromptSection?.(
-            clean(payload?.dialogue) + '\n' + clean(payload?.worldDigest), 'npc'
-          ) || '';
-        } catch (error) {
-          console.error('[Công Cụ Nhân Vật] Đọc Sổ Tay Thế Giới thất bại (đã cách ly)', error);
-        }
-      }
+      // Mục kiểu từ khoá chỉ bật khi văn bản quét có nhắc tới, nên hai pha cần hai văn bản quét khác nhau
+      // (xem buildWorldbookSection). Cách ly lỗi: lorebook hỏng thì hai pha vẫn phải chạy.
+      const worldbook = await buildWorldbookSection(
+        clean(payload?.dialogue) + '\n' + clean(payload?.worldDigest), st
+      );
 
       // --- Pha 1: trích xuất nhân vật từ hội thoại ---
       const extraction = await callModel(window.NPC_ENGINE_PROMPT.buildPrompt({
@@ -502,6 +525,7 @@ window.NPC_ENGINE = (function() {
         const activities = await callModel(window.NPC_ENGINE_OFFSCREEN.buildPrompt({
           absentNpcs: absent,
           worldDigest: clean(payload?.worldDigest),
+          worldbook: await buildWorldbookSection(offscreenScanText(absent, payload?.worldDigest), st),
           sceneSummary: describePath(state.scene.location),
           travelCache: state.travelCache,
           worldScale: st.worldScale,

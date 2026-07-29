@@ -163,7 +163,13 @@ check('ba nấc che vị trí đều có trong ô chọn',
     /WORLD_ENGINE_WORLDBOOK\?\.buildPromptSection\?\.\([\s\S]{0,160}'npc'\s*\)/.test(engine));
   check('việc đọc lorebook được cách ly lỗi',
     /buildPromptSection[\s\S]{0,300}catch \(error\)/.test(engine));
-  check('có công tắc worldbookEnabled gác trước', /st\.worldbookEnabled !== false/.test(engine));
+  check('có công tắc worldbookEnabled gác trước', /st\.worldbookEnabled === false/.test(engine));
+  // Cả hai pha đều phải nhận tư liệu: pha hai là nơi nhân vật quyết định hành động,
+  // thiếu tư liệu thì hoạt động ngầm sinh ra sẽ không ăn nhập với thế giới quan.
+  check('pha trích xuất nhận tư liệu', /NPC_ENGINE_PROMPT\.buildPrompt\(\{[\s\S]{0,400}worldbook,/.test(engine));
+  check('pha hoạt động ngầm nhận tư liệu',
+    /NPC_ENGINE_OFFSCREEN\.buildPrompt\(\{[\s\S]{0,400}worldbook: await buildWorldbookSection\(/.test(engine));
+  check('hai pha dùng văn bản quét khác nhau', engine.includes('function offscreenScanText('));
 }
 
 // ===== Công cụ bỏ ẩn =====
