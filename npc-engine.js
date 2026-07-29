@@ -896,6 +896,65 @@ window.NPC_ENGINE = (function() {
     }
   }
 
+  // ================= Chữa dữ liệu =================
+
+  // Quét và sửa những chỗ không nhất quán tích tụ sau nhiều lượt: id trùng, tham chiếu tới nhân vật
+  // không còn tồn tại, tri thức trỏ tới sự thật đã bị xoá, nhân vật trong kho còn nằm ở danh sách
+  // hoạt động. Chỉ sửa, không xoá dữ liệu thật.
+  function repairState(state) {
+    const fixed = { duplicateIds: 0, danglingRelations: 0, danglingFacts: 0, misplacedArchive: 0, missingIds: 0 };
+    const seen = new Set();
+
+    for (const npc of [...state.npcs, ...state.archive]) {
+      if (!clean(npc.id)) { npc.id = data().nextNpcId(state); fixed.missingIds += 1; }
+      if (seen.has(npc.id)) { npc.id = data().nextNpcId(state); fixed.duplicateIds += 1; }
+      seen.add(npc.id);
+    }
+
+    const names = new Set([...state.npcs, ...state.archive].map(npc => normalized(npc.name)));
+    const factIds = new Set(asArray(state.publicFacts).map(fact => fact.id));
+
+    for (const npc of [...state.npcs, ...state.archive]) {
+      const relations = asArray(npc.relations?.npcs);
+      const kept = relations.filter(link => !clean(link?.name) || names.has(normalized(link.name)));
+      fixed.danglingRelations += relations.length - kept.length;
+      npc.relations.npcs = kept;
+
+      // factId trỏ tới sự thật đã biến mất thì gỡ liên kết, giữ lại nội dung tri thức.
+      for (const item of asArray(npc.knowledge)) {
+        if (item.factId && !factIds.has(item.factId)) { item.factId = null; fixed.danglingFacts += 1; }
+      }
+    }
+
+    // Đánh dấu đã vào kho mà vẫn nằm ở danh sách hoạt động: chuyển về đúng chỗ.
+    const misplaced = state.npcs.filter(npc => npc.status?.archived === true);
+    for (const npc of misplaced) data().archiveNpc(state, npc.id, npc.status.condition);
+    fixed.misplacedArchive = misplaced.length;
+
+    state.scene.presentIds = asArray(state.scene?.presentIds).filter(id => seen.has(id));
+    return fixed;
+  }
+
+  // Đối soát với lịch sử chat thật: tầng hiện tại ngắn hơn tầng đã ghi thì lùi về cho khớp.
+  // Xoá lùi nhiều tầng một lúc thì điểm lưu một cấp không phủ hết, phải lọc theo dấu tầng.
+  function reconcileHistory() {
+    const layer = core()?.getChatLayer?.();
+    if (!Number.isFinite(Number(layer))) return { changed: false, reason: 'no_layer' };
+    const state = data().loadState();
+    const stateLayer = asLayer(state.chatLayer);
+    if (stateLayer === null || Number(layer) >= stateLayer) {
+      const fixed = repairState(state);
+      data().saveState(state);
+      return { changed: false, repaired: fixed };
+    }
+    data().rollbackToLayer(state, Number(layer));
+    const fixed = repairState(state);
+    data().saveState(state);
+    applyInjection(state);
+    setStatus(`Đã đối soát về tầng ${layer}`);
+    return { changed: true, layer: Number(layer), dropped: state.lastRollback?.dropped, repaired: fixed };
+  }
+
   // ================= Sự kiện =================
 
   function onGenerationStarted(type, _opts, dryRun) {
@@ -941,6 +1000,8 @@ window.NPC_ENGINE = (function() {
       guard('Công Cụ Nhân Vật', 'Vuốt Tái Sinh', onMessageSwiped));
     ctx.eventSource.on(types.MESSAGE_DELETED || 'message_deleted',
       guard('Công Cụ Nhân Vật', 'Xóa Tin Nhắn', onMessageDeleted));
+    ctx.eventSource.on(types.CHAT_LOADED || 'chat_loaded',
+      guard('Công Cụ Nhân Vật', 'Tải Trò Chuyện', () => { reconcileHistory(); applyInjection(); }));
     // Lịch chạy riêng: không phụ thuộc việc Công Cụ Thế Giới có suy diễn lượt này hay không.
     ctx.eventSource.on(types.GENERATION_ENDED || types.MESSAGE_RECEIVED || 'message_received',
       guard('Công Cụ Nhân Vật', 'Sinh Xong', onMessageReceived));
@@ -970,6 +1031,8 @@ window.NPC_ENGINE = (function() {
     backfill,
     stopBackfill,
     getBackfillStatus: () => clone(backfillStatus),
+    reconcileHistory,
+    repairState,
     buildWorldEngineContext,
     // Xuất ra để giao diện và kiểm thử dùng lại mà không phải gọi API.
     buildInjectionText,

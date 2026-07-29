@@ -295,6 +295,34 @@ check('ba nấc che vị trí đều có trong ô chọn',
   check('điểm lưu nêu số nhân vật trọng yếu', /checkpoint\.npcs \|\| \[\]\)\.filter\(npc => npc\.tier === 'core'\)/.test(ui));
 }
 
+// ===== Điền lại hàng loạt, đối soát, vòng tiến độ =====
+{
+  const engine = fs.readFileSync(path.join(root, 'npc-engine.js'), 'utf8');
+  check('engine có hàm điền lại', engine.includes('async function backfill('));
+  check('engine có hàm dừng điền lại', engine.includes('function stopBackfill('));
+  check('điền lại tính vào trạng thái đang chạy', /isRunning: \(\) => running \|\| backfillRunning/.test(engine));
+  check('nút dừng dừng được cả điền lại', /function abort\(\)[\s\S]{0,160}backfillRunning = false/.test(engine));
+  // Chuỗi này là thứ quả cầu nổi nhận ra để vẽ vòng tiến độ đợt/tổng.
+  check('báo tiến độ đúng định dạng quả cầu hiểu', /Đang điền lại \$\{current\}\/\$\{total\}/.test(engine));
+  check('tự sao lưu trước khi xoá sạch', /createSnapshot\?\.\('Tự động trước khi điền lại'\)/.test(engine));
+  check('giữ lại bộ nhớ đệm tuyến đường khi dựng lại', /travelCache: original\.travelCache/.test(engine));
+
+  check('có nút bắt đầu điền lại', ui.includes('we-npc-backfill-start'));
+  check('có nút dừng', ui.includes('we-npc-backfill-stop'));
+  check('bắt đầu có hỏi xác nhận vì sẽ xoá sạch', /backfillStart\.onclick[\s\S]{0,400}confirm\(/.test(ui));
+
+  check('engine có hàm đối soát lịch sử', engine.includes('function reconcileHistory('));
+  check('engine có hàm chữa dữ liệu', engine.includes('function repairState('));
+  check('tự đối soát khi mở cuộc trò chuyện', /CHAT_LOADED[\s\S]{0,140}reconcileHistory\(\)/.test(engine));
+  check('có nút đối soát tay', ui.includes('we-npc-repair'));
+
+  check('trang chủ có vòng tiến độ', ui.includes('we-npc-ring'));
+  check('vòng đổi màu khi gần đầy', /ratio >= 1 \? 'var\(--we-danger\)'/.test(ui));
+  for (const cls of ['we-npc-ring', 'we-npc-ring-text', 'we-npc-ring-value', 'we-npc-ring-label']) {
+    check(`style.css có lớp .${cls}`, css.includes('.' + cls));
+  }
+}
+
 // ===== Công cụ bỏ ẩn =====
 check('có nút bỏ ẩn toàn bộ', ui.includes('we-npc-unhide-all'));
 check('nút bỏ ẩn gọi đúng hàm cứu hộ', ui.includes('window.WORLD_ENGINE?.unhideAllMessages?.()'));

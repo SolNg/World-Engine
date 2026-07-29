@@ -326,6 +326,49 @@ const baseSettings = () => config.getSettings(true);
   check('trần cực chặt vẫn tôn trọng trần', tiny.length <= 120);
 }
 
+// ===== Đối soát và chữa dữ liệu =====
+// Sau nhiều lượt, dữ liệu tích tụ những chỗ không nhất quán mà không thao tác nào tự dọn:
+// quan hệ trỏ tới người đã xoá, tri thức trỏ tới sự thật không còn, id trùng nhau.
+{
+  const state = data.defaultState();
+  const a = data.upsertNpc(state, { name: 'Người Còn', tier: 'core', significance: 80 });
+  const b = data.upsertNpc(state, { name: 'Người Mất', tier: 'core', significance: 70 });
+  const fact = engine.addPublicFact(state, 'Một sự thật', 5, 'sự kiện');
+
+  a.relations.npcs = [
+    { id: b.id, name: 'Người Mất', type: 'đồng minh' },
+    { id: 'npc:999', name: 'Không Tồn Tại', type: 'thù địch' }
+  ];
+  a.knowledge = [
+    { fact: 'Một sự thật', source: 'nghe đồn', layer: 5, factId: fact.id },
+    { fact: 'Trỏ vào hư không', source: 'suy đoán', layer: 5, factId: 'fact:404' }
+  ];
+  // Đánh dấu đã vào kho nhưng vẫn nằm ở danh sách hoạt động.
+  b.status.archived = true;
+  b.status.alive = false;
+  state.scene = { layer: 5, location: [], presentIds: [a.id, 'npc:không-có'] };
+
+  const fixed = engine.repairState(state);
+
+  check('gỡ quan hệ trỏ tới nhân vật không tồn tại', fixed.danglingRelations === 1);
+  check('giữ lại quan hệ hợp lệ',
+    data.findNpc(state, 'Người Còn').relations.npcs.some(link => link.name === 'Người Mất'));
+  check('gỡ liên kết tới sự thật đã biến mất', fixed.danglingFacts === 1);
+  // Gỡ liên kết chứ không xoá nội dung: điều nhân vật biết vẫn là điều họ biết.
+  check('không xoá nội dung tri thức', data.findNpc(state, 'Người Còn').knowledge.length === 2);
+  check('giữ nguyên liên kết còn hợp lệ',
+    data.findNpc(state, 'Người Còn').knowledge[0].factId === fact.id);
+  check('chuyển người đánh dấu vào kho về đúng chỗ', fixed.misplacedArchive === 1);
+  check('người đó nay nằm trong kho', state.archive.some(npc => npc.name === 'Người Mất'));
+  check('lọc id không tồn tại khỏi danh sách có mặt',
+    state.scene.presentIds.length === 1 && state.scene.presentIds[0] === a.id);
+
+  // Chạy lần hai trên dữ liệu đã sạch thì không sửa gì nữa.
+  const again = engine.repairState(state);
+  check('chạy lại trên dữ liệu sạch thì không sửa gì',
+    Object.values(again).every(value => value === 0));
+}
+
 // ===== Nối ngược sang Công Cụ Thế Giới =====
 {
   const state = data.defaultState();

@@ -5484,6 +5484,25 @@ window.WORLD_ENGINE_UI = (function() {
       { label: 'Lượt', value: String(state.round || 0) }
     ];
 
+    // Vòng tiến độ: cho thấy ngay ngân sách NPC trọng yếu còn bao nhiêu chỗ, vì đó là con số
+    // quyết định độ dài khối chèn và ai được sinh hoạt động ngầm.
+    const ratio = Math.max(0, Math.min(1, core.length / limit));
+    const radius = 54;
+    const circumference = 2 * Math.PI * radius;
+    const dash = (circumference * ratio).toFixed(1);
+    const ringColor = ratio >= 1 ? 'var(--we-danger)' : (ratio >= 0.8 ? 'var(--we-gold)' : 'var(--we-accent)');
+    const ring = `<div class="we-npc-ring">
+      <svg viewBox="0 0 160 160" width="130" height="130">
+        <circle cx="80" cy="80" r="${radius}" fill="none" stroke="var(--we-ring-track)" stroke-width="8"/>
+        <circle cx="80" cy="80" r="${radius}" fill="none" stroke="${ringColor}" stroke-width="8" stroke-linecap="round"
+          stroke-dasharray="${dash} ${(circumference - circumference * ratio).toFixed(1)}" transform="rotate(-90 80 80)"/>
+      </svg>
+      <div class="we-npc-ring-text">
+        <div class="we-npc-ring-value">${core.length}<span>/${limit}</span></div>
+        <div class="we-npc-ring-label">Trọng Yếu</div>
+      </div>
+    </div>`;
+
     const counts = { core: core.length, peripheral: peripheral.length, archive: archive.length, rumors: rumors.length };
     const rows = ['core', 'peripheral', 'archive', 'rumors'].map((view, index, all) => {
       const meta = NPC_VIEW_META[view];
@@ -5499,6 +5518,7 @@ window.WORLD_ENGINE_UI = (function() {
     }).join('');
 
     return '<div class="we-npc-home">'
+      + ring
       + '<div class="we-npc-core">' + stats.map(stat =>
           `<div class="we-npc-stat"><div class="we-npc-stat-value">${h(stat.value)}</div><div class="we-npc-stat-label">${h(stat.label)}</div></div>`
         ).join('') + '</div>'
@@ -5995,7 +6015,9 @@ window.WORLD_ENGINE_UI = (function() {
         </div>`
       + hint('Quét từ tầng đầu cuộc trò chuyện, chia đợt gọi API để dựng lại hồ sơ nhân vật cho phần quá khứ. Dùng khi mới cài extension giữa chừng một cuộc trò chuyện đã dài. <b>Thao tác này xoá sạch hồ sơ hiện tại rồi dựng lại từ đầu</b> — một bản lưu tự động được tạo trước khi chạy. Chỉ trích xuất nhân vật, không sinh hoạt động ngầm cho quá khứ, vì phần đó đã có chính văn rồi.');
 
-    const maintainBody = `<button class="we-btn" id="we-npc-unhide-all" style="width:100%;margin-bottom:4px;">Bỏ Ẩn Toàn Bộ Tin Nhắn</button>`
+    const maintainBody = `<button class="we-btn" id="we-npc-repair" style="width:100%;margin-bottom:4px;">Đối Soát Và Chữa Dữ Liệu</button>`
+      + hint('Lùi hồ sơ về khớp với số tầng hội thoại thật, rồi quét sửa những chỗ không nhất quán tích tụ sau nhiều lượt: id trùng, quan hệ trỏ tới nhân vật đã bị xoá, tri thức trỏ tới sự thật không còn, nhân vật đánh dấu vào kho mà vẫn nằm ở danh sách hoạt động. Chỉ sửa, không xoá dữ liệu thật. Việc này cũng tự chạy mỗi lần mở cuộc trò chuyện.')
+      + `<button class="we-btn" id="we-npc-unhide-all" style="width:100%;margin:12px 0 4px;">Bỏ Ẩn Toàn Bộ Tin Nhắn</button>`
       + hint('Công cụ cứu hộ cho người dùng bản cũ. Bộ Nhớ Ký Ức trước đây có tính năng ẩn chính văn đã được tóm tắt bao phủ; nay engine đó đã bị gỡ nên không còn ai bỏ ẩn nữa. Nút này quét cuộc trò chuyện hiện tại và gỡ mọi cờ ẩn còn sót. <b>Chạy một lần cho mỗi cuộc trò chuyện cũ là đủ.</b>');
 
     const themeBody = select('we-npc-theme-select', 'Bộ phối màu của mặt Nhân Vật', getStoredNpcTheme(),
@@ -6539,6 +6561,21 @@ window.WORLD_ENGINE_UI = (function() {
         };
         reader.readAsText(file);
         importFile.value = '';
+      };
+    }
+
+    const repair = document.getElementById('we-npc-repair');
+    if (repair) {
+      repair.onclick = () => {
+        const result = window.NPC_ENGINE?.reconcileHistory?.();
+        if (!result) { showToast('Công Cụ Nhân Vật chưa sẵn sàng', true); return; }
+        const fixed = result.repaired || {};
+        const total = Object.values(fixed).reduce((sum, value) => sum + (Number(value) || 0), 0);
+        const parts = [];
+        if (result.changed) parts.push(`lùi về tầng ${result.layer}`);
+        if (total) parts.push(`sửa ${total} chỗ`);
+        showToast(parts.length ? 'Đã đối soát: ' + parts.join(' · ') : 'Dữ liệu đã nhất quán, không cần sửa');
+        refresh();
       };
     }
 
