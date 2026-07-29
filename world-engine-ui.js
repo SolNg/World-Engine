@@ -5831,6 +5831,11 @@ window.WORLD_ENGINE_UI = (function() {
   }
 
   async function runNpcLink() {
+    // Đang chạy thì đây là "bỏ qua", không phải "thất bại" — báo nhầm khiến người dùng tưởng bị ngắt.
+    if (window.NPC_ENGINE?.isRunning?.()) {
+      showToast(`Đang ${window.NPC_ENGINE?.getRunningLabel?.() || 'chạy'}, vui lòng đợi hoàn tất`);
+      return;
+    }
     try {
       const ok = await window.WORLD_ENGINE?.manualNpcLink?.();
       showToast(ok ? 'Đã cập nhật hồ sơ nhân vật' : 'Chưa cập nhật được hồ sơ nhân vật', !ok);

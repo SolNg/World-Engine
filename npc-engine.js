@@ -32,6 +32,22 @@ window.NPC_ENGINE = (function() {
     return parts.length ? parts.join(' › ') : 'chưa rõ';
   }
 
+  // Báo trạng thái ra quả cầu nổi và thanh trên cùng, dùng chung đường của Công Cụ Thế Giới.
+  // Không có phần này thì engine là hộp đen: người dùng không biết nó đang chạy, đã xong,
+  // hay đã bỏ qua vì lý do gì — mọi trục trặc đều trông giống nhau là "không thấy gì cả".
+  function setStatus(text, isError) {
+    const message = '[Nhân Vật] ' + clean(text);
+    try { window.__WE_SetExternalStatus?.(message, !!isError); } catch (error) { /* không có UI thì thôi */ }
+    if (isError) console.warn('[Công Cụ Nhân Vật] ' + clean(text));
+    else console.log('[Công Cụ Nhân Vật] ' + clean(text));
+  }
+
+  const SKIP_REASONS = {
+    disabled: 'Công Cụ Nhân Vật đang tắt',
+    running: 'đã có tác vụ đang chạy, bỏ qua lượt này',
+    manual: 'đang ở chế độ thủ công'
+  };
+
   // ================= Gộp kết quả trích xuất =================
   // Tách riêng khỏi phần gọi API để kiểm thử được mà không cần mạng.
 
@@ -497,8 +513,14 @@ window.NPC_ENGINE = (function() {
 
   async function ingestWorldEvolution(payload) {
     const st = settings(true);
-    if (st.engineEnabled === false) return { skipped: true, reason: 'disabled' };
-    if (running) return { skipped: true, reason: 'running' };
+    if (st.engineEnabled === false) {
+      setStatus(SKIP_REASONS.disabled);
+      return { skipped: true, reason: 'disabled', message: SKIP_REASONS.disabled };
+    }
+    if (running) {
+      // Bỏ qua chứ không phải thất bại: một tác vụ khác đang chạy và sẽ hoàn tất bình thường.
+      return { skipped: true, reason: 'running', message: SKIP_REASONS.running };
+    }
 
     const layer = asLayer(payload?.layer) ?? core()?.getChatLayer?.() ?? null;
     const replace = payload?.replace === true;
@@ -506,6 +528,7 @@ window.NPC_ENGINE = (function() {
     running = true;
     runningLabel = 'Trích xuất nhân vật';
     abortController = new AbortController();
+    setStatus('Đang trích xuất nhân vật...');
 
     try {
       // Reroll (replace=true) thì dựng lại từ điểm lưu, để lần sinh mới không chồng lên lần sinh cũ.
@@ -553,6 +576,7 @@ window.NPC_ENGINE = (function() {
 
       if (st.offscreenEnabled !== false && absent.length) {
         runningLabel = 'Suy diễn hoạt động ngầm';
+        setStatus(`Đang suy diễn hoạt động ngầm cho ${absent.length} nhân vật vắng mặt...`);
         const activities = await callModel(window.NPC_ENGINE_OFFSCREEN.buildPrompt({
           absentNpcs: absent,
           worldDigest: clean(payload?.worldDigest),
@@ -583,6 +607,17 @@ window.NPC_ENGINE = (function() {
       try { window.WORLD_ENGINE_UI?.refresh?.(true); }
       catch (error) { console.warn('[Công Cụ Nhân Vật] Làm mới giao diện thất bại (đã cách ly)', error); }
 
+      const core_ = state.npcs.filter(npc => npc.tier === 'core').length;
+      const summary = [
+        `${merged.added.length} mới`,
+        `${merged.updated.length} cập nhật`,
+        `${core_} trọng yếu`,
+        offscreen.acted.length ? `${offscreen.acted.length} hoạt động ngầm` : '',
+        offscreen.rumors.length ? `${offscreen.rumors.length} tin đồn` : '',
+        merged.deaths.length ? `${merged.deaths.length} qua đời` : ''
+      ].filter(Boolean).join(' · ');
+      setStatus('Hoàn tất — ' + summary);
+
       return {
         skipped: false,
         arrived,
@@ -590,8 +625,12 @@ window.NPC_ENGINE = (function() {
         updated: merged.updated,
         deaths: merged.deaths,
         acted: offscreen.acted,
-        rumors: offscreen.rumors
+        rumors: offscreen.rumors,
+        message: summary
       };
+    } catch (error) {
+      setStatus('Thất bại: ' + (error?.message || error), true);
+      throw error;
     } finally {
       running = false;
       runningLabel = '';
@@ -627,7 +666,16 @@ window.NPC_ENGINE = (function() {
     autoTimer = null;
     const st = settings(true);
     if (st.engineEnabled === false || st.evolveMode === 'manual') return;
-    if (running) return;
+
+    // Đang có tác vụ chạy (thường là đường Thế Giới gọi sang): hẹn lại chứ không bỏ cuộc.
+    // Bỏ cuộc ở đây thì nếu tác vụ kia thất bại giữa chừng, lượt này mất luôn mà không ai biết.
+    if (running) {
+      if (autoRetries < AUTO_MAX_RETRIES) {
+        autoRetries += 1;
+        autoTimer = setTimeout(() => runAutoExtraction(expectedKey), AUTO_RETRY_MS);
+      }
+      return;
+    }
 
     const ctx = window.SillyTavern?.getContext?.();
     const chat = ctx?.chat || [];

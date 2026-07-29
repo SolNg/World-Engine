@@ -470,6 +470,42 @@ const baseSettings = () => config.getSettings(true);
     // Triệu chứng "phải đóng bảng đi mới thấy": chạy xong không làm mới giao diện.
     check('chạy xong thì làm mới bảng điều khiển',
       /WORLD_ENGINE_UI\?\.refresh\?\.\(true\)/.test(source));
+    // Gặp tác vụ đang chạy thì hẹn lại, không bỏ cuộc: tác vụ kia có thể thất bại giữa chừng.
+    check('gặp tác vụ đang chạy thì hẹn lại chứ không bỏ cuộc',
+      /if \(running\) \{[\s\S]{0,240}setTimeout\(\(\) => runAutoExtraction\(expectedKey\)/.test(source));
+
+    // Báo trạng thái: không có thì engine là hộp đen, mọi trục trặc trông giống nhau.
+    check('có hàm báo trạng thái', source.includes('function setStatus('));
+    check('báo qua đường trạng thái dùng chung', source.includes('window.__WE_SetExternalStatus'));
+    check('báo lúc bắt đầu trích xuất', source.includes("setStatus('Đang trích xuất nhân vật...')"));
+    check('báo lúc bắt đầu hoạt động ngầm', /setStatus\(`Đang suy diễn hoạt động ngầm/.test(source));
+    check('báo lúc hoàn tất kèm số liệu', /setStatus\('Hoàn tất — ' \+ summary\)/.test(source));
+    check('báo lỗi khi thất bại', /setStatus\('Thất bại: '[\s\S]{0,60}true\)/.test(source));
+    check('có bảng lý do bỏ qua', source.includes('SKIP_REASONS'));
+  }
+
+  // ===== Chạy xong phải báo số liệu thật =====
+  {
+    global.WORLD_ENGINE_API.callApi = async () => JSON.stringify({
+      scene: { presentNames: [] },
+      npcs: [{ name: 'Nhân Vật Mới', tier: 'core', significance: 90, present: true }],
+      activities: []
+    });
+    global.WORLD_ENGINE_WORLDBOOK = { buildPromptSection: async () => '' };
+    storage.clear();
+    config.patchSettings({ engineEnabled: true, offscreenEnabled: false });
+
+    const result = await engine.ingestWorldEvolution({ layer: 40, dialogue: 'x', worldDigest: 'y' });
+    check('kết quả kèm tóm tắt bằng lời', typeof result.message === 'string' && result.message.length > 0);
+    check('tóm tắt nêu số nhân vật mới', result.message.includes('1 mới'));
+    check('tóm tắt nêu số nhân vật trọng yếu', result.message.includes('1 trọng yếu'));
+
+    // Gọi chồng lên nhau thì báo "bỏ qua" kèm lý do, không phải "thất bại".
+    config.patchSettings({ engineEnabled: false });
+    const skipped = await engine.ingestWorldEvolution({ layer: 41, dialogue: 'x' });
+    check('bị tắt thì báo bỏ qua', skipped.skipped === true && skipped.reason === 'disabled');
+    check('bỏ qua có kèm lý do bằng lời', typeof skipped.message === 'string' && skipped.message.length > 0);
+    config.patchSettings({ engineEnabled: true });
   }
 
   if (failures > 0) {
