@@ -93,6 +93,13 @@ check('sửa hồ sơ tay thì ghi lại trạng thái',
   check('mặt npc khai hook onSettingsTab', /onSettingsTab: key => \{ _npcSettingsTab = key; \}/.test(ui));
   check('mặt npc khai hook refreshDebug', /refreshDebug: \(\) => refreshNpcDebugRender\(\)/.test(ui));
   check('có hàm renderNpcDebug', ui.includes('function renderNpcDebug('));
+  // Thẻ tự kiểm tra chèn: hàm dùng chung vốn nhận tham số phạm vi, nhưng trước đây chỉ mặt Thế Giới
+  // gọi tới nên mặt Nhân Vật không có chỗ nào soi được phần chèn của chính nó.
+  check('tab Gỡ Lỗi của NPC có thẻ tự kiểm tra chèn', /renderInjectInspector\('npc'\)/.test(ui));
+  check('thẻ nằm trong khung .we-prompt-debug để bấm thu gọn được',
+    /injectCard[\s\S]{0,80}we-prompt-debug|we-prompt-debug'>' \+ injectCard/.test(ui));
+  check('làm mới xong thì gắn lại nút thu gọn',
+    /refreshNpcDebugRender[\s\S]{0,400}bindPromptSegToggle/.test(ui));
   check('có nút xuất gói chẩn đoán', ui.includes('we-npc-export-diag'));
   check('gói chẩn đoán xuất đúng phạm vi npc', /WORLD_ENGINE_DIAG\?\.download\?\.\('npc'\)/.test(ui));
 }

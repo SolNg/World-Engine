@@ -5798,6 +5798,9 @@ window.WORLD_ENGINE_UI = (function() {
   function renderNpcDebug() {
     const debug = window.NPC_ENGINE?.getLastDebug?.() || {};
     const state = npcData()?.loadState?.() || {};
+    // Thẻ tự kiểm tra chèn, phạm vi npc: trả lời câu "ràng buộc nhân vật có thực sự vào prompt
+    // gửi cho mô hình chính hay không". Đăng ký thành công không đồng nghĩa với đã vào nội dung.
+    const injectCard = renderInjectInspector('npc');
     const rows = [
       ['Lượt', state.round || 0],
       ['Tầng hội thoại', state.chatLayer ?? '—'],
@@ -5812,7 +5815,8 @@ window.WORLD_ENGINE_UI = (function() {
       ? `<div class="we-input-group"><label>${h(title)}</label><textarea rows="6" readonly style="width:100%;">${h(typeof content === 'string' ? content : JSON.stringify(content, null, 2))}</textarea></div>`
       : '';
 
-    return rows
+    return '<div class="we-prompt-debug">' + injectCard + '</div>'
+      + rows
       + (debug.error ? `<div class="we-hint" style="color:var(--we-danger);">Lỗi lần chạy gần nhất: ${h(debug.error)}</div>` : '')
       + block('Prompt lần gần nhất', debug.prompt)
       + block('Phản hồi API lần gần nhất', debug.apiResponse);
@@ -5820,7 +5824,10 @@ window.WORLD_ENGINE_UI = (function() {
 
   function refreshNpcDebugRender() {
     const target = document.getElementById('we-npc-debug-render');
-    if (target) target.innerHTML = renderNpcDebug();
+    if (!target) return;
+    target.innerHTML = renderNpcDebug();
+    // innerHTML xoá sạch handler cũ, phải gắn lại nút thu gọn của thẻ tự kiểm tra chèn.
+    bindPromptSegToggle(target.querySelector('.we-prompt-debug'));
   }
 
   async function runNpcLink() {
