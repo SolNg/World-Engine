@@ -38,19 +38,40 @@ window.NPC_ENGINE = (function() {
       const name = clean(incoming?.name);
       if (!name) continue;
 
-      // Bậc do mô hình đề xuất vẫn phải qua ngưỡng cấu hình — không phó mặc mô hình tự quyết,
-      // vì tiêu chuẩn của nó trôi dần qua các lượt.
-      const significance = Math.min(100, Math.max(0, parseInt(incoming.significance) || 0));
-      const proposedCore = incoming.tier === 'core' && significance >= st.significanceThreshold;
-
       const existing = data().findNpc(state, name);
       const isNew = !existing;
 
+      // Prompt dặn mô hình chỉ ghi phần THAY ĐỔI, nên nhân vật cũ thường về mà không kèm
+      // significance hay tier. Trước đây chỗ này quy về 0 rồi ghi đè, khiến nhân vật chính bị
+      // xoá điểm ngay lượt sau khi tái xuất hiện và tụt luôn xuống ngoại vi.
+      // Nguyên tắc: KHÔNG có trong phản hồi thì GIỮ NGUYÊN, không phải đặt về mặc định.
+      const rawSignificance = incoming.significance;
+      const hasSignificance = rawSignificance !== undefined && rawSignificance !== null
+        && rawSignificance !== '' && Number.isFinite(Number(rawSignificance));
+      const significance = hasSignificance
+        ? Math.min(100, Math.max(0, parseInt(rawSignificance)))
+        : (parseInt(existing?.significance) || 0);
+
+      // Bậc do mô hình đề xuất vẫn phải qua ngưỡng cấu hình — không phó mặc mô hình tự quyết,
+      // vì tiêu chuẩn của nó trôi dần qua các lượt.
+      const proposedTier = (incoming.tier === 'core' || incoming.tier === 'peripheral') ? incoming.tier : null;
+      let tier;
+      if (existing?.pinned) {
+        tier = existing.tier;                                   // ghim tay thì mô hình không đụng tới được
+      } else if (proposedTier === 'core') {
+        tier = significance >= st.significanceThreshold ? 'core' : 'peripheral';
+      } else if (proposedTier === 'peripheral') {
+        tier = 'peripheral';
+      } else {
+        tier = existing?.tier || 'peripheral';                   // không nói gì thì giữ nguyên bậc cũ
+      }
+
       const patch = {
         name,
-        aliases: asArray(incoming.aliases),
+        // Biệt danh cũng cộng dồn: lượt sau mô hình chỉ nêu biệt danh mới, ghi đè sẽ mất tên cũ.
+        aliases: [...asArray(existing?.aliases), ...asArray(incoming.aliases)],
         significance,
-        tier: proposedCore ? 'core' : (existing?.tier === 'core' && existing?.pinned ? 'core' : 'peripheral'),
+        tier,
         lastSeenLayer: currentLayer,
         firstSeenLayer: existing?.firstSeenLayer ?? currentLayer
       };

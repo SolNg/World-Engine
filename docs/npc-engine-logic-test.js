@@ -89,6 +89,57 @@ const baseSettings = () => config.getSettings(true);
     lyMoBach.knowledge.filter(item => item.fact === 'Người chơi mang kiếm gãy').length === 1);
 }
 
+// ===== Cập nhật một phần không được xoá dữ liệu cũ =====
+// Lỗi đã gặp thật: prompt dặn mô hình "chỉ ghi phần THAY ĐỔI", nên lượt sau nó trả về nhân vật cũ
+// mà không kèm significance/tier. Mã gộp quy về 0 rồi ghi đè, khiến nhân vật chính bị xoá điểm và
+// tụt xuống ngoại vi ngay lượt sau khi tái xuất hiện.
+{
+  config.patchSettings({ significanceThreshold: 60 });
+  const state = data.defaultState();
+
+  engine.mergeExtraction(state, {
+    npcs: [{
+      name: 'Rias Gremory', aliases: ['Chủ tịch'], tier: 'core', significance: 95, present: true,
+      location: { path: ['Nhật Bản', 'Kuoh', 'Học viện Kuoh'] },
+      faction: { name: 'Gremory', role: 'chủ nhân' }
+    }]
+  }, 10);
+
+  const before = data.findNpc(state, 'Rias Gremory');
+  check('lần đầu ghi đúng điểm', before.significance === 95);
+  check('lần đầu lên trọng yếu', before.tier === 'core');
+
+  // Lượt sau mô hình chỉ báo thay đổi, không kèm significance/tier/aliases.
+  engine.mergeExtraction(state, {
+    npcs: [{ name: 'Rias Gremory', present: true, status: { condition: 'bị thương' } }]
+  }, 11);
+
+  const after = data.findNpc(state, 'Rias Gremory');
+  check('thiếu significance thì GIỮ NGUYÊN điểm cũ', after.significance === 95);
+  check('thiếu tier thì GIỮ NGUYÊN bậc cũ', after.tier === 'core');
+  check('biệt danh không bị xoá', after.aliases.includes('Chủ tịch'));
+  check('thế lực không bị xoá', after.faction?.name === 'Gremory');
+  check('vị trí không bị xoá', after.location.path[2] === 'Học viện Kuoh');
+  check('phần thật sự thay đổi thì vẫn được ghi', after.status.condition === 'bị thương');
+
+  // Mô hình chấm lại thấp hơn ngưỡng thì phải hạ bậc — đó là quyết định có chủ ý, khác với bỏ trống.
+  engine.mergeExtraction(state, {
+    npcs: [{ name: 'Rias Gremory', tier: 'peripheral', significance: 20, present: true }]
+  }, 12);
+  const demoted = data.findNpc(state, 'Rias Gremory');
+  check('mô hình chấm lại thấp thì hạ bậc thật', demoted.tier === 'peripheral');
+  check('điểm mới được ghi nhận', demoted.significance === 20);
+
+  // Ghim tay thì mô hình không đụng tới bậc được nữa.
+  demoted.pinned = true;
+  demoted.tier = 'core';
+  engine.mergeExtraction(state, {
+    npcs: [{ name: 'Rias Gremory', tier: 'peripheral', significance: 10, present: true }]
+  }, 13);
+  check('nhân vật được ghim thì mô hình không hạ bậc được',
+    data.findNpc(state, 'Rias Gremory').tier === 'core');
+}
+
 // ===== Cái chết =====
 {
   const state = data.defaultState();

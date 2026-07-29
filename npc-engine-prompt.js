@@ -23,6 +23,8 @@ Chấm "significance" từ 0 đến 100 theo mức độ thiết yếu. Thà b�
 【QUY TẮC】
 - Chỉ ghi nhận điều chính văn nêu ra hoặc suy ra được trực tiếp. Không sáng tác thêm tình tiết.
 - Nhân vật đã có trong hồ sơ thì chỉ ghi phần THAY ĐỔI, giữ nguyên phần không đổi.
+- RIÊNG "name", "tier" và "significance" thì LUÔN ghi lại đầy đủ cho mọi nhân vật xuất hiện, kể cả khi không đổi so với hồ sơ. Ba trường này dùng để xếp bậc, thiếu là xếp sai.
+- Chấm lại "significance" theo toàn bộ những gì đã biết về nhân vật tính đến lúc này, không phải chỉ theo lượt hội thoại vừa rồi. Nhân vật chính của truyện thì điểm phải cao và giữ ổn định qua các lượt, không được tụt chỉ vì lượt này họ ít nói.
 - "present" đánh dấu nhân vật có thực sự xuất hiện trong cảnh vừa rồi hay không — dùng để biết ai đang vắng mặt.
 - Nhân vật chết thì đưa vào "deaths" kèm nguyên nhân, đừng chỉ đặt alive=false.
 - Tên riêng giữ nguyên dạng chính văn dùng. Biệt danh cho vào "aliases".
