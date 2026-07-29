@@ -5606,7 +5606,7 @@ window.WORLD_ENGINE_UI = (function() {
     const sec = (id, title, inner) =>
       '<div class="we-section"><div class="we-section-title">' + sectionHeader(title, id) + '</div>'
       + sectionBody(id, inner) + '</div>';
-    const hint = text => text ? `<div class="we-hint">${h(text)}</div>` : '';
+    const hint = note => note ? `<div class="we-hint">${note}</div>` : '';
     const text = (id, label, value, placeholder, note) => `<div class="we-input-group"><label>${h(label)}</label>
       <input type="text" id="${id}" value="${u(value || '')}" placeholder="${h(placeholder || '')}" style="width:100%;">
       ${hint(note)}</div>`;
@@ -5623,18 +5623,20 @@ window.WORLD_ENGINE_UI = (function() {
       <textarea id="${id}" rows="3" placeholder="${h(placeholder || '')}" style="width:100%;">${h(value || '')}</textarea>
       ${hint(note)}</div>`;
 
-    // ===== API riêng: Công Cụ Nhân Vật không dùng chung API với Công Cụ Thế Giới, để việc suy diễn
-    // nhân vật không tranh lượt gọi với suy diễn thế giới. Không điền phần này thì engine im lặng hoàn toàn.
+    // ===== API riêng =====
+    // Công Cụ Nhân Vật gọi API riêng, không dùng chung với Công Cụ Thế Giới, để suy diễn nhân vật
+    // không tranh lượt gọi với suy diễn thế giới. Bỏ trống phần này thì engine im lặng hoàn toàn.
     const apiBody = `
       ${select('we-npc-connection-mode', 'Phương Thức Kết Nối', settings.connectionMode === 'proxy' ? 'proxy' : 'direct', [
         ['direct', 'Kết Nối Trực Tiếp (Mặc Định)'],
         ['proxy', 'Qua Proxy Của SillyTavern (Khắc Phục CORS)']
-      ], 'Không kết nối được hoặc console báo lỗi CORS thì chuyển sang proxy.')}
+      ], 'Trình duyệt gọi thẳng tới API. Nếu console báo lỗi CORS hoặc không kết nối được, chuyển sang proxy để server SillyTavern chuyển tiếp giúp — chậm hơn một chút nhưng né được chặn của trình duyệt.')}
       ${text('we-npc-api-url', 'URL API (Tương Thích OpenAI)', settings.apiUrl, 'https://api.openai.com/v1',
-        'Chỉ cần điền tới cấp tiền tố phiên bản, /chat/completions sẽ được tự bổ sung.')}
+        'Chỉ điền tới cấp tiền tố phiên bản, phần <code>/chat/completions</code> sẽ tự bổ sung. Ví dụ: <span style="color:var(--we-text2);">https://api.openai.com/v1</span> hoặc <span style="color:var(--we-text2);">https://openrouter.ai/api/v1</span>. Có thể dùng chung nhà cung cấp với Công Cụ Thế Giới nhưng khác model.')}
       <div class="we-input-group">
         <label>API Key</label>
         <input type="password" id="we-npc-api-key" value="${u(settings.apiKey || '')}" style="width:100%;">
+        <div class="we-hint">Lưu trong bộ nhớ cục bộ của trình duyệt, không gửi đi đâu ngoài endpoint bạn điền ở trên.</div>
       </div>
       <div class="we-input-group" style="display:flex;gap:6px;align-items:end;">
         <div style="flex:1;">
@@ -5643,6 +5645,7 @@ window.WORLD_ENGINE_UI = (function() {
         </div>
         <button class="we-btn" id="we-npc-fetch-models" style="white-space:nowrap;flex-shrink:0;">Lấy Danh Sách</button>
       </div>
+      ${hint('Tác vụ này là trích xuất có cấu trúc, không phải sáng tác — model tầm trung, rẻ và nhanh thường cho kết quả ổn định hơn model lớn. Điều quan trọng là nó phải trả JSON đúng khuôn.')}
       <div class="we-input-group">
         <select id="we-npc-model-list" style="display:none;width:100%;margin-top:4px;">
           <option value="">-- Chọn Mô Hình --</option>
@@ -5651,77 +5654,93 @@ window.WORLD_ENGINE_UI = (function() {
       <div class="we-input-group" style="display:flex;gap:6px;">
         <div style="flex:1;">${num('we-npc-temperature', 'Nhiệt Độ', settings.temperature)}</div>
         <div style="flex:1;">${num('we-npc-max-tokens', 'Giới Hạn Đầu Ra', settings.maxTokens)}</div>
-      </div>`;
+      </div>
+      ${hint('Nhiệt độ thấp (0.2–0.4) cho trích xuất bám sát chính văn, ít bịa. Cao hơn 0.7 thì hoạt động ngầm sáng tạo hơn nhưng dễ đi lệch truyện. Giới hạn đầu ra cần đủ lớn để chứa hồ sơ nhiều nhân vật — thiếu thì JSON bị cắt giữa chừng và hỏng.')}`;
 
     const runBody = toggle('we-npc-engine-enabled', 'Bật Công Cụ Nhân Vật', settings.engineEnabled !== false,
-        'Tắt thì ngừng cả trích xuất lẫn chèn ràng buộc.')
-      + toggle('we-npc-first-layer-opening', 'Tầng Đầu Là Lời Mở Đầu Của AI', settings.firstLayerIsAiOpening !== false);
+        'Tắt thì ngừng cả trích xuất lẫn chèn ràng buộc, và gỡ luôn phần đã chèn khỏi prompt. Hồ sơ nhân vật vẫn được giữ nguyên, bật lại là có ngay.')
+      + toggle('we-npc-first-layer-opening', 'Tầng Đầu Là Lời Mở Đầu Của AI', settings.firstLayerIsAiOpening !== false,
+        'Bật khi tin nhắn đầu tiên của cuộc trò chuyện là lời chào do thẻ nhân vật viết sẵn, không phải hội thoại thật. Khi bật, tầng 0 được bỏ qua lúc đếm lượt.');
 
     const filterBody = num('we-npc-core-limit', 'Số nhân vật trọng yếu tối đa', settings.npcCoreLimit,
-        'Vượt ngưỡng thì người lâu không xuất hiện nhất bị hạ bậc; người được ghim thì miễn. Đây là van chặn duy nhất giữ cho prompt không phình ra khi truyện dài.')
+        'Chỉ nhân vật <b>trọng yếu</b> mới sinh hoạt động ngầm và mới được đưa vào ràng buộc gửi cho AI, nên con số này quyết định trực tiếp độ dài prompt. Vượt ngưỡng thì người lâu không xuất hiện nhất bị hạ xuống ngoại vi; người được <b>ghim</b> trong hồ sơ thì miễn. Truyện ít nhân vật để 8–10, truyện quần hùng có thể lên 15–20 nhưng prompt sẽ nặng theo.')
       + num('we-npc-threshold', 'Ngưỡng điểm để lên bậc trọng yếu', settings.significanceThreshold,
-        'Mô hình đề xuất điểm, nhưng chỉ vượt ngưỡng này mới thành trọng yếu. Thấy nhân vật toàn nằm ở Ngoại Vi thì hạ ngưỡng xuống 40-45.');
+        'Mô hình chấm mỗi nhân vật 0–100 theo mức thiết yếu, nhưng chỉ vượt ngưỡng này mới thành trọng yếu — không phó mặc mô hình tự quyết, vì tiêu chuẩn của nó trôi dần qua các lượt. <b>Thấy nhân vật toàn nằm ở Ngoại Vi thì hạ xuống 40–45; thấy lọt quá nhiều vai vụn thì nâng lên 70.</b>');
 
     const linkBody = toggle('we-npc-link', 'Thế Giới → Nhân Vật', settings.npcLinkEnabled !== false,
-        'Suy diễn thế giới xong thì chạy tiếp trích xuất nhân vật và hoạt động ngầm, ngay trong cùng lượt. Tốn thêm một lượt gọi API mỗi turn.')
+        'Suy diễn thế giới xong thì chạy tiếp trích xuất nhân vật và hoạt động ngầm, ngay trong cùng lượt — nhờ vậy NPC phản ứng được với diễn biến vừa xảy ra. <b>Tốn thêm một lượt gọi API mỗi turn.</b> Tắt thì hồ sơ chỉ cập nhật khi bạn bấm tay ở nút bên dưới.')
       + toggle('we-npc-to-world', 'Nhân Vật → Thế Giới', settings.injectIntoWorldEngine !== false,
-        'Đưa dự định của nhân vật trọng yếu vào prompt suy diễn thế giới.')
-      + num('we-npc-world-limit', 'Số nhân vật đưa sang thế giới', settings.worldEngineNpcLimit)
+        'Đưa vị trí và dự định của nhân vật trọng yếu vào prompt suy diễn thế giới, để thế giới biết ai đang toan tính gì mà sinh sự kiện cho khớp. Không tốn thêm lượt gọi API nào.')
+      + num('we-npc-world-limit', 'Số nhân vật đưa sang thế giới', settings.worldEngineNpcLimit,
+        'Lấy theo điểm thiết yếu từ cao xuống. Để nhỏ (5–8) là đủ; nhiều quá thì prompt suy diễn thế giới bị loãng.')
       + `<button class="we-btn we-btn-primary" id="we-npc-link-now" style="width:100%;margin-top:8px;"><i class="fa-solid fa-link"></i> Cập Nhật Hồ Sơ Nhân Vật Ngay</button>`
-      + hint('Đẩy tóm tắt thế giới hiện tại sang mà không đợi lượt kế tiếp. Chạy lại ở cùng tầng sẽ ghi đè kết quả lần trước.');
+      + hint('Đẩy tóm tắt thế giới hiện tại sang mà không đợi lượt kế tiếp. Dùng khi vừa đổi ngưỡng lọc và muốn chấm lại ngay, hoặc khi tắt liên kết tự động. Chạy lại ở cùng tầng sẽ ghi đè kết quả lần trước, không nhân bản.');
 
-    const offscreenBody = toggle('we-npc-offscreen', 'Cho phép nhân vật vắng mặt tự hành động', settings.offscreenEnabled !== false)
-      + num('we-npc-offscreen-max', 'Số nhân vật hành động tối đa mỗi lượt', settings.offscreenMaxPerRound)
+    const offscreenBody = toggle('we-npc-offscreen', 'Cho phép nhân vật vắng mặt tự hành động', settings.offscreenEnabled !== false,
+        'Đây là tính năng chính của engine. Mỗi lượt, các nhân vật trọng yếu <b>không có mặt trong cảnh</b> sẽ tự hành động theo mục tiêu của họ và theo diễn biến thế giới vừa xảy ra. Tắt thì engine chỉ còn ghi chép thụ động những gì đã diễn ra trên màn hình.')
+      + num('we-npc-offscreen-max', 'Số nhân vật hành động tối đa mỗi lượt', settings.offscreenMaxPerRound,
+        'Chặn trên cho mỗi lượt. Một lượt hội thoại là khoảng thời gian ngắn — để 2–3 thì thế giới chuyển động vừa phải; để cao thì mọi thứ biến động dồn dập, dễ rối truyện.')
       + num('we-npc-aggressiveness', 'Mức chủ động (0 đến 1)', settings.offscreenAggressiveness,
-        'Càng cao thì nhân vật càng ráo riết theo đuổi mục tiêu, cục diện chuyển biến càng nhanh.');
+        'Dịch thành lời chỉ dẫn cho mô hình chứ không phải công thức. <b>0.2</b> hầu hết án binh bất động, chỉ ai có lý do cấp bách mới động thủ. <b>0.5</b> ai có mục tiêu rõ thì tiến hành, số còn lại giữ nguyên. <b>0.9</b> ráo riết theo đuổi, cục diện chuyển biến nhanh. Truyện chậm rãi nên để 0.3, truyện tranh đoạt để 0.7.');
 
-    const injectBody = toggle('we-npc-inject', 'Bật chèn ràng buộc vào prompt', settings.injectIntoPrompt !== false)
+    const injectBody = toggle('we-npc-inject', 'Bật chèn ràng buộc vào prompt', settings.injectIntoPrompt !== false,
+        'Công tắc tổng của phần gửi cho AI. Tắt thì engine vẫn theo dõi và ghi hồ sơ, nhưng AI không nhận được ràng buộc nào — nhân vật lại tự do xuất hiện ở bất cứ đâu.')
       + toggle('we-npc-time-anchor', 'Neo thời gian', settings.timeAnchorEnabled !== false,
-        'Một dòng ngắn nhắc ngày truyện, số lượt và diễn biến nền gần đây, chống việc AI trôi mốc thời gian.')
-      + toggle('we-npc-inject-location', 'Ràng buộc vị trí', settings.injectLocation !== false)
-      + toggle('we-npc-inject-knowledge', 'Ràng buộc tri thức', settings.injectKnowledge !== false)
-      + toggle('we-npc-inject-rumor', 'Tin đồn', settings.injectRumor !== false)
+        'Một dòng ngắn ghi ngày truyện, số lượt và 2–3 diễn biến nền gần nhất. Rất rẻ về token, chống việc AI quên mốc thời gian sau vài lượt.')
+      + toggle('we-npc-inject-location', 'Ràng buộc vị trí', settings.injectLocation !== false,
+        'Cho AI biết ai đang ở đâu, ai đang trên đường và còn mấy lượt nữa mới tới. Kèm ràng buộc cứng: nhân vật đang đi đường thì <b>không được cho xuất hiện ở đích</b> trước hạn.')
+      + toggle('we-npc-inject-knowledge', 'Ràng buộc tri thức', settings.injectKnowledge !== false,
+        'Liệt kê những gì mỗi nhân vật <b>chưa</b> biết, để họ không nhắc tới chuyện chưa từng tới tai mình — kể cả cái chết của người khác. Trục tốn token nhất nhưng cũng là thứ tạo cảm giác thế giới sống mạnh nhất.')
+      + toggle('we-npc-inject-rumor', 'Tin đồn', settings.injectRumor !== false,
+        'Kết quả hoạt động ngầm nào đủ lộ liễu thì lan thành tin đồn và được đưa vào prompt, cho AI có chất liệu để nhân vật bàn tán.')
       + select('we-npc-fog', 'Che vị trí thật', settings.locationFogMode, [
           ['off', 'Tắt — AI biết vị trí thật'],
           ['fog', 'Sương mù — chỉ nói chỗ người chơi tưởng, kèm gợi ý mơ hồ'],
           ['strict', 'Nghiêm ngặt — chỉ nói chỗ người chơi tưởng']
-        ], 'Sương mù giữ được bất ngờ mà AI vẫn có chất liệu để viết: nó không biết đích thật nên không lỡ miệng tiết lộ.')
+        ], 'Engine lưu tách biệt <b>vị trí thật</b> và <b>chỗ người chơi tưởng nhân vật đang ở</b>. <b>Tắt:</b> AI biết hết, bạn toàn quyền quyết định tiết lộ hay không. <b>Sương mù (mặc định):</b> AI chỉ biết chỗ người chơi tưởng, kèm một câu kiểu "có tin đồn hắn không còn ở đó" — giữ được bất ngờ mà vẫn có chất liệu viết, và AI không lỡ miệng tiết lộ thứ nó không biết. <b>Nghiêm ngặt:</b> mù hoàn toàn cho tới khi người chơi tự đi tìm.')
       + select('we-npc-knowledge-scope', 'Phạm vi ràng buộc tri thức', settings.knowledgeInjectScope, [
           ['in-scene', 'Chỉ nhân vật có mặt trong cảnh'],
           ['all', 'Toàn bộ nhân vật trọng yếu'],
           ['none', 'Tắt']
-        ], 'Phát cho toàn bộ thì prompt phình theo số nhân vật nhân số sự kiện.')
-      + num('we-npc-knowledge-limit', 'Số mục tối đa mỗi nhân vật', settings.knowledgeInjectLimit);
+        ], 'Chi phí token tăng theo <i>số nhân vật × số sự kiện</i>. Chọn "trong cảnh" là đủ dùng vì chỉ người đang đối thoại mới có nguy cơ lỡ miệng. Chọn "toàn bộ" khi truyện có nhiều tuyến song song và bạn hay chuyển cảnh.')
+      + num('we-npc-knowledge-limit', 'Số mục tối đa mỗi nhân vật', settings.knowledgeInjectLimit,
+        'Lấy các sự việc mới nhất trước. Để 3–5 là vừa; cao hơn thì prompt phình nhanh mà AI cũng khó nhớ hết.');
 
     const travelBody = select('we-npc-world-scale', 'Thế giới quan', settings.worldScale, [
         ['auto', 'Tự suy từ lorebook'], ['cổ trang', 'Cổ trang'], ['hiện đại', 'Hiện đại'],
         ['tu tiên', 'Tu tiên'], ['viễn tưởng', 'Viễn tưởng']
-      ], 'Quyết định tốc độ đi lại: cùng quãng đường, kiếm hiệp tốn nhiều lượt hơn truyện có phi kiếm.')
+      ], 'Quyết định tốc độ đi lại khi mô hình ước lượng một chuyến đi mất bao nhiêu lượt. Cùng quãng Dương Châu → Trường An: kiếm hiệp cưỡi ngựa mất cả chục lượt, tu tiên có phi kiếm thì một lượt. Để "tự suy" thì mô hình tự đoán từ lorebook và chính văn — chọn tay chính xác hơn khi truyện pha trộn nhiều yếu tố.')
       + toggle('we-npc-travel-cache', 'Nhớ số lượt của các tuyến đường đã đi', settings.travelCacheEnabled !== false,
-        'Giữ nhất quán: cùng một tuyến không thể lúc nhanh lúc chậm.');
+        'Lần đầu ai đó đi tuyến nào thì mô hình ước lượng, engine ghi lại con số đó. Lần sau dùng lại để giữ nhất quán — cùng một tuyến không thể lúc 3 lượt lúc 12 lượt. Ngữ cảnh khác hẳn (đi gấp, đường bị chặn, phương tiện tốt hơn) thì mô hình vẫn ghi đè được.');
 
-    const toneBody = area('we-npc-tone-prompt', 'Prompt Bổ Sung', settings.tonePrompt, 'Yêu cầu riêng gửi kèm khi trích xuất nhân vật')
-      + area('we-npc-name-blacklist', 'Danh Sách Tên Không Lưu', settings.nameBlacklist, 'Mỗi dòng một tên')
-      + area('we-npc-filter-regex', 'Regex Lọc Nội Dung', settings.filterRegex, 'Mỗi dòng một biểu thức');
+    const toneBody = area('we-npc-tone-prompt', 'Prompt Bổ Sung', settings.tonePrompt,
+        'Ví dụ: ưu tiên nhân vật thuộc phe phái, bỏ qua nhân vật chỉ xuất hiện trong hồi tưởng',
+        'Chèn vào đầu prompt trích xuất. Dùng để chỉnh khẩu vị lọc nhân vật cho hợp thể loại truyện của bạn.')
+      + area('we-npc-name-blacklist', 'Danh Sách Tên Không Lưu', settings.nameBlacklist, 'Mỗi dòng một tên',
+        'Tên trong danh sách này sẽ không bao giờ được đưa vào hồ sơ. Dùng cho tên người chơi, hoặc những nhân vật bạn không muốn engine theo dõi.')
+      + area('we-npc-filter-regex', 'Regex Lọc Nội Dung', settings.filterRegex, 'Mỗi dòng một biểu thức',
+        'Xoá phần khớp mẫu khỏi hội thoại <i>trước khi</i> gửi đi trích xuất. Dùng để bỏ thẻ định dạng, khối suy nghĩ của AI, hoặc chú thích ngoài truyện.');
 
-    const retryBody = num('we-npc-api-retries', 'Số Lần Thử Lại Khi API Lỗi', settings.apiAutoRetries)
-      + num('we-npc-api-timeout', 'Thời Gian Chờ API (ms)', settings.apiTimeoutMs);
+    const retryBody = num('we-npc-api-retries', 'Số Lần Thử Lại Khi API Lỗi', settings.apiAutoRetries,
+        'Gọi lại khi API trả lỗi hoặc trả JSON hỏng. Để 1–2 giúp vượt qua lỗi mạng thoáng qua; để 0 thì thất bại là dừng ngay, dễ nhận ra vấn đề hơn khi đang chỉnh cấu hình.')
+      + num('we-npc-api-timeout', 'Thời Gian Chờ API (ms)', settings.apiTimeoutMs,
+        'Quá hạn thì huỷ yêu cầu. 120000 là hai phút — model chậm hoặc hồ sơ nhiều nhân vật thì nên nâng lên.');
 
     const archiveBody = toggle('we-npc-sync-to-chat', 'Đồng Bộ Vào Dữ Liệu Chat Của Tavern', settings.syncToChat === true,
-        'Bật thì hồ sơ nhân vật đi theo cuộc trò chuyện sang thiết bị khác.')
-      + toggle('we-npc-auto-backup', 'Tự Động Sao Lưu', settings.autoBackup === true);
+        'Đính hồ sơ nhân vật vào chính file chat của SillyTavern, nhờ đó nó đi theo cuộc trò chuyện sang thiết bị khác mà không cần dịch vụ ngoài. Tắt thì hồ sơ chỉ nằm trong bộ nhớ trình duyệt của máy này.')
+      + toggle('we-npc-auto-backup', 'Tự Động Sao Lưu', settings.autoBackup === true,
+        'Tự chụp lại hồ sơ trước những thao tác ghi đè lớn, để còn đường lùi khi có sự cố.');
 
     const maintainBody = `<button class="we-btn" id="we-npc-unhide-all" style="width:100%;margin-bottom:4px;">Bỏ Ẩn Toàn Bộ Tin Nhắn</button>`
-      + hint('Công cụ cứu hộ: gỡ mọi tin nhắn còn bị Bộ Nhớ Ký Ức cũ che đi. Chạy một lần là đủ.');
-
-    const worldbookBody = toggle('we-npc-worldbook-enabled', 'Đọc World Info Làm Tư Liệu Nền', settings.worldbookEnabled === true)
-      + toggle('we-npc-worldbook-trigger', 'Tôn Trọng Kích Hoạt Theo Từ Khoá', settings.worldbookTrigger === true);
+      + hint('Công cụ cứu hộ cho người dùng bản cũ. Bộ Nhớ Ký Ức trước đây có tính năng ẩn chính văn đã được tóm tắt bao phủ; nay engine đó đã bị gỡ nên không còn ai bỏ ẩn nữa. Nút này quét cuộc trò chuyện hiện tại và gỡ mọi cờ ẩn còn sót. <b>Chạy một lần cho mỗi cuộc trò chuyện cũ là đủ.</b>');
 
     const themeBody = select('we-npc-theme-select', 'Bộ phối màu của mặt Nhân Vật', getStoredNpcTheme(),
-      WE_THEMES.map(theme => [theme.id, theme.name]), 'Mỗi mặt engine nhớ bộ màu riêng.');
+      WE_THEMES.map(theme => [theme.id, theme.name]),
+      'Mỗi mặt engine nhớ bộ màu riêng, chuyển mặt là đổi theo — nhờ đó nhìn màu là biết đang ở engine nào.');
 
-    const debugBody = `<button class="we-btn" id="we-npc-export-diag" style="width:100%;margin-bottom:8px;">Xuất Gói Chẩn Đoán</button>
-      <div id="we-npc-debug-render">${renderNpcDebug()}</div>`;
+    const debugBody = `<button class="we-btn" id="we-npc-export-diag" style="width:100%;margin-bottom:8px;">Xuất Gói Chẩn Đoán</button>`
+      + hint('Xuất toàn bộ trạng thái hiện tại ra file JSON để báo lỗi. Khoá API đã được che trước khi ghi.')
+      + `<div id="we-npc-debug-render">${renderNpcDebug()}</div>`;
 
     const aboutBody = `<div class="we-npc-about">
       <p><strong>Công Cụ Nhân Vật</strong> theo dõi các NPC trọng yếu theo sáu trục — vị trí, mục tiêu, thế lực, quan hệ, tri thức, trạng thái — và cho họ tiếp tục hành động khi vắng mặt khỏi cảnh.</p>
@@ -5730,14 +5749,19 @@ window.WORLD_ENGINE_UI = (function() {
       <p style="color:var(--we-text3);">Phiên bản ${h(window.NPC_ENGINE_SETTINGS?.VERSION || '?')}</p>
     </div>`;
 
+    // Worldbook dùng chung khối giao diện với Công Cụ Thế Giới: tự đọc lorebook của cuộc trò chuyện
+    // hiện tại, liệt kê từng mục kèm ô chọn và ghi đè kiểu kích hoạt. Phạm vi lưu riêng theo engine.
+    const shared = renderSettingsAfterCheckpoint({ scope: 'npc' });
+
     const panelContent = {
-      common:    sec('set-npc-api', 'API Riêng', apiBody) + sec('set-npc-run', 'Vận Hành', runBody) + sec('set-npc-filter', 'Bộ Lọc Nhân Vật', filterBody),
+      common:    sec('set-npc-api', 'API Riêng', apiBody) + sec('set-npc-run', 'Vận Hành', runBody)
+                 + sec('set-npc-filter', 'Bộ Lọc Nhân Vật', filterBody),
       link:      sec('set-npc-link', 'Nối Với Công Cụ Thế Giới', linkBody),
       advanced:  sec('set-npc-offscreen', 'Hoạt Động Ngầm', offscreenBody) + sec('set-npc-inject', 'Chèn Vào Prompt', injectBody)
                  + sec('set-npc-travel', 'Di Chuyển', travelBody) + sec('set-npc-tone', 'Prompt Và Bộ Lọc', toneBody)
                  + sec('set-npc-retry', 'Thử Lại Và Thời Gian Chờ', retryBody),
       archive:   sec('set-npc-archive', 'Lưu Trữ', archiveBody) + sec('set-npc-maintain', 'Bảo Trì', maintainBody),
-      worldbook: sec('set-npc-worldbook', 'Sổ Tay Thế Giới', worldbookBody),
+      worldbook: shared.worldbook,
       debug:     sec('set-npc-debug', 'Gỡ Lỗi', debugBody),
       about:     sec('set-npc-theme', 'Giao Diện', themeBody) + sec('set-npc-about', 'Giới Thiệu', aboutBody)
     };
@@ -5763,7 +5787,12 @@ window.WORLD_ENGINE_UI = (function() {
       + '<button class="we-icon-btn" id="we-npc-settings-back" type="button" title="Quay Lại"><i class="fa-solid fa-arrow-left"></i></button>'
       + '<span class="we-sub-title">Cài Đặt Công Cụ Nhân Vật</span>'
       + '</div>'
-      + tabBar + '<div class="we-npc-settings">' + panels + '</div>';
+      + tabBar + '<div class="we-npc-settings">' + panels + '</div>'
+      // Lưu / Đặt lại cố định dưới cùng, giống trang cài đặt thế giới: mọi tab đều lưu được bằng một chạm.
+      + '<div class="we-settings-save-actions we-settings-save-sticky">'
+      + '<button class="we-btn" id="we-npc-save-settings">Lưu Cài Đặt</button>'
+      + '<button class="we-btn we-btn-danger" id="we-npc-reset-settings">Đặt Lại Cài Đặt</button>'
+      + '</div>';
   }
 
   function renderNpcDebug() {
@@ -5894,8 +5923,6 @@ window.WORLD_ENGINE_UI = (function() {
     bindToggle('we-npc-first-layer-opening', 'firstLayerIsAiOpening');
     bindToggle('we-npc-sync-to-chat', 'syncToChat');
     bindToggle('we-npc-auto-backup', 'autoBackup');
-    bindToggle('we-npc-worldbook-enabled', 'worldbookEnabled');
-    bindToggle('we-npc-worldbook-trigger', 'worldbookTrigger');
 
     // Lấy danh sách mô hình từ chính endpoint đã điền, dùng lại bộ gọi API dùng chung.
     const fetchModels = document.getElementById('we-npc-fetch-models');
@@ -5953,6 +5980,67 @@ window.WORLD_ENGINE_UI = (function() {
 
     const themeSelect = document.getElementById('we-npc-theme-select');
     if (themeSelect) themeSelect.onchange = () => { setNpcTheme(themeSelect.value); refresh(); };
+
+    // ===== Lưu / Đặt lại =====
+    // Từng ô đã tự lưu khi rời khỏi (onchange), nhưng nút Lưu vẫn cần: nó quét lại TOÀN BỘ ô ở mọi tab
+    // trong một lần, nên ô đang gõ dở mà chưa rời con trỏ cũng được ghi. Các tab ẩn vẫn nằm trong DOM
+    // (chỉ ẩn bằng CSS) nên quét được hết.
+    const NPC_FIELD_MAP = {
+      'we-npc-api-url': 'apiUrl', 'we-npc-api-key': 'apiKey', 'we-npc-model': 'model',
+      'we-npc-connection-mode': 'connectionMode', 'we-npc-temperature': 'temperature',
+      'we-npc-max-tokens': 'maxTokens', 'we-npc-api-retries': 'apiAutoRetries',
+      'we-npc-api-timeout': 'apiTimeoutMs',
+      'we-npc-engine-enabled': 'engineEnabled', 'we-npc-first-layer-opening': 'firstLayerIsAiOpening',
+      'we-npc-core-limit': 'npcCoreLimit', 'we-npc-threshold': 'significanceThreshold',
+      'we-npc-link': 'npcLinkEnabled', 'we-npc-to-world': 'injectIntoWorldEngine',
+      'we-npc-world-limit': 'worldEngineNpcLimit',
+      'we-npc-offscreen': 'offscreenEnabled', 'we-npc-offscreen-max': 'offscreenMaxPerRound',
+      'we-npc-aggressiveness': 'offscreenAggressiveness',
+      'we-npc-inject': 'injectIntoPrompt', 'we-npc-time-anchor': 'timeAnchorEnabled',
+      'we-npc-inject-location': 'injectLocation', 'we-npc-inject-knowledge': 'injectKnowledge',
+      'we-npc-inject-rumor': 'injectRumor', 'we-npc-fog': 'locationFogMode',
+      'we-npc-knowledge-scope': 'knowledgeInjectScope', 'we-npc-knowledge-limit': 'knowledgeInjectLimit',
+      'we-npc-world-scale': 'worldScale', 'we-npc-travel-cache': 'travelCacheEnabled',
+      'we-npc-tone-prompt': 'tonePrompt', 'we-npc-name-blacklist': 'nameBlacklist',
+      'we-npc-filter-regex': 'filterRegex',
+      'we-npc-sync-to-chat': 'syncToChat', 'we-npc-auto-backup': 'autoBackup',
+      'we-worldbook-trigger': 'worldbookTrigger'
+    };
+
+    const collectNpcSettings = () => {
+      const collected = {};
+      for (const [id, key] of Object.entries(NPC_FIELD_MAP)) {
+        const element = document.getElementById(id);
+        if (!element) continue;
+        collected[key] = element.type === 'checkbox' ? element.checked : element.value;
+      }
+      return collected;
+    };
+
+    const saveBtn = document.getElementById('we-npc-save-settings');
+    if (saveBtn) {
+      saveBtn.onclick = () => {
+        const saved = window.NPC_ENGINE_SETTINGS?.patchSettings(collectNpcSettings());
+        window.NPC_ENGINE?.applyInjection?.();
+        showToast(saved ? 'Đã lưu cài đặt Công Cụ Nhân Vật' : 'Lưu cài đặt thất bại', !saved);
+        refresh();
+      };
+    }
+
+    const resetBtn = document.getElementById('we-npc-reset-settings');
+    if (resetBtn) {
+      resetBtn.onclick = () => {
+        // Chỉ đặt lại CẤU HÌNH. Hồ sơ nhân vật là dữ liệu của cuộc trò chuyện, không đụng tới —
+        // muốn xoá hồ sơ thì dùng thao tác trên từng thẻ nhân vật ở trang danh sách.
+        const defaults = window.NPC_ENGINE_SETTINGS?.DEFAULTS;
+        if (!defaults) { showToast('Không đọc được cấu hình mặc định', true); return; }
+        if (!confirm('Đặt lại toàn bộ cài đặt Công Cụ Nhân Vật về mặc định?\n\nBao gồm cả URL API và khoá API. Hồ sơ nhân vật KHÔNG bị xoá.')) return;
+        window.NPC_ENGINE_SETTINGS.saveSettings({ ...defaults });
+        window.NPC_ENGINE?.applyInjection?.();
+        showToast('Đã đặt lại cài đặt về mặc định');
+        refresh();
+      };
+    }
 
     const unhide = document.getElementById('we-npc-unhide-all');
     if (unhide) {

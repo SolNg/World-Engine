@@ -2,7 +2,7 @@
 window.WORLD_ENGINE_WORLDBOOK = (function() {
   const STORAGE_PREFIXES = {
     world: 'world_engine_worldbook_selection_',
-    memory: 'memory_engine_worldbook_selection_'
+    npc: 'npc_engine_worldbook_selection_'
   };
   let worldInfoModulePromise = null;
 
@@ -12,7 +12,7 @@ window.WORLD_ENGINE_WORLDBOOK = (function() {
 
   function normalizeScope(scope) {
     if (scope == null || scope === '' || scope === 'world') return 'world';
-    if (scope === 'memory') return 'memory';
+    if (scope === 'npc') return 'npc';
     throw new Error(`Scope sách thế giới không xác định: ${scope}`);
   }
 
@@ -176,8 +176,8 @@ window.WORLD_ENGINE_WORLDBOOK = (function() {
   const LOGIC = { AND_ANY: 0, NOT_ALL: 1, NOT_ANY: 2, AND_ALL: 3 };
 
   function triggerEnabled(scope) {
-    if (normalizeScope(scope) === 'memory') {
-      return window.MEMORY_ENGINE_SETTINGS?.getSettings()?.worldbookTrigger === true;
+    if (normalizeScope(scope) === 'npc') {
+      return window.NPC_ENGINE_SETTINGS?.getSettings()?.worldbookTrigger === true;
     }
     const a = window.WORLD_ENGINE_API;
     const s = a && a.getSettings ? a.getSettings() : {};
@@ -277,8 +277,8 @@ window.WORLD_ENGINE_WORLDBOOK = (function() {
         `【${entry.world} / ${entry.title}】\n${entry.content}`
       ).join('\n\n');
 
-      const instruction = normalizedScope === 'memory'
-        ? 'Nội dung dưới đây chỉ dùng để nhận diện nhân vật, biệt danh và bối cảnh. Không được coi nội dung sách thế giới là ký ức mới hình thành của nhân vật.'
+      const instruction = normalizedScope === 'npc'
+        ? 'Nội dung dưới đây là tư liệu nền để nhận diện nhân vật, biệt danh, thế lực và địa danh. Không được coi nó là sự việc vừa xảy ra, cũng không được coi là điều nhân vật đương nhiên biết — tri thức của nhân vật chỉ đến từ những gì họ chứng kiến hoặc nghe được trong truyện.'
         : 'Nội dung dưới đây là các sự thật và ràng buộc thế giới quan của đoạn chat hiện tại. Suy diễn nền phải tuân thủ; không được tự ý viết lại các thiết lập đã định.';
 
       return `========== Các mục sách thế giới đã chọn ==========

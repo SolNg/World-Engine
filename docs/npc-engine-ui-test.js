@@ -116,6 +116,56 @@ for (const [id, key] of settingsBindings) {
 check('ba nấc che vị trí đều có trong ô chọn',
   /'off', 'Tắt[\s\S]{0,200}'fog', 'Sương mù[\s\S]{0,200}'strict', 'Nghiêm ngặt/.test(ui));
 
+// ===== Lưu / Đặt lại =====
+{
+  check('có nút Lưu Cài Đặt', ui.includes('we-npc-save-settings'));
+  check('có nút Đặt Lại Cài Đặt', ui.includes('we-npc-reset-settings'));
+  check('thanh lưu dùng lại lớp sticky có sẵn', /we-settings-save-actions we-settings-save-sticky/.test(ui));
+  // Nút Lưu phải quét lại toàn bộ ô ở MỌI tab, không chỉ tab đang mở — các tab ẩn vẫn nằm trong DOM.
+  check('có bảng ánh xạ ô nhập sang khoá cấu hình', ui.includes('NPC_FIELD_MAP'));
+  check('có hàm quét toàn bộ ô nhập', ui.includes('const collectNpcSettings'));
+  check('nút Lưu ghi một lần bằng kết quả quét được',
+    ui.includes('patchSettings(collectNpcSettings())'));
+  check('Đặt lại đọc từ DEFAULTS của module cấu hình', /NPC_ENGINE_SETTINGS\?\.DEFAULTS/.test(ui));
+  // Neo vào chính khối xử lý nút của NPC: trang cài đặt thế giới cũng có biến tên resetBtn,
+  // không neo thì phép kiểm bắt nhầm khối kia.
+  {
+    const from = ui.indexOf("getElementById('we-npc-reset-settings')");
+    const block = from >= 0 ? ui.slice(from, from + 900) : '';
+    check('Đặt lại có hỏi xác nhận trước', block.includes('confirm('));
+    // Cấu hình và dữ liệu là hai thứ khác nhau: đặt lại cài đặt không được xoá hồ sơ nhân vật.
+    check('Đặt lại ghi đè cấu hình bằng mặc định', block.includes('saveSettings({ ...defaults })'));
+    check('Đặt lại không đụng tới hồ sơ nhân vật',
+      !block.includes('clearState') && !block.includes('saveState'));
+  }
+}
+
+// ===== Worldbook dùng chung, không tự dựng lại =====
+{
+  // Bản trước chỉ có hai công tắc bật/tắt, không đọc lorebook, nên tab Worldbook vô dụng.
+  check('dùng lại khối Worldbook của trang cài đặt thế giới',
+    /renderSettingsAfterCheckpoint\(\{ scope: 'npc' \}\)/.test(ui));
+  check('tab worldbook lấy từ khối dùng chung', /worldbook: shared\.worldbook/.test(ui));
+  check('không còn hai công tắc worldbook tự chế',
+    !ui.includes('we-npc-worldbook-enabled') && !ui.includes('we-npc-worldbook-trigger'));
+
+  // Phạm vi 'npc' phải được các module dùng chung chấp nhận, nếu không mở tab là ném lỗi.
+  const worldbook = fs.readFileSync(path.join(root, 'world-engine-worldbook.js'), 'utf8');
+  check('module worldbook chấp nhận phạm vi npc', /if \(scope === 'npc'\) return 'npc';/.test(worldbook));
+  check('module worldbook có khoá lưu riêng cho npc', worldbook.includes('npc_engine_worldbook_selection_'));
+  check('module worldbook không còn phạm vi memory', !/'memory'/.test(worldbook));
+  check('công tắc kích hoạt từ khoá đọc cấu hình của NPC Engine',
+    /normalizeScope\(scope\) === 'npc'[\s\S]{0,120}NPC_ENGINE_SETTINGS/.test(worldbook));
+
+  // Chọn mục trong giao diện mà engine không đọc thì tab đó chỉ để trang trí.
+  const engine = fs.readFileSync(path.join(root, 'npc-engine.js'), 'utf8');
+  check('engine thật sự đọc Sổ Tay Thế Giới khi trích xuất',
+    /WORLD_ENGINE_WORLDBOOK\?\.buildPromptSection\?\.\([\s\S]{0,160}'npc'\s*\)/.test(engine));
+  check('việc đọc lorebook được cách ly lỗi',
+    /buildPromptSection[\s\S]{0,300}catch \(error\)/.test(engine));
+  check('có công tắc worldbookEnabled gác trước', /st\.worldbookEnabled !== false/.test(engine));
+}
+
 // ===== Công cụ bỏ ẩn =====
 check('có nút bỏ ẩn toàn bộ', ui.includes('we-npc-unhide-all'));
 check('nút bỏ ẩn gọi đúng hàm cứu hộ', ui.includes('window.WORLD_ENGINE?.unhideAllMessages?.()'));

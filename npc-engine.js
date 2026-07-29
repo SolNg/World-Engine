@@ -462,13 +462,27 @@ window.NPC_ENGINE = (function() {
       const arrived = data().tickTravel(state);
       const storyDay = core()?.getLastStoryDay?.();
 
+      // Sổ Tay Thế Giới: các mục người dùng đã chọn ở tab Worldbook, phạm vi lưu riêng của engine này.
+      // Quét theo hội thoại lượt hiện tại nên mục kiểu từ khoá chỉ bật khi thật sự được nhắc tới.
+      // Cách ly lỗi: lorebook hỏng thì trích xuất nhân vật vẫn phải chạy.
+      let worldbook = '';
+      if (st.worldbookEnabled !== false) {
+        try {
+          worldbook = await window.WORLD_ENGINE_WORLDBOOK?.buildPromptSection?.(
+            clean(payload?.dialogue) + '\n' + clean(payload?.worldDigest), 'npc'
+          ) || '';
+        } catch (error) {
+          console.error('[Công Cụ Nhân Vật] Đọc Sổ Tay Thế Giới thất bại (đã cách ly)', error);
+        }
+      }
+
       // --- Pha 1: trích xuất nhân vật từ hội thoại ---
       const extraction = await callModel(window.NPC_ENGINE_PROMPT.buildPrompt({
         npcs: state.npcs,
         knownLimit: st.npcCoreLimit * 2,
         dialogue: clean(payload?.dialogue),
         worldDigest: clean(payload?.worldDigest),
-        worldbook: clean(payload?.worldbook),
+        worldbook,
         tonePrompt: st.tonePrompt,
         nameBlacklist: st.nameBlacklist,
         storyDay
