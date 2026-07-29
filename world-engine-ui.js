@@ -5772,6 +5772,59 @@ window.WORLD_ENGINE_UI = (function() {
     { key: 'about',     label: 'Giới Thiệu' }
   ];
 
+  // ===== Bản lưu theo cuộc trò chuyện =====
+  // Phần backend đã có sẵn trong world-engine-chatcache.js với phạm vi riêng 'npc'; trước đây
+  // không có giao diện nào chạm tới, nên code chạy được mà không ai gọi.
+  function npcCache() {
+    try { return window.WORLD_ENGINE_CHATCACHE?.forScope?.('npc') || null; }
+    catch (error) { return null; }
+  }
+
+  function renderNpcSnapshotRows() {
+    const list = npcCache()?.listSnapshots?.() || [];
+    if (!list.length) return '<div class="we-empty">Chưa có bản lưu nào</div>';
+    return list.map(item => {
+      let time = '';
+      try { time = new Date(item.createdAt).toLocaleString(); } catch (error) {}
+      return '<div class="we-snapshot-row" data-npc-snap-id="' + u(item.id) + '">'
+        + '<div class="we-snapshot-main">'
+        + '<div class="we-snapshot-name"><span class="we-snapshot-badge' + (item.auto ? ' is-auto' : '') + '">'
+        + (item.auto ? 'Tự Động' : 'Thủ Công') + '</span>' + h(item.name) + '</div>'
+        + '<div class="we-snapshot-meta">Lượt ' + (item.round || 0) + ' · ' + (Number(item.characters) || 0)
+        + ' nhân vật · ' + (Number(item.entities) || 0) + ' trong kho' + (time ? ' · ' + h(time) : '') + '</div>'
+        + '</div><div class="we-snapshot-actions">'
+        + '<button class="we-icon-btn" data-npc-snap-action="restore" title="Khôi Phục"><i class="fa-solid fa-rotate-left"></i></button>'
+        + '<button class="we-icon-btn" data-npc-snap-action="rename" title="Đổi Tên"><i class="fa-solid fa-pen"></i></button>'
+        + '<button class="we-icon-btn" data-npc-snap-action="export" title="Xuất Bản Lưu"><i class="fa-solid fa-download"></i></button>'
+        + '<button class="we-icon-btn" data-npc-snap-action="delete" title="Xoá"><i class="fa-solid fa-trash"></i></button>'
+        + '</div></div>';
+    }).join('');
+  }
+
+  function refreshNpcSnapshots() {
+    const list = document.getElementById('we-npc-snapshot-list');
+    if (list) list.innerHTML = renderNpcSnapshotRows();
+    const status = document.getElementById('we-npc-cache-status');
+    const info = npcCache()?.getStatus?.();
+    if (status && info) {
+      status.textContent = info.usable
+        ? 'Đồng bộ ' + (info.syncEnabled ? 'đã bật' : 'đã tắt') + ' · Bản sửa cục bộ ' + info.localRev
+          + ' / Cloud ' + info.liveRev + ' · ' + info.snapshotCount + ' bản lưu'
+        : 'Cuộc trò chuyện hiện tại không lưu được vào dữ liệu Tavern';
+    }
+  }
+
+  // Tải một đối tượng xuống thành file JSON, dùng chung cho xuất hồ sơ và xuất bản lưu.
+  function downloadNpcJson(payload, filename) {
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = filename;
+    link.click();
+    URL.revokeObjectURL(url);
+  }
+
   function renderNpcSettingsView() {
     const settings = npcSettings();
     const sec = (id, title, inner) =>
@@ -5902,7 +5955,33 @@ window.WORLD_ENGINE_UI = (function() {
     const archiveBody = toggle('we-npc-sync-to-chat', 'Đồng Bộ Vào Dữ Liệu Chat Của Tavern', settings.syncToChat === true,
         'Đính hồ sơ nhân vật vào chính file chat của SillyTavern, nhờ đó nó đi theo cuộc trò chuyện sang thiết bị khác mà không cần dịch vụ ngoài. Tắt thì hồ sơ chỉ nằm trong bộ nhớ trình duyệt của máy này.')
       + toggle('we-npc-auto-backup', 'Tự Động Sao Lưu', settings.autoBackup === true,
-        'Tự chụp lại hồ sơ trước những thao tác ghi đè lớn, để còn đường lùi khi có sự cố.');
+        'Tự chụp lại hồ sơ trước những thao tác ghi đè lớn, để còn đường lùi khi có sự cố.')
+      + '<div class="we-hint" id="we-npc-cache-status" style="margin-bottom:8px;">Đang đọc...</div>';
+
+    const snapshotBody = '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px;">'
+      + '<button class="we-btn we-btn-primary" id="we-npc-snap-create">Tạo Bản Lưu</button>'
+      + '<button class="we-btn" id="we-npc-snap-import">Nhập Bản Lưu</button>'
+      + '<input type="file" id="we-npc-snap-file" accept=".json" style="display:none;">'
+      + '</div><div class="we-chatcache-list" id="we-npc-snapshot-list">' + renderNpcSnapshotRows() + '</div>'
+      + hint('Bản lưu nằm trong dữ liệu chat của Tavern nên đi theo cuộc trò chuyện. Khôi phục sẽ ghi đè hồ sơ hiện tại.');
+
+    const dataBody = '<div style="display:flex;gap:6px;flex-wrap:wrap;">'
+      + '<button class="we-btn" id="we-npc-export-data">Xuất JSON</button>'
+      + '<button class="we-btn" id="we-npc-import-data">Nhập JSON</button>'
+      + '<input type="file" id="we-npc-import-file" accept=".json" style="display:none;">'
+      + '</div>'
+      + hint('Xuất toàn bộ hồ sơ nhân vật của cuộc trò chuyện này ra file, gồm cả điểm lưu và bộ nhớ đệm tuyến đường. Nhập vào sẽ <b>ghi đè</b> hồ sơ hiện tại — nên tạo một bản lưu trước.');
+
+    // Điểm lưu là trạng thái trước khi tầng hiện tại được sinh ra; reroll chèn bản này.
+    const checkpoint = npcData()?.loadCheckpoint?.();
+    const axis = (label, value) => '<div class="we-npc-axis"><span class="we-npc-axis-key">' + h(label) + '</span><span>' + h(String(value)) + '</span></div>';
+    const checkpointBody = !checkpoint
+      ? '<div class="we-empty">Chưa có điểm lưu</div>'
+      : axis('Lượt', checkpoint.round || 0)
+        + axis('Tầng hội thoại', checkpoint.chatLayer ?? '—')
+        + axis('Nhân vật', (checkpoint.npcs || []).length + ' (' + (checkpoint.npcs || []).filter(npc => npc.tier === 'core').length + ' trọng yếu)')
+        + axis('Trong kho', (checkpoint.archive || []).length)
+        + hint('Reroll sẽ chèn bản này thay vì trạng thái hiện tại, để lần sinh mới không thấy hệ quả của lần sinh cũ.');
 
     const maintainBody = `<button class="we-btn" id="we-npc-unhide-all" style="width:100%;margin-bottom:4px;">Bỏ Ẩn Toàn Bộ Tin Nhắn</button>`
       + hint('Công cụ cứu hộ cho người dùng bản cũ. Bộ Nhớ Ký Ức trước đây có tính năng ẩn chính văn đã được tóm tắt bao phủ; nay engine đó đã bị gỡ nên không còn ai bỏ ẩn nữa. Nút này quét cuộc trò chuyện hiện tại và gỡ mọi cờ ẩn còn sót. <b>Chạy một lần cho mỗi cuộc trò chuyện cũ là đủ.</b>');
@@ -5933,7 +6012,11 @@ window.WORLD_ENGINE_UI = (function() {
       advanced:  sec('set-npc-offscreen', 'Hoạt Động Ngầm', offscreenBody) + sec('set-npc-inject', 'Chèn Vào Prompt', injectBody)
                  + sec('set-npc-travel', 'Di Chuyển', travelBody) + sec('set-npc-tone', 'Prompt Và Bộ Lọc', toneBody)
                  + sec('set-npc-retry', 'Thử Lại Và Thời Gian Chờ', retryBody),
-      archive:   sec('set-npc-archive', 'Lưu Trữ', archiveBody) + sec('set-npc-maintain', 'Bảo Trì', maintainBody),
+      archive:   sec('set-npc-archive', 'Lưu Trữ Và Đồng Bộ', archiveBody)
+                 + sec('set-npc-snapshot', 'Bản Lưu Theo Cuộc Trò Chuyện', snapshotBody)
+                 + sec('set-npc-data', 'Nhập/Xuất Dữ Liệu', dataBody)
+                 + sec('set-npc-checkpoint', 'Điểm Lưu Hiện Tại', checkpointBody)
+                 + sec('set-npc-maintain', 'Bảo Trì', maintainBody),
       worldbook: shared.worldbook,
       debug:     sec('set-npc-debug', 'Gỡ Lỗi', debugBody),
       about:     sec('set-npc-theme', 'Giao Diện', themeBody) + sec('set-npc-about', 'Giới Thiệu', aboutBody)
@@ -6295,6 +6378,120 @@ window.WORLD_ENGINE_UI = (function() {
         window.NPC_ENGINE?.applyInjection?.();
         showToast('Đã đặt lại cài đặt về mặc định');
         refresh();
+      };
+    }
+
+    // ===== Bản lưu theo cuộc trò chuyện =====
+    refreshNpcSnapshots();
+
+    const snapCreate = document.getElementById('we-npc-snap-create');
+    if (snapCreate) {
+      snapCreate.onclick = () => {
+        const name = prompt('Tên bản lưu:', 'Bản lưu ' + new Date().toLocaleString());
+        if (name === null) return;
+        const ok = npcCache()?.createSnapshot?.(String(name).trim() || 'Không tên');
+        showToast(ok ? 'Đã tạo bản lưu' : 'Tạo bản lưu thất bại', !ok);
+        refreshNpcSnapshots();
+      };
+    }
+
+    const snapImport = document.getElementById('we-npc-snap-import');
+    const snapFile = document.getElementById('we-npc-snap-file');
+    if (snapImport && snapFile) {
+      snapImport.onclick = () => snapFile.click();
+      snapFile.onchange = event => {
+        const file = event.target.files && event.target.files[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = ev => {
+          try {
+            const ok = npcCache()?.importSnapshot?.(JSON.parse(ev.target.result));
+            showToast(ok ? 'Đã nhập bản lưu' : 'Tệp không hợp lệ', !ok);
+            refreshNpcSnapshots();
+          } catch (error) {
+            showToast('Đọc tệp thất bại: ' + (error?.message || error), true);
+          }
+        };
+        reader.readAsText(file);
+        snapFile.value = '';
+      };
+    }
+
+    document.querySelectorAll('[data-npc-snap-action]').forEach(button => {
+      button.onclick = () => {
+        const row = button.closest('[data-npc-snap-id]');
+        const id = row?.dataset.npcSnapId;
+        const cache = npcCache();
+        if (!id || !cache) return;
+        const action = button.dataset.npcSnapAction;
+
+        if (action === 'restore') {
+          if (!confirm('Khôi phục bản lưu này?\n\nHồ sơ nhân vật hiện tại sẽ bị ghi đè. Một bản lưu tự động được tạo trước khi khôi phục.')) return;
+          const ok = cache.restoreSnapshot?.(id);
+          showToast(ok ? 'Đã khôi phục' : 'Khôi phục thất bại', !ok);
+          window.NPC_ENGINE?.applyInjection?.();
+          refresh();
+          return;
+        }
+        if (action === 'rename') {
+          const name = prompt('Tên mới:');
+          if (name === null) return;
+          cache.renameSnapshot?.(id, String(name).trim() || 'Không tên');
+        } else if (action === 'export') {
+          const payload = cache.exportSnapshot?.(id);
+          if (!payload) { showToast('Không xuất được bản lưu này', true); return; }
+          downloadNpcJson(payload, 'npc-engine-snapshot-' + Date.now() + '.json');
+          showToast('Đã xuất bản lưu');
+        } else if (action === 'delete') {
+          if (!confirm('Xoá bản lưu này?')) return;
+          cache.deleteSnapshot?.(id);
+        }
+        refreshNpcSnapshots();
+      };
+    });
+
+    // ===== Nhập / Xuất toàn bộ hồ sơ =====
+    const exportData = document.getElementById('we-npc-export-data');
+    if (exportData) {
+      exportData.onclick = () => {
+        downloadNpcJson({
+          type: 'npc-engine-state',
+          version: window.NPC_ENGINE_DATA?.VERSION || '1.0.0',
+          exportedAt: new Date().toISOString(),
+          chatId: window.WORLD_ENGINE_CORE?.getChatId?.() || 'default',
+          state: npcData()?.loadState?.() || null,
+          checkpoint: npcData()?.loadCheckpoint?.() || null
+        }, 'npc-engine-' + (window.WORLD_ENGINE_CORE?.getChatId?.() || 'chat') + '-' + Date.now() + '.json');
+        showToast('Đã xuất hồ sơ nhân vật');
+      };
+    }
+
+    const importData = document.getElementById('we-npc-import-data');
+    const importFile = document.getElementById('we-npc-import-file');
+    if (importData && importFile) {
+      importData.onclick = () => importFile.click();
+      importFile.onchange = event => {
+        const file = event.target.files && event.target.files[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = ev => {
+          try {
+            const payload = JSON.parse(ev.target.result);
+            if (!payload || !payload.state) { showToast('Tệp không phải hồ sơ nhân vật', true); return; }
+            if (!confirm('Nhập hồ sơ này?\n\nToàn bộ hồ sơ nhân vật của cuộc trò chuyện hiện tại sẽ bị ghi đè.')) return;
+            // Tự sao lưu trước khi ghi đè: nhập nhầm tệp là mất sạch hồ sơ đang có.
+            npcCache()?.createSnapshot?.('Tự động trước khi nhập');
+            npcData().saveState(payload.state);
+            if (payload.checkpoint) npcData().saveCheckpoint(payload.checkpoint);
+            window.NPC_ENGINE?.applyInjection?.();
+            showToast('Đã nhập hồ sơ nhân vật');
+            refresh();
+          } catch (error) {
+            showToast('Đọc tệp thất bại: ' + (error?.message || error), true);
+          }
+        };
+        reader.readAsText(file);
+        importFile.value = '';
       };
     }
 

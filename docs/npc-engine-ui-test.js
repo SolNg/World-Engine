@@ -267,6 +267,34 @@ check('ba nấc che vị trí đều có trong ô chọn',
   check('hai pha dùng văn bản quét khác nhau', engine.includes('function offscreenScanText('));
 }
 
+// ===== Bản lưu và nhập/xuất =====
+// Phần backend chatcache phạm vi 'npc' đã có sẵn nhưng trước đây không giao diện nào chạm tới —
+// code chạy được mà không ai gọi.
+{
+  check('có hàm lấy phạm vi bộ nhớ đệm của npc', /forScope\?\.\('npc'\)/.test(ui));
+  check('có hàm dựng danh sách bản lưu', ui.includes('function renderNpcSnapshotRows('));
+  check('có hàm làm mới danh sách bản lưu', ui.includes('function refreshNpcSnapshots('));
+  for (const action of ['restore', 'rename', 'export', 'delete']) {
+    check(`bản lưu có thao tác ${action}`, ui.includes(`data-npc-snap-action="${action}"`));
+  }
+  check('tạo được bản lưu mới', ui.includes('we-npc-snap-create'));
+  check('nhập được bản lưu từ tệp', ui.includes('we-npc-snap-import'));
+  check('khôi phục có hỏi xác nhận', /action === 'restore'[\s\S]{0,200}confirm\(/.test(ui));
+
+  check('xuất được toàn bộ hồ sơ', ui.includes('we-npc-export-data'));
+  check('nhập được toàn bộ hồ sơ', ui.includes('we-npc-import-data'));
+  check('xuất kèm cả điểm lưu', /type: 'npc-engine-state'[\s\S]{0,400}checkpoint:/.test(ui));
+  check('nhập có hỏi xác nhận vì sẽ ghi đè', /payload\.state[\s\S]{0,200}confirm\(/.test(ui));
+  // Nhập nhầm tệp là mất sạch hồ sơ đang có, nên phải tự sao lưu trước.
+  check('nhập thì tự sao lưu trước khi ghi đè',
+    /confirm\('Nhập hồ sơ này[\s\S]{0,300}createSnapshot\?\.\('Tự động trước khi nhập'\)/.test(ui));
+  check('tệp lạ bị từ chối', /!payload \|\| !payload\.state/.test(ui));
+
+  // Xem được điểm lưu đang giữ gì.
+  check('có mục xem điểm lưu', /sec\('set-npc-checkpoint'/.test(ui));
+  check('điểm lưu nêu số nhân vật trọng yếu', /checkpoint\.npcs \|\| \[\]\)\.filter\(npc => npc\.tier === 'core'\)/.test(ui));
+}
+
 // ===== Công cụ bỏ ẩn =====
 check('có nút bỏ ẩn toàn bộ', ui.includes('we-npc-unhide-all'));
 check('nút bỏ ẩn gọi đúng hàm cứu hộ', ui.includes('window.WORLD_ENGINE?.unhideAllMessages?.()'));
