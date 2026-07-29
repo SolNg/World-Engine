@@ -5295,6 +5295,11 @@ window.WORLD_ENGINE_UI = (function() {
       ball.classList.toggle('we-ball-counting', cur > 0 && cur < total);
       if (count) count.textContent = (cur < total) ? `${cur}/${total}` : '';
     }
+
+    // Đầu hàm này xoá we-ball-evolving, mà mọi thông báo trạng thái đều đi qua đây — kể cả thông báo
+    // phát ra GIỮA LÚC engine đang chạy. Không dựng lại thì chính thông báo tiến độ lại dập tắt hoạt
+    // ảnh xoay. Engine nào đang chạy là do hook isRunning của mặt đó quyết định, nên hỏi lại nó ở đây.
+    updateBallControls();
   }
 
   function clearBallBadge() {
@@ -6102,6 +6107,9 @@ window.WORLD_ENGINE_UI = (function() {
   return {
     buildPanel, buildInputButton, showPanel, hidePanel, togglePanel, refresh, setStatus,
     setEvolvingUI, setInjectedScope,
+    // Cho engine ngoài báo "trạng thái chạy của tôi vừa đổi", để quả cầu vẽ lại hoạt ảnh xoay và
+    // nút dừng. Không có đường này thì engine phải tự đụng vào DOM của quả cầu.
+    refreshBallControls: () => updateBallControls(),
     registerEngineFace,
     listEngineFaces: () => { ensureBuiltinEngineFaces(); return _engineFaceOrder.map(id => ({ ...getEngineFace(id) })); },
     advanceEngineFace

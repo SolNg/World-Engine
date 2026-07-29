@@ -44,6 +44,13 @@ window.NPC_ENGINE = (function() {
     else console.log('[Công Cụ Nhân Vật] ' + clean(text));
   }
 
+  // Báo cho quả cầu nổi biết trạng thái chạy vừa đổi, để nó vẽ lại hoạt ảnh xoay và nút dừng.
+  // Chỉ hiện thông báo chữ là không đủ: người dùng không nhìn banner sẽ tưởng engine chết.
+  function notifyBusyChanged() {
+    try { window.WORLD_ENGINE_UI?.refreshBallControls?.(); }
+    catch (error) { /* giao diện chưa sẵn sàng thì bỏ qua */ }
+  }
+
   const SKIP_REASONS = {
     disabled: 'Công Cụ Nhân Vật đang tắt',
     running: 'đã có tác vụ đang chạy, bỏ qua lượt này',
@@ -584,6 +591,7 @@ window.NPC_ENGINE = (function() {
     running = true;
     runningLabel = 'Trích xuất nhân vật';
     abortController = new AbortController();
+    notifyBusyChanged();
     setStatus('Đang trích xuất nhân vật...');
 
     try {
@@ -691,6 +699,7 @@ window.NPC_ENGINE = (function() {
       running = false;
       runningLabel = '';
       abortController = null;
+      notifyBusyChanged();
     }
   }
 
@@ -836,6 +845,8 @@ window.NPC_ENGINE = (function() {
     if (abortController) abortController.abort();
     running = false;
     runningLabel = '';
+    setStatus('Đã gửi tín hiệu dừng');
+    notifyBusyChanged();
   }
 
   return {

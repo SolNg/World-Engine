@@ -529,6 +529,25 @@ const baseSettings = () => config.getSettings(true);
     check('báo lúc hoàn tất kèm số liệu', /setStatus\('Hoàn tất — ' \+ summary\)/.test(source));
     check('báo lỗi khi thất bại', /setStatus\('Thất bại: '[\s\S]{0,60}true\)/.test(source));
     check('có bảng lý do bỏ qua', source.includes('SKIP_REASONS'));
+
+    // Chữ chạy trên banner là chưa đủ: người dùng không nhìn banner sẽ tưởng engine chết.
+    // Quả cầu phải xoay và nút dừng phải hiện ra, giống hệt khi Công Cụ Thế Giới chạy.
+    check('có báo cho quả cầu khi trạng thái chạy đổi', source.includes('function notifyBusyChanged('));
+    check('báo qua đường dùng chung của giao diện',
+      /WORLD_ENGINE_UI\?\.refreshBallControls\?\.\(\)/.test(source));
+    check('báo lúc bắt đầu chạy',
+      /abortController = new AbortController\(\);[\s\S]{0,80}notifyBusyChanged\(\);/.test(source));
+    check('báo lúc kết thúc, kể cả khi lỗi',
+      /abortController = null;[\s\S]{0,40}notifyBusyChanged\(\);/.test(source));
+    check('bấm dừng thì phản hồi ngay', /function abort\(\)[\s\S]{0,220}notifyBusyChanged\(\);/.test(source));
+
+    // Mọi thông báo trạng thái đều đi qua setBallState, mà hàm đó xoá lớp xoay ở đầu.
+    // Không dựng lại theo isRunning thì chính thông báo tiến độ lại dập tắt hoạt ảnh.
+    const ui = fs.readFileSync(path.join(root, 'world-engine-ui.js'), 'utf8');
+    check('giao diện xuất ra đường làm mới nút quả cầu',
+      /refreshBallControls: \(\) => updateBallControls\(\)/.test(ui));
+    check('setBallState dựng lại trạng thái chạy ở cuối hàm',
+      /we-ball-counting', cur > 0 && cur < total\)[\s\S]{0,700}updateBallControls\(\);/.test(ui));
   }
 
   // ===== Chạy xong phải báo số liệu thật =====
