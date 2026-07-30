@@ -6196,7 +6196,7 @@ window.WORLD_ENGINE_UI = (function() {
     });
     document.querySelectorAll('.we-npc-archive').forEach(button => {
       button.onclick = () => mutate(button.dataset.npcId, (npc, state) => {
-        npcData().archiveNpc(state, npc.id, npc.status?.condition);
+        npcData().archiveNpc(state, npc.id, npc.status?.condition, window.WORLD_ENGINE_CORE?.getChatLayer?.());
       });
     });
     document.querySelectorAll('.we-npc-revive').forEach(button => {

@@ -168,7 +168,7 @@ window.NPC_ENGINE = (function() {
       if (!name) continue;
       const npc = data().findNpc(state, name);
       if (!npc || npc.tier !== 'core') continue;
-      data().archiveNpc(state, name, clean(death.reason));
+      data().archiveNpc(state, name, clean(death.reason), currentLayer);
       const fact = addPublicFact(state, `${name} đã chết${death.reason ? ' (' + clean(death.reason) + ')' : ''}`, currentLayer, 'death');
       result.deaths.push(npc.id);
       result.facts.push(fact.id);
@@ -762,14 +762,26 @@ window.NPC_ENGINE = (function() {
     autoRetries = 0;
 
     const worldState = core()?.loadState?.() || {};
+    const layer = core()?.getChatLayer?.();
+
+    // Reroll hoặc sửa rồi gửi lại: tầng này đã xử lý rồi, phải dựng lại từ điểm lưu chứ không nối
+    // thêm — nếu không, nhân vật của lần sinh bị bỏ vẫn nằm nguyên trong hồ sơ.
+    //
+    // Ở đây so sánh số tầng là AN TOÀN, khác với trường hợp của Công Cụ Thế Giới: hàm này chạy sau
+    // GENERATION_ENDED nên tin nhắn đã nằm trong chat rồi. Chỗ từng gây hồi quy ở v2.3.18 là
+    // GENERATION_STARTED, phát ra TRƯỚC khi tầng được đẩy vào chat.
+    const npcState = data().loadState();
+    const stateLayer = asLayer(npcState.chatLayer);
+    const replace = stateLayer !== null && asLayer(layer) !== null && Number(layer) <= stateLayer;
+
     try {
       await ingestWorldEvolution({
-        layer: core()?.getChatLayer?.(),
+        layer,
         worldRound: worldState.round,
         worldDigest: worldState.worldDigest,
         worldUpdate: worldState.lastEvolveResult,
         dialogue: buildDialogueText(chat, st.evolveReadRounds),
-        replace: false
+        replace
       });
     } catch (error) {
       console.error('[Công Cụ Nhân Vật] Chạy tự động thất bại', error);

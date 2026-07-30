@@ -150,6 +150,55 @@ function check(label, condition) {
   check('báo cáo số bản ghi đã bỏ', state.lastRollback.dropped.knowledge === 1);
 }
 
+// ===== Lùi tầng phải xoá cả nhân vật sinh ra ở tầng đó =====
+// Lỗi người dùng báo: reroll hoặc xoá lượt xong, nhân vật của lần sinh đã bỏ vẫn nằm nguyên trong
+// hồ sơ. Nguyên nhân là rollbackToLayer chỉ lọc các trường cộng dồn BÊN TRONG từng nhân vật,
+// không hề đụng tới danh sách nhân vật.
+{
+  const state = data.defaultState();
+  const old = data.upsertNpc(state, { name: 'Người Có Từ Trước', tier: 'core', firstSeenLayer: 5 });
+  const born = data.upsertNpc(state, { name: 'Người Của Lượt Bị Bỏ', tier: 'core', firstSeenLayer: 12 });
+  const manual = data.upsertNpc(state, { name: 'Người Nhập Tay', tier: 'core' }); // không có firstSeenLayer
+
+  old.relations.npcs = [{ id: born.id, name: 'Người Của Lượt Bị Bỏ', type: 'đồng minh' }];
+  state.scene = { layer: 12, location: [], presentIds: [old.id, born.id] };
+
+  data.rollbackToLayer(state, 10);
+
+  check('xoá nhân vật xuất hiện lần đầu ở tầng bị bỏ', data.findNpc(state, 'Người Của Lượt Bị Bỏ') === null);
+  check('giữ nhân vật có từ trước', data.findNpc(state, 'Người Có Từ Trước') !== null);
+  // Người nhập tay hoặc từ lorebook không thuộc tầng nào, lùi tầng không được đụng tới.
+  check('giữ nhân vật nhập tay không có dấu tầng', data.findNpc(state, 'Người Nhập Tay') !== null);
+  check('gỡ quan hệ trỏ tới người vừa bị xoá',
+    data.findNpc(state, 'Người Có Từ Trước').relations.npcs.length === 0);
+  check('gỡ khỏi danh sách người có mặt', !state.scene.presentIds.includes(born.id));
+  check('báo cáo số nhân vật đã xoá', state.lastRollback.dropped.npcs === 1);
+}
+
+// ===== Lùi tầng phải huỷ cả cái chết xảy ra ở tầng đó =====
+{
+  const state = data.defaultState();
+  data.upsertNpc(state, { name: 'Người Chết Oan', tier: 'core', firstSeenLayer: 3 });
+  data.archiveNpc(state, 'Người Chết Oan', 'bị đâm', 12);
+
+  check('vào kho thì đóng dấu tầng', state.archive[0].status.archivedLayer === 12);
+
+  data.rollbackToLayer(state, 10);
+
+  check('cái chết ở tầng bị bỏ được huỷ', state.archive.length === 0);
+  check('nhân vật trở lại danh sách hoạt động', data.findNpc(state, 'Người Chết Oan') !== null);
+  check('đánh dấu còn sống trở lại', data.findNpc(state, 'Người Chết Oan').status.alive === true);
+  check('xoá dấu tầng vào kho', data.findNpc(state, 'Người Chết Oan').status.archivedLayer === null);
+  check('báo cáo số người được kéo lại', state.lastRollback.dropped.revived === 1);
+
+  // Cái chết xảy ra TRƯỚC tầng lùi thì vẫn giữ nguyên.
+  const older = data.defaultState();
+  data.upsertNpc(older, { name: 'Người Chết Thật', tier: 'core', firstSeenLayer: 1 });
+  data.archiveNpc(older, 'Người Chết Thật', 'trúng độc', 4);
+  data.rollbackToLayer(older, 10);
+  check('cái chết trước tầng lùi thì giữ nguyên', older.archive.length === 1);
+}
+
 // ===== Đếm hành trình =====
 {
   const state = data.defaultState();

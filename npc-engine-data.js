@@ -62,7 +62,8 @@ window.NPC_ENGINE_DATA = (function() {
         condition: clean(source.status && source.status.condition) || 'khoẻ',
         resources: clean(source.status && source.status.resources),
         alive: (source.status && source.status.alive) !== false,
-        archived: (source.status && source.status.archived) === true
+        archived: (source.status && source.status.archived) === true,
+        archivedLayer: asLayer(source.status && source.status.archivedLayer)
       },
 
       offscreenLog: asArray(source.offscreenLog),
@@ -151,7 +152,7 @@ window.NPC_ENGINE_DATA = (function() {
   function rollbackToLayer(state, layer) {
     const target = asLayer(layer);
     if (target === null) return state;
-    const dropped = { knowledge: 0, offscreen: 0, rumors: 0 };
+    const dropped = { knowledge: 0, offscreen: 0, rumors: 0, npcs: 0, revived: 0 };
 
     const stripNpc = npc => {
       const knowledge = npc.knowledge.filter(item => {
@@ -172,8 +173,40 @@ window.NPC_ENGINE_DATA = (function() {
       return npc;
     };
 
-    state.npcs = state.npcs.map(stripNpc);
-    state.archive = state.archive.map(stripNpc);
+    // Nhân vật XUẤT HIỆN LẦN ĐẦU ở tầng bị bỏ thì phải biến mất theo. Trước đây chỗ này chỉ lọc
+    // các trường cộng dồn bên trong từng nhân vật, nên reroll hay xoá lượt xong thì nhân vật của
+    // lần sinh đã bỏ vẫn nằm nguyên trong hồ sơ — chỉ rỗng ruột.
+    // Người có firstSeenLayer rỗng thì giữ: đó là người nhập tay hoặc từ lorebook, không thuộc tầng nào.
+    const bornAtOrAfter = npc => {
+      const born = asLayer(npc?.firstSeenLayer);
+      return born !== null && born >= target;
+    };
+    const removedIds = new Set([...state.npcs, ...state.archive].filter(bornAtOrAfter).map(npc => npc.id));
+    dropped.npcs = removedIds.size;
+
+    state.npcs = state.npcs.filter(npc => !removedIds.has(npc.id)).map(stripNpc);
+    state.archive = state.archive.filter(npc => !removedIds.has(npc.id)).map(stripNpc);
+
+    // Người bị đưa vào kho ở tầng bị bỏ thì kéo trở lại: cái chết đó chưa từng xảy ra.
+    const revived = state.archive.filter(npc => {
+      const archivedAt = asLayer(npc?.status?.archivedLayer);
+      return archivedAt !== null && archivedAt >= target;
+    });
+    for (const npc of revived) {
+      npc.status.archived = false;
+    npc.status.archivedLayer = null;
+      npc.status.alive = true;
+      npc.status.archivedLayer = null;
+      state.archive = state.archive.filter(item => item.id !== npc.id);
+      if (!state.npcs.some(item => item.id === npc.id)) state.npcs.push(npc);
+    }
+    dropped.revived = revived.length;
+
+    // Gỡ luôn quan hệ trỏ tới những người vừa biến mất.
+    for (const npc of [...state.npcs, ...state.archive]) {
+      npc.relations.npcs = asArray(npc.relations?.npcs).filter(link => !removedIds.has(link?.id));
+    }
+    state.scene.presentIds = asArray(state.scene?.presentIds).filter(id => !removedIds.has(id));
 
     const byLayer = list => asArray(list).filter(item => {
       const itemLayer = asLayer(item?.layer);
@@ -233,11 +266,12 @@ window.NPC_ENGINE_DATA = (function() {
   // NPC trong kho không sinh hoạt động ngầm và không tính vào npcCoreLimit, nhưng vẫn tra cứu được
   // và ràng buộc tri thức vẫn còn hiệu lực: người khác chưa chắc đã biết là nhân vật này đã chết.
 
-  function archiveNpc(state, idOrName, reason) {
+  function archiveNpc(state, idOrName, reason, layer) {
     const npc = findNpc(state, idOrName);
     if (!npc) return null;
     npc.status.alive = false;
     npc.status.archived = true;
+    npc.status.archivedLayer = asLayer(layer);
     if (clean(reason)) npc.status.condition = clean(reason);
     state.npcs = state.npcs.filter(item => item.id !== npc.id);
     if (!state.archive.some(item => item.id === npc.id)) state.archive.push(npc);

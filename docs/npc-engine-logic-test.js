@@ -573,6 +573,13 @@ const baseSettings = () => config.getSettings(true);
     check('báo lỗi khi thất bại', /setStatus\('Thất bại: '[\s\S]{0,60}true\)/.test(source));
     check('có bảng lý do bỏ qua', source.includes('SKIP_REASONS'));
 
+    // Reroll hoặc sửa rồi gửi lại qua đường chạy tự động: tầng này đã xử lý rồi nên phải dựng lại
+    // từ điểm lưu. Trước đây đường này luôn truyền replace: false, nên nhân vật của lần sinh bị bỏ
+    // vẫn nằm nguyên trong hồ sơ — đúng lỗi người dùng báo.
+    check('đường tự động nhận ra tầng đã xử lý',
+      /const replace = stateLayer !== null && asLayer\(layer\) !== null && Number\(layer\) <= stateLayer/.test(source));
+    check('không còn truyền cứng replace: false', !/replace: false/.test(source));
+
     // Chữ chạy trên banner là chưa đủ: người dùng không nhìn banner sẽ tưởng engine chết.
     // Quả cầu phải xoay và nút dừng phải hiện ra, giống hệt khi Công Cụ Thế Giới chạy.
     check('có báo cho quả cầu khi trạng thái chạy đổi', source.includes('function notifyBusyChanged('));
