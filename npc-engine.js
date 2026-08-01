@@ -66,7 +66,7 @@ window.NPC_ENGINE = (function() {
   // Tách riêng khỏi phần gọi API để kiểm thử được mà không cần mạng.
 
   function mergeExtraction(state, parsed, layer) {
-    const result = { added: [], updated: [], deaths: [], facts: [] };
+    const result = { added: [], updated: [], deaths: [], facts: [], identityProposals: [] };
     if (!parsed || typeof parsed !== 'object') return result;
 
     const st = settings();
@@ -150,6 +150,10 @@ window.NPC_ENGINE = (function() {
 
       // Nhân dạng: chỉ điền vào ô trống, không bao giờ ghi đè ô đã chốt.
       data().mergeIdentity(npc, incoming.identity);
+
+      // Chính văn tiết lộ nhân dạng khác thì mô hình được ĐỀ NGHỊ, không được tự sửa.
+      const proposal = data().proposeIdentityChange(npc, incoming.identityChange, currentLayer);
+      if (proposal) result.identityProposals.push({ id: npc.id, name: npc.name, ...proposal });
 
       // Tri thức là trường cộng dồn: nối thêm và đóng dấu tầng, không ghi đè.
       for (const item of asArray(incoming.knowledge)) {
@@ -809,7 +813,8 @@ window.NPC_ENGINE = (function() {
         offscreen.acted.length ? `${offscreen.acted.length} hoạt động ngầm` : '',
         offscreen.rumors.length ? `${offscreen.rumors.length} tin đồn` : '',
         acknowledged.length ? `${acknowledged.length} chuyện vào truyện` : '',
-        merged.deaths.length ? `${merged.deaths.length} qua đời` : ''
+        merged.deaths.length ? `${merged.deaths.length} qua đời` : '',
+        merged.identityProposals.length ? `${merged.identityProposals.length} đề nghị đổi nhân dạng` : ''
       ].filter(Boolean).join(' · ');
       setStatus('Hoàn tất — ' + summary);
 

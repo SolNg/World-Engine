@@ -115,6 +115,59 @@ function check(label, condition) {
     data.findNpc(data.loadState(), 'Rias Gremory').identity.species === 'Ác ma');
 }
 
+// ===== Đề nghị đổi nhân dạng: ghi lại, chờ duyệt, không tự áp dụng =====
+// Chống trôi là đúng, nhưng chính văn có thể tiết lộ nhân dạng khác thật — người cải trang bị lột
+// mặt nạ, hoặc lần chốt đầu sai vì cảnh mơ hồ. Cho mô hình tự sửa thì mất sạch ý nghĩa chống trôi,
+// nên đề nghị được GHI LẠI và hỏi người chơi.
+{
+  const state = data.defaultState();
+  const npc = data.upsertNpc(state, { name: 'Kiếm khách bí ẩn', tier: 'core' });
+  data.mergeIdentity(npc, { gender: 'nam', socialRole: 'lãng khách' });
+
+  const proposal = data.proposeIdentityChange(npc,
+    { field: 'gender', value: 'nữ', reason: 'Nàng gỡ khăn che mặt, để lộ gương mặt thiếu nữ.' }, 12);
+
+  check('ghi nhận được đề nghị', proposal !== null);
+  check('đề nghị nêu cả giá trị cũ và mới', proposal.from === 'nam' && proposal.to === 'nữ');
+  // Điểm mấu chốt: hồ sơ KHÔNG đổi, chỉ có đề nghị nằm chờ.
+  check('hồ sơ vẫn giữ nguyên, chưa đổi gì', npc.identity.gender === 'nam');
+  check('đề nghị nằm trong hàng chờ', npc.identityProposals.length === 1);
+
+  // Không có căn cứ thì không nhận: đó là suy đoán, không phải tiết lộ.
+  check('thiếu lý do thì bỏ qua',
+    data.proposeIdentityChange(npc, { field: 'species', value: 'Yêu tộc' }, 12) === null);
+  check('trường lạ thì bỏ qua',
+    data.proposeIdentityChange(npc, { field: 'bịa', value: 'x', reason: 'y' }, 12) === null);
+  check('ô chưa chốt thì không cần đề nghị, cứ điền thẳng',
+    data.proposeIdentityChange(npc, { field: 'species', value: 'Yêu tộc', reason: 'có căn cứ' }, 12) === null);
+  check('giá trị trùng cái đã có thì bỏ qua',
+    data.proposeIdentityChange(npc, { field: 'gender', value: 'nam', reason: 'có căn cứ' }, 12) === null);
+
+  // Cùng một trường đề nghị lại thì thay bản cũ, không chồng đống.
+  data.proposeIdentityChange(npc, { field: 'gender', value: 'nữ giả trai', reason: 'căn cứ mới' }, 13);
+  check('đề nghị mới thay bản cũ cùng trường', npc.identityProposals.length === 1);
+  check('giữ bản mới nhất', npc.identityProposals[0].to === 'nữ giả trai');
+
+  // Người chơi từ chối.
+  check('từ chối được', data.dismissIdentityProposal(npc, 'gender') === true);
+  check('từ chối thì hồ sơ giữ nguyên', npc.identity.gender === 'nam');
+  check('hàng chờ trống sau khi từ chối', npc.identityProposals.length === 0);
+
+  // Người chơi đồng ý.
+  data.proposeIdentityChange(npc, { field: 'gender', value: 'nữ', reason: 'gỡ khăn che mặt' }, 14);
+  const applied = data.applyIdentityProposal(npc, 'gender');
+  check('đồng ý thì mới đổi', npc.identity.gender === 'nữ');
+  check('trả về đề nghị vừa áp dụng', applied.to === 'nữ');
+  check('áp dụng xong thì rời hàng chờ', npc.identityProposals.length === 0);
+
+  // Sau khi đổi, mô hình vẫn không tự ghi đè được.
+  data.mergeIdentity(npc, { gender: 'nam' });
+  check('đổi rồi thì vẫn khoá với mô hình', npc.identity.gender === 'nữ');
+
+  data.saveState(state);
+  check('đề nghị sống sót qua lưu/đọc', Array.isArray(data.findNpc(data.loadState(), 'Kiếm khách bí ẩn').identityProposals));
+}
+
 // ===== Trần NPC trọng yếu =====
 {
   const state = data.defaultState();

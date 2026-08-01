@@ -45,6 +45,7 @@ Chỉ xuất một khối JSON hợp lệ, không kèm giải thích, không kè
       "significance": 0,
       "present": true,
       "identity": { "gender": "giới tính", "pronouns": "cách xưng hô", "species": "chủng tộc", "ageStage": "độ tuổi", "appearance": "đặc điểm ngoại hình cố định", "socialRole": "thân phận xã hội" },
+      "identityChange": { "field": "tên trường cần đổi", "value": "giá trị mới", "reason": "câu trong chính văn cho biết điều đó" },
       "location": { "path": ["quốc gia", "vùng", "thành", "địa điểm"] },
       "goals": [{ "text": "mục tiêu", "priority": 1, "progress": "chớm nảy / đang tiến hành / gần hoàn tất / đã hoàn tất / thất bại" }],
       "faction": { "name": "tên thế lực", "role": "vai trò", "standing": "đang lên / ổn định / đang xuống" },
@@ -71,6 +72,10 @@ Trường "identity" là những thứ KHÔNG đổi theo thời gian: giới t�
 - Nhân vật MỚI: điền đầy đủ những gì chính văn nêu ra. Không nêu thì để trống, đừng đoán.
 - Nhân vật ĐÃ CÓ trong hồ sơ: chỉ điền vào ô còn trống. Ô đã có giá trị thì bỏ qua, không được sửa dù bạn nghĩ nó sai — hệ thống sẽ tự bỏ mọi thay đổi lên ô đã chốt.
 - Đây là cơ chế chống trôi: qua vài chục lượt, nhân vật không được lặng lẽ đổi giới tính, tuổi hay chủng tộc.
+
+Nếu chính văn lượt này THẬT SỰ tiết lộ nhân dạng khác với hồ sơ — người cải trang bị lột mặt nạ, thân phận thật được nói ra, nhân vật biến hình — thì điền vào "identityChange" kèm câu chữ trong chính văn làm căn cứ. Đây chỉ là ĐỀ NGHỊ: hệ thống giữ nguyên hồ sơ và hỏi người chơi, không tự đổi.
+
+Chỉ dùng "identityChange" khi có căn cứ rõ ràng trong chính văn. Bạn thấy hồ sơ "có vẻ sai" mà không có câu nào chứng minh thì đừng điền — đó là suy đoán, không phải tiết lộ.
 
 【SỰ VIỆC HẬU TRƯỜNG ĐANG CHỜ】
 Phần tư liệu bên dưới có thể liệt kê những sự việc engine đã suy diễn ở hậu trường nhưng CHƯA từng được kể ra trong truyện.

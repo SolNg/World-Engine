@@ -5449,6 +5449,11 @@ window.WORLD_ENGINE_UI = (function() {
     catch (error) { return 'night'; }
   }
 
+  const NPC_IDENTITY_LABELS = {
+    gender: 'giới tính', pronouns: 'cách xưng hô', species: 'chủng tộc',
+    ageStage: 'độ tuổi', appearance: 'ngoại hình', socialRole: 'thân phận'
+  };
+
   const NPC_VIEW_META = {
     core: { title: 'Trọng Yếu', poem: 'Người đáng nhớ thì thế gian nhớ' },
     peripheral: { title: 'Ngoại Vi', poem: 'Chưa rõ chí hướng, hãy còn đợi thời' },
@@ -5697,6 +5702,10 @@ window.WORLD_ENGINE_UI = (function() {
     if (npc.pinned) badges.push('<span class="we-npc-badge we-npc-badge-pin">ghim</span>');
     if (inTransit) badges.push(`<span class="we-npc-badge we-npc-badge-move">đi đường · ${location.etaRounds} lượt</span>`);
     if (npc.status?.alive === false) badges.push('<span class="we-npc-badge we-npc-badge-dead">đã chết</span>');
+    const proposals = Array.isArray(npc.identityProposals) ? npc.identityProposals : [];
+    if (proposals.length) {
+      badges.push(`<span class="we-npc-badge we-npc-badge-ask">${proposals.length} đề nghị</span>`);
+    }
 
     const axes = [];
     axes.push(`<div class="we-npc-axis"><span class="we-npc-axis-key">Vị trí</span><span>${h(npcPath(location.path))}${
@@ -5761,6 +5770,15 @@ window.WORLD_ENGINE_UI = (function() {
       <div class="we-npc-card-body"${collapsed ? ' hidden' : ''}>
         ${axes.join('')}
         ${log ? `<div class="we-npc-log"><div class="we-npc-axis-key">Hoạt động ngầm</div>${log}</div>` : ''}
+        ${proposals.map(item => `<div class="we-npc-proposal">
+          <div class="we-npc-proposal-head">Chính văn có vẻ nói khác về <b>${h(NPC_IDENTITY_LABELS[item.field] || item.field)}</b></div>
+          <div class="we-npc-proposal-diff">${h(item.from)} → <b>${h(item.to)}</b></div>
+          <div class="we-npc-proposal-reason">${h(item.reason)}</div>
+          <div class="we-npc-proposal-actions">
+            <button class="we-btn we-btn-sm we-npc-proposal-no" data-npc-id="${h(key)}" data-field="${h(item.field)}">Giữ nguyên</button>
+            <button class="we-btn we-btn-sm we-btn-primary we-npc-proposal-yes" data-npc-id="${h(key)}" data-field="${h(item.field)}">Đổi theo</button>
+          </div>
+        </div>`).join('')}
         ${_npcPeek[key] ? `<div class="we-npc-peek">${h(_npcPeek[key])}</div>` : ''}
         <div class="we-npc-actions">${actions}</div>
       </div>
@@ -6292,6 +6310,20 @@ window.WORLD_ENGINE_UI = (function() {
         npcData().archiveNpc(state, npc.id, npc.status?.condition, window.WORLD_ENGINE_CORE?.getChatLayer?.());
       });
     });
+    // Đề nghị đổi nhân dạng: chỉ đổi khi người chơi bấm đồng ý. Không có gì đổi âm thầm.
+    document.querySelectorAll('.we-npc-proposal-yes').forEach(button => {
+      button.onclick = () => mutate(button.dataset.npcId, npc => {
+        const done = npcData().applyIdentityProposal(npc, button.dataset.field);
+        if (done) showToast(`Đã đổi ${NPC_IDENTITY_LABELS[done.field] || done.field} thành "${done.to}"`);
+      });
+    });
+    document.querySelectorAll('.we-npc-proposal-no').forEach(button => {
+      button.onclick = () => mutate(button.dataset.npcId, npc => {
+        npcData().dismissIdentityProposal(npc, button.dataset.field);
+        showToast('Đã giữ nguyên hồ sơ');
+      });
+    });
+
     document.querySelectorAll('.we-npc-revive').forEach(button => {
       button.onclick = () => mutate(button.dataset.npcId, (npc, state) => {
         npcData().reviveNpc(state, npc.id);

@@ -3946,3 +3946,29 @@
   border-left: 2px solid var(--we-accent);
   border-radius: 0 6px 6px 0;
 }
+
+/* ---- Đề nghị đổi nhân dạng, chờ người chơi duyệt ---- */
+.we-npc-badge-ask { border-color: var(--we-purple); color: var(--we-purple); }
+.we-npc-proposal {
+  margin-top: 10px;
+  padding: 9px 11px;
+  font-size: 12px;
+  line-height: 1.6;
+  background: var(--we-bg2);
+  border: 1px solid var(--we-purple);
+  border-radius: 8px;
+}
+.we-npc-proposal-head { color: var(--we-text2); }
+.we-npc-proposal-diff { margin-top: 3px; color: var(--we-text); }
+.we-npc-proposal-reason {
+  margin-top: 4px;
+  font-size: 11px;
+  font-style: italic;
+  color: var(--we-text3);
+}
+.we-npc-proposal-actions {
+  display: flex;
+  gap: 6px;
+  justify-content: flex-end;
+  margin-top: 8px;
+}

@@ -82,6 +82,8 @@ window.NPC_ENGINE_DATA = (function() {
         archivedLayer: asLayer(source.status && source.status.archivedLayer)
       },
 
+      // Đề nghị đổi nhân dạng do mô hình nêu, CHỜ người chơi duyệt. Không tự áp dụng bao giờ.
+      identityProposals: asArray(source.identityProposals),
       offscreenLog: asArray(source.offscreenLog),
       pendingIntent: source.pendingIntent || null
     };
@@ -305,16 +307,53 @@ window.NPC_ENGINE_DATA = (function() {
   // Gộp neo nhân dạng theo nguyên tắc ĐIỀN MỘT LẦN: ô trống thì nhận giá trị mới, ô đã có thì giữ
   // nguyên. Đây chính là cơ chế chống trôi — mô hình không có đường nào ghi đè lên thứ đã chốt.
   // Trả về danh sách ô vừa được điền, để nơi gọi biết có gì thay đổi.
+  const IDENTITY_FIELDS = ['gender', 'pronouns', 'species', 'ageStage', 'appearance', 'socialRole'];
+
   function mergeIdentity(npc, incoming) {
     const filled = [];
     if (!npc || !incoming || typeof incoming !== 'object') return filled;
-    for (const field of ['gender', 'pronouns', 'species', 'ageStage', 'appearance', 'socialRole']) {
+    for (const field of IDENTITY_FIELDS) {
       const value = clean(incoming[field]);
       if (!value || clean(npc.identity[field])) continue;
       npc.identity[field] = value;
       filled.push(field);
     }
     return filled;
+  }
+
+  // Chính văn có thể tiết lộ nhân dạng khác thật: người cải trang bị lột mặt nạ, hoặc lần chốt đầu
+  // sai vì cảnh mơ hồ. Nhưng cho mô hình tự sửa thì cơ chế chống trôi mất sạch ý nghĩa.
+  //
+  // Nên đề nghị được GHI LẠI chứ không áp dụng: hồ sơ giữ nguyên, giao diện hiện dấu chờ duyệt,
+  // người chơi bấm đồng ý thì mới đổi. Không có gì đổi âm thầm sau lưng.
+  function proposeIdentityChange(npc, change, layer) {
+    if (!npc || !change || typeof change !== 'object') return null;
+    const field = clean(change.field);
+    const value = clean(change.value);
+    const reason = clean(change.reason);
+    if (!IDENTITY_FIELDS.includes(field) || !value || !reason) return null;
+
+    const current = clean(npc.identity[field]);
+    if (!current || normalized(current) === normalized(value)) return null;   // chưa chốt hoặc không đổi gì
+
+    npc.identityProposals = asArray(npc.identityProposals).filter(item => item.field !== field);
+    const proposal = { field, from: current, to: value, reason, layer: asLayer(layer) };
+    npc.identityProposals.push(proposal);
+    return proposal;
+  }
+
+  function applyIdentityProposal(npc, field) {
+    const proposal = asArray(npc?.identityProposals).find(item => item.field === field);
+    if (!proposal) return null;
+    npc.identity[proposal.field] = proposal.to;
+    npc.identityProposals = npc.identityProposals.filter(item => item.field !== field);
+    return proposal;
+  }
+
+  function dismissIdentityProposal(npc, field) {
+    const before = asArray(npc?.identityProposals).length;
+    npc.identityProposals = asArray(npc?.identityProposals).filter(item => item.field !== field);
+    return before !== npc.identityProposals.length;
   }
 
   // Mô tả nhân dạng thành một dòng, dùng cho prompt và cho ràng buộc gửi AI chính.
@@ -626,6 +665,10 @@ window.NPC_ENGINE_DATA = (function() {
     removeNpc,
     mergeIdentity,
     describeIdentity,
+    IDENTITY_FIELDS,
+    proposeIdentityChange,
+    applyIdentityProposal,
+    dismissIdentityProposal,
     enforceCoreLimit,
     proximity,
     travelKey,
