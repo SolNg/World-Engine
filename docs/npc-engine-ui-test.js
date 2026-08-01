@@ -328,6 +328,22 @@ check('ba nấc che vị trí đều có trong ô chọn',
   }
 }
 
+// ===== Nhật ký cập nhật riêng của engine =====
+{
+  check('có nhật ký cập nhật riêng', ui.includes('const NPC_CHANGELOG = ['));
+  check('có hàm dựng trang giới thiệu', ui.includes('function renderNpcAbout('));
+  check('cắm vào tab Giới Thiệu',
+    /sec\('set-npc-changelog', 'Nhật Ký Cập Nhật', renderNpcAbout\(\)\)/.test(ui));
+  check('hiện phiên bản hiện tại', ui.includes('Phiên bản hiện tại v'));
+  check('có ô chọn phiên bản', ui.includes('we-npc-changelog-select'));
+  check('chuyển phiên bản chỉ ẩn hiện, không dựng lại',
+    /changelogSelect\.onchange[\s\S]{0,300}panel\.style\.display/.test(ui));
+  // Hai engine đánh số riêng, nên nhật ký cũng phải tách khỏi CHANGELOG của Thế Giới.
+  check('tách khỏi nhật ký của Công Cụ Thế Giới',
+    ui.indexOf('const NPC_CHANGELOG') !== ui.indexOf('const CHANGELOG'));
+  check('ghi công repo tham khảo', ui.includes('world-backstage'));
+}
+
 // ===== Công cụ bỏ ẩn =====
 check('có nút bỏ ẩn toàn bộ', ui.includes('we-npc-unhide-all'));
 check('nút bỏ ẩn gọi đúng hàm cứu hộ', ui.includes('window.WORLD_ENGINE?.unhideAllMessages?.()'));

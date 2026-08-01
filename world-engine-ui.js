@@ -5872,6 +5872,57 @@ window.WORLD_ENGINE_UI = (function() {
     URL.revokeObjectURL(url);
   }
 
+  // Nhật ký cập nhật của Công Cụ Nhân Vật, tách riêng khỏi CHANGELOG của Công Cụ Thế Giới
+  // vì hai engine đánh số phiên bản độc lập.
+  const NPC_CHANGELOG = [
+    { version: '1.0.0', date: '2026-08-02', items: [
+      'Đồng hồ thế giới thay cho đếm lượt: trạng thái đếm bằng PHÚT truyện, mô hình tự đọc thời gian trôi qua từ chính văn. Một lượt hội thoại không còn là một đơn vị thời gian — nó chỉ là lúc quyết toán.',
+      'Bốn kiểu hẹn theo bản chất công việc: trôi tự nhiên (đi đường, chờ đợi), giờ công hiệu lực (rèn đồ, nghiên cứu — chỉ tiến khi nhân vật thực sự ngồi làm), hẹn giờ cố định (cuộc họp, hạn chót), chờ điều kiện (chờ hồi âm, chờ nguyên liệu).',
+      'Neo nhân dạng: giới tính, xưng hô, chủng tộc, độ tuổi, ngoại hình và thân phận chỉ điền được một lần. Mô hình không ghi đè được ô đã chốt, chặn việc nhân vật lặng lẽ trôi giới tính hay tuổi qua vài chục lượt.',
+      'Phân biệt sự việc hậu trường với sự việc trong truyện đã biết: chuyện engine suy diễn ra chỉ được thừa nhận khi AI chính thật sự kể vào chính văn. Trước đó nó không lọt vào ràng buộc tri thức — nếu không, ràng buộc lại chính là đường tiết lộ tình tiết đang giấu.',
+      'Engine tự chấm điểm chọn nhân vật cho pha hoạt động ngầm theo mức liên quan: dự định đến hạn, vừa được nhắc tới, đang đi đường, ở gần cảnh của người chơi, cộng phần thưởng cho người lâu chưa có diễn biến. Số còn lại giữ nguyên trạng thái, không bịa hoạt động.',
+      'Thêm nút Đang làm gì trên từng thẻ nhân vật: xem đoạn tự sự ngôi thứ nhất mà không gửi vào chat, không đổi trạng thái, không tiến thời gian.',
+      'Ý tưởng đồng hồ thế giới, bốn kiểu hẹn, neo nhân dạng, tách sự việc hậu trường và chọn theo mức liên quan tham khảo từ world-backstage (h675786161-prog, giấy phép MIT); phần cài đặt được viết lại theo khuôn dữ liệu của kho này.'
+    ] },
+    { version: '0.4.0', date: '2026-08-01', items: [
+      'Sửa lỗi dự định treo vĩnh viễn: NPC hẹn nhau đi ăn ngay hôm đó, ba ngày sau truyện vẫn viết cảnh họ đang ăn. Dự định nay có vòng đời còn hạn → đến hạn → quá hạn thì bỏ.',
+      'Prompt hoạt động ngầm biết đã trôi qua bao lâu giữa hai lượt, kèm thang co giãn hành động: vài phút thì chỉ phản ứng ngắn, nhiều ngày thì đi xa và hoàn tất kế hoạch.',
+      'Sửa lỗi reroll và xoá lượt không xoá nhân vật của lượt bị bỏ. Lùi tầng nay lọc theo tầng xuất hiện lần đầu, gỡ cả quan hệ trỏ tới người vừa bị xoá, và huỷ cả cái chết xảy ra ở tầng đó.',
+      'Sửa lỗi cập nhật một phần xoá điểm nhân vật: mô hình không gửi lại significance thì giữ nguyên, không quy về 0.'
+    ] },
+    { version: '0.3.0', date: '2026-08-01', items: [
+      'Khôi phục các tính năng vốn có của Bộ Nhớ Ký Ức mà bản đầu bỏ sót: sửa hồ sơ bằng tay, điền lại hàng loạt cho phần quá khứ, bản lưu theo cuộc trò chuyện, nhập/xuất JSON, xem điểm lưu, đối soát và chữa dữ liệu.',
+      'Trang chủ có vòng tiến độ hiển thị số nhân vật trọng yếu trên trần cấu hình.',
+      'Trang cài đặt chia bảy tab theo khuôn của Công Cụ Thế Giới, có thanh Lưu và Đặt Lại cố định.'
+    ] },
+    { version: '0.2.0', date: '2026-08-01', items: [
+      'Giao diện đầy đủ: mặt engine thứ ba trên quả cầu nổi, bảng điều khiển bốn mục, trang cài đặt có mục API riêng.',
+      'Lịch chạy độc lập: engine tự bám sự kiện của Tavern, không còn phụ thuộc hoàn toàn vào chu kỳ của Công Cụ Thế Giới.',
+      'Trần độ dài khối chèn, cắt theo mức thiết yếu để không làm tràn ngữ cảnh của SillyTavern.'
+    ] },
+    { version: '0.1.0', date: '2026-08-01', items: [
+      'Bản đầu tiên, thay thế Bộ Nhớ Ký Ức. Theo dõi NPC theo sáu trục: vị trí, mục tiêu, thế lực, quan hệ, tri thức, trạng thái.',
+      'Bộ lọc ba bậc trọng yếu / ngoại vi / quần chúng, có ngưỡng điểm chỉnh được.',
+      'Hoạt động ngầm cho nhân vật vắng mặt, ràng buộc vị trí và tri thức gửi cho AI chính, ba nấc che vị trí thật.'
+    ] }
+  ];
+
+  function renderNpcAbout() {
+    const version = window.NPC_ENGINE_SETTINGS?.VERSION || '?';
+    const options = NPC_CHANGELOG.map((entry, index) =>
+      `<option value="${h(entry.version)}"${index === 0 ? ' selected' : ''}>v${h(entry.version)}${entry.date ? ' (' + h(entry.date) + ')' : ''}</option>`).join('');
+    const panels = NPC_CHANGELOG.map((entry, index) =>
+      `<div class="we-changelog-panel" data-ver="${h(entry.version)}"${index === 0 ? '' : ' style="display:none;"'}>`
+      + `<div class="we-changelog-head">v${h(entry.version)}${entry.date ? ' <span class="we-changelog-date">' + h(entry.date) + '</span>' : ''}</div>`
+      + '<ul class="we-changelog-items">' + (entry.items || []).map(item => `<li>${h(item)}</li>`).join('') + '</ul></div>').join('');
+
+    return '<div class="we-changelog-panel-wrap">'
+      + `<span class="we-changelog-cur">Phiên bản hiện tại v${h(version)}</span>`
+      + '<div class="we-changelog-row"><label class="we-changelog-row-label">Xem Phiên Bản</label>'
+      + `<select id="we-npc-changelog-select" class="we-changelog-select">${options}</select></div>`
+      + panels + '</div>';
+  }
+
   function renderNpcSettingsView() {
     const settings = npcSettings();
     const sec = (id, title, inner) =>
@@ -6083,7 +6134,9 @@ window.WORLD_ENGINE_UI = (function() {
                  + sec('set-npc-maintain', 'Bảo Trì', maintainBody),
       worldbook: shared.worldbook,
       debug:     sec('set-npc-debug', 'Gỡ Lỗi', debugBody),
-      about:     sec('set-npc-theme', 'Giao Diện', themeBody) + sec('set-npc-about', 'Giới Thiệu', aboutBody)
+      about:     sec('set-npc-about', 'Giới Thiệu', aboutBody)
+                 + sec('set-npc-changelog', 'Nhật Ký Cập Nhật', renderNpcAbout())
+                 + sec('set-npc-theme', 'Giao Diện', themeBody)
     };
 
     // Dùng lại đúng lớp .we-settings-tab / .we-settings-panel của trang cài đặt thế giới, nên việc
@@ -6409,6 +6462,15 @@ window.WORLD_ENGINE_UI = (function() {
     bindSelect('we-npc-fog', 'locationFogMode');
     bindSelect('we-npc-knowledge-scope', 'knowledgeInjectScope');
     bindSelect('we-npc-world-scale', 'worldScale');
+
+    const changelogSelect = document.getElementById('we-npc-changelog-select');
+    if (changelogSelect) {
+      changelogSelect.onchange = () => {
+        document.querySelectorAll('.we-changelog-panel[data-ver]').forEach(panel => {
+          panel.style.display = panel.dataset.ver === changelogSelect.value ? '' : 'none';
+        });
+      };
+    }
 
     const themeSelect = document.getElementById('we-npc-theme-select');
     if (themeSelect) themeSelect.onchange = () => { setNpcTheme(themeSelect.value); refresh(); };

@@ -56,21 +56,67 @@ Mặc định tắt để không ảnh hưởng hành vi cũ; bật lên trong m
 
 ### 🧑 NPC Engine — Công Cụ Nhân Vật
 
-Một engine độc lập, cho NPC tiếp tục sống khi không có mặt trên màn hình.
+Engine độc lập, cho NPC tiếp tục sống khi không có mặt trên màn hình. Dùng API riêng, cấu hình riêng, dữ liệu riêng theo từng cuộc trò chuyện.
 
-**Lọc ba bậc** — không phải ai xuất hiện cũng được lưu. Nhân vật có tên riêng, có động cơ rõ, có tác động tới người chơi thì lên bậc **trọng yếu**; có tên nhưng chưa rõ chí hướng thì **ngoại vi**; còn "lão chủ quán", "tên lính gác" thì bỏ qua hoàn toàn. Ngưỡng và số lượng tối đa chỉnh được trong cài đặt — đây là van chặn duy nhất giữ cho prompt không phình ra khi truyện dài.
+#### Lọc ba bậc
 
-**Sáu trục theo dõi**: vị trí, mục tiêu, thế lực, quan hệ với người chơi và với NPC khác, tri thức, trạng thái.
+Không phải ai xuất hiện cũng được lưu. Nhân vật có tên riêng, có động cơ rõ, có tác động tới người chơi thì lên bậc **trọng yếu**; có tên nhưng chưa rõ chí hướng thì **ngoại vi**; còn "lão chủ quán", "tên lính gác" thì bỏ qua hoàn toàn.
 
-**Hoạt động ngầm** — mỗi lượt, các NPC trọng yếu đang vắng mặt sẽ tự hành động dựa trên mục tiêu của họ và diễn biến thế giới vừa xảy ra. Kết quả nào đủ lộ liễu thì lan thành tin đồn nối vào hệ tin đồn của World Engine.
+Mô hình chấm điểm 0–100, nhưng **ngưỡng lên bậc do bạn đặt** — không phó mặc mô hình, vì tiêu chuẩn của nó trôi dần qua các lượt. Chỉ NPC trọng yếu mới sinh hoạt động ngầm và mới được đưa vào ràng buộc gửi AI, nên số lượng tối đa là van chặn giữ cho prompt không phình ra khi truyện dài.
 
-**Ràng buộc gửi cho AI** — engine không kể lể nhật ký vào prompt, mà chỉ đưa ràng buộc cứng:
+#### Sáu trục theo dõi
 
-- **Vị trí**: ai đang ở đâu, ai đang trên đường và còn mấy lượt nữa mới tới. Ba nấc che vị trí thật — để AI biết hết, hoặc chỉ biết chỗ người chơi *tưởng* nhân vật đang ở (kèm gợi ý mơ hồ), hoặc mù hoàn toàn.
-- **Tri thức**: với nhân vật đang có mặt trong cảnh, liệt kê những gì họ **chưa** biết. NPC không được nhắc tới chuyện chưa từng tới tai mình — kể cả cái chết của người khác.
-- **Neo thời gian**: một dòng ngắn ghi ngày truyện, số lượt và vài diễn biến nền gần nhất, chống việc AI trôi mốc thời gian sau vài lượt.
+Vị trí · mục tiêu · thế lực · quan hệ với người chơi và với NPC khác · tri thức · trạng thái.
 
-**Về khoảng cách**: engine không tự hiểu địa lý. Vị trí lưu dưới dạng đường dẫn phân cấp (quốc gia › vùng › thành › địa điểm) nên độ gần suy ra bằng so khớp tiền tố; còn thời gian đi lại thì AI ước lượng một lần theo thế giới quan — cùng quãng đường, truyện kiếm hiệp tốn nhiều lượt hơn truyện có phi kiếm — rồi engine chỉ việc trừ dần mỗi lượt.
+Cộng một khối **neo nhân dạng** riêng: giới tính, cách xưng hô, chủng tộc, độ tuổi, ngoại hình cố định, thân phận xã hội. Những trường này **chỉ điền được một lần** — mô hình không ghi đè được ô đã chốt, chặn việc nhân vật lặng lẽ đổi giới tính hay trẻ hoá qua vài chục lượt. Bạn sửa tay thì vẫn đổi được bình thường.
+
+#### Đồng hồ thế giới
+
+Trạng thái đếm bằng **phút truyện**, không phải bằng lượt. Một lượt hội thoại không phải một đơn vị thời gian — nó chỉ là lúc quyết toán, còn đồng hồ nhích bao nhiêu là do chính văn quyết định. Mô hình tự đọc thời gian trôi qua từ lời văn ("nửa giờ sau", "ba ngày sau", "Rằm tháng Giêng"), không cần bạn cấu hình biểu thức nào.
+
+Nhờ vậy mọi lịch hẹn co giãn đúng: một cuộc hẹn "ngay hôm nay" mà truyện nhảy ba ngày thì nó đã kết thúc rồi, chứ không còn treo mãi.
+
+#### Bốn kiểu hẹn
+
+| Kiểu | Tiến theo | Dùng cho |
+|---|---|---|
+| **Trôi tự nhiên** | Đồng hồ thế giới | Đi đường, chờ đợi, hồi phục |
+| **Giờ công hiệu lực** | Chỉ khi nhân vật thực sự bỏ công | Rèn đồ, nghiên cứu, luyện tập |
+| **Hẹn giờ cố định** | Mốc thời gian cụ thể | Cuộc họp, buổi lễ, hạn chót |
+| **Chờ điều kiện** | Đợi thứ khác xảy ra | Chờ hồi âm, chờ nguyên liệu |
+
+Kiểu **giờ công** là chỗ khác biệt: một thanh kiếm cần 20 giờ *ngồi rèn*, không phải 20 giờ trôi qua — engine không cộng công khi thợ rèn đang đi đường.
+
+#### Hoạt động ngầm
+
+Mỗi lượt, engine **tự chấm điểm chọn** một số NPC vắng mặt để đẩy, theo mức liên quan: ai có dự định đến hạn, ai vừa được nhắc tới trong chính văn, ai đang đi đường, ai ở gần cảnh của người chơi, cộng phần thưởng cho người lâu chưa có diễn biến. Số còn lại **giữ nguyên trạng thái, không bịa hoạt động** — đứng yên một lượt là hợp lý, bịa việc cho đủ người mới phá truyện.
+
+#### Hậu trường ≠ trong truyện đã biết
+
+Chuyện engine suy diễn ra ở hậu trường **chưa tồn tại trong truyện** cho tới khi AI chính thật sự kể ra hoặc để lại dấu vết. Trước đó nó không lọt vào ràng buộc tri thức — vì ràng buộc *"nhân vật X chưa biết Y"* chính là đang kể Y cho AI, tức là tự tiết lộ tình tiết đang giấu.
+
+#### Ràng buộc gửi cho AI chính
+
+Engine không kể lể nhật ký vào prompt, chỉ đưa ràng buộc cứng, có trần độ dài và cắt theo mức thiết yếu:
+
+- **Neo thời gian** — ngày truyện, số lượt, vài diễn biến nền gần nhất
+- **Nhân dạng cố định** — viết đúng giới tính, xưng hô, độ tuổi của nhân vật đang có mặt
+- **Vị trí** — ai đang ở đâu, ai chưa thể có mặt. Ba nấc che vị trí thật: AI biết hết, chỉ biết chỗ người chơi *tưởng* (kèm gợi ý mơ hồ), hoặc mù hoàn toàn
+- **Tri thức** — với nhân vật trong cảnh, liệt kê những gì họ **chưa** biết
+- **Tin đồn** — tách rõ chuyện chưa ai kể (chất liệu) với chuyện đã thành sự thật trong truyện
+
+#### Về khoảng cách
+
+Engine không tự hiểu địa lý. Vị trí lưu dưới dạng đường dẫn phân cấp (quốc gia › vùng › thành › địa điểm) nên độ gần suy ra bằng so khớp tiền tố. Thời gian đi lại thì AI ước lượng một lần theo thế giới quan — cùng quãng đường, kiếm hiệp mất nhiều giờ hơn truyện có phi kiếm — rồi engine ghi lại để lần sau đi tuyến đó vẫn ra con số cũ.
+
+#### Công cụ đi kèm
+
+- **Sửa hồ sơ tay** — chữa mọi trục khi mô hình chấm sai, thêm nhân vật bị bỏ sót, xoá người bị nhận nhầm
+- **Điền lại hàng loạt** — quét từ đầu cuộc trò chuyện để dựng hồ sơ cho phần quá khứ, dùng khi mới cài giữa chừng
+- **Xem tại chỗ** — nút *"Đang làm gì?"* sinh đoạn tự sự ngôi thứ nhất, không gửi vào chat, không đổi trạng thái, không tiến thời gian
+- **Bản lưu theo cuộc trò chuyện** — tạo, khôi phục, xuất, nhập
+- **Đối soát và chữa dữ liệu** — lùi hồ sơ về khớp số tầng thật, gỡ liên kết hỏng
+- **Tự kiểm tra việc chèn** — xem chính xác ràng buộc có thực sự vào prompt gửi cho mô hình hay không
 
 ### 💾 Lưu trữ & đồng bộ
 
@@ -116,6 +162,22 @@ Các chuỗi được **giữ nguyên tiếng Trung có chủ đích** (không p
 - Vài từ khoá nhận diện lời thoại tiếng Trung dùng để tránh liên kết nhầm ký ức (không ảnh hưởng khi viết truyện bằng tiếng Việt).
 
 Quy trình rà soát lỗi sau dịch: kiểm tra cú pháp từng file bằng **cả `node --check` lẫn trình phân tích cú pháp `acorn`** (không chỉ dùng một công cụ để tránh bỏ sót), cộng với việc chạy lại toàn bộ script kiểm thử sẵn có trong `docs/*-test.js` để xác nhận các thay đổi thuật ngữ không phá vỡ logic so khớp trạng thái giữa các file.
+
+---
+
+## 🔢 Phiên bản
+
+Hai engine đánh số **độc lập với nhau**. Xem nhật ký cập nhật ngay trong extension:
+
+- **World Engine** — mặt Thế Giới → Cài Đặt → tab **Giới Thiệu**
+- **NPC Engine** — mặt Nhân Vật → Cài Đặt → tab **Giới Thiệu** → mục **Nhật Ký Cập Nhật**
+
+---
+
+## 🙏 Ghi công
+
+- Dự án gốc **世界引擎 / World Engine** — tác giả **Disnight**, giấy phép MIT.
+- Một số ý tưởng của Công Cụ Nhân Vật — đồng hồ thế giới, bốn kiểu hẹn, neo nhân dạng, tách sự việc hậu trường khỏi sự việc trong truyện đã biết, chọn nhân vật theo mức liên quan — tham khảo từ [**world-backstage**](https://github.com/h675786161-prog/world-backstage) của **h675786161-prog**, giấy phép MIT. Phần cài đặt được viết lại theo khuôn dữ liệu của kho này, không chép mã.
 
 ---
 
