@@ -9,15 +9,25 @@ window.NPC_ENGINE_OFFSCREEN = (function() {
 - Một lượt hội thoại là một khoảng thời gian ngắn. Phần lớn nhân vật chỉ nhích một bước nhỏ, hoặc không làm gì đáng kể. Nhân vật không có việc gì để làm thì cứ bỏ qua, đừng ép ra hành động.
 - Nhân vật đã chết hoặc đang bị giam giữ thì không hành động.
 
+【BỐN KIỂU HẸN — CHỌN ĐÚNG KIỂU CHO TỪNG VIỆC】
+Không phải việc gì cũng tiến theo cùng một cách. Khi đặt "intent", chọn "mode" cho khớp bản chất công việc:
+
+- "natural" — trôi theo thời gian: đi đường, chờ đợi, hồi phục vết thương, cây lớn lên. Điền "duration" là tổng thời gian cần trôi qua.
+- "effort" — cần giờ CÔNG thực sự: rèn đồ, nghiên cứu, luyện tập, điều tra. Điền "duration" là tổng thời gian nhân vật phải NGỒI LÀM. Thời gian trôi qua trong lúc họ đi đường hay bận việc khác thì không tính.
+- "scheduled" — hẹn giờ cố định: cuộc họp, buổi lễ, hạn chót. Điền "duration" là khoảng cách từ bây giờ tới lúc đó.
+- "conditional" — chờ thứ khác xảy ra: chờ hồi âm, chờ nguyên liệu tới, chờ người khác ra tay. Điền "condition", bỏ trống "duration".
+
+Chọn sai kiểu thì việc sẽ xong sai lúc: một thanh kiếm cần 20 giờ rèn mà đặt "natural" sẽ tự xong sau 20 giờ dù thợ rèn đang đi xa.
+
 【DI CHUYỂN — QUY TẮC RIÊNG】
-Nếu nhân vật lên đường tới nơi khác, bạn phải ước lượng "etaRounds": còn bao nhiêu LƯỢT HỘI THOẠI nữa thì tới nơi.
+Nếu nhân vật lên đường tới nơi khác, ước lượng "duration": chuyến đi mất bao nhiêu THỜI GIAN TRUYỆN (ngày/giờ/phút), không phải bao nhiêu lượt hội thoại.
 
 Căn cứ để ước lượng:
 - Hai địa điểm cách nhau bao xa theo mô tả trong truyện.
 - Thế giới quan này đi lại bằng gì — đi bộ, ngựa, thuyền, xe, khinh công, phi kiếm, phi thuyền. Thế giới quan khác nhau thì cùng một quãng đường ra số lượt rất khác nhau.
 - Nhân vật có gấp gáp không, có phương tiện tốt không, đường có bị chặn không.
 
-Trong cùng một thành thì gần như không tốn thời gian di chuyển (etaRounds = 0). Khác thành thì phải có etaRounds > 0. Đi càng xa, số lượt càng lớn.
+Trong cùng một thành thì gần như không tốn thời gian. Khác thành thì phải có thời lượng thật: đi bộ trong thành vài chục phút, cưỡi ngựa liên thành vài giờ tới vài ngày, đi thuyền hay dịch trạm thì tuỳ tuyến. Đi càng xa, thời lượng càng lớn.
 
 Ghi rõ "travelMode" là phương tiện di chuyển.
 
@@ -65,8 +75,17 @@ Chỉ xuất một khối JSON hợp lệ, không kèm giải thích, không kè
       "visibility": "công khai / kín đáo / bí mật",
       "becameRumor": false,
       "rumorText": "nội dung tin đồn nếu becameRumor là true",
-      "move": { "to": ["quốc gia", "vùng", "thành", "địa điểm"], "etaRounds": 0, "travelMode": "phương tiện" },
-      "intent": { "action": "dự định sắp tới", "etaRounds": 0 },
+      "move": {
+        "to": ["quốc gia", "vùng", "thành", "địa điểm"],
+        "duration": { "days": 0, "hours": 0, "minutes": 0 },
+        "travelMode": "phương tiện"
+      },
+      "intent": {
+        "action": "dự định sắp tới",
+        "mode": "natural / effort / scheduled / conditional",
+        "duration": { "days": 0, "hours": 0, "minutes": 0 },
+        "condition": "chỉ điền khi mode là conditional"
+      },
       "knowledgeGained": [{ "fact": "điều mới biết", "source": "chứng kiến / nghe đồn / suy đoán", "certainty": "chắc chắn / ngờ vực / mơ hồ" }]
     }
   ]
@@ -91,7 +110,8 @@ Không nhân vật nào có hành động đáng kể thì trả "activities": [
     return 'Rất chủ động: nhân vật ráo riết hành động, cục diện chuyển biến nhanh.';
   }
 
-  function describeAbsentNpcs(npcs) {
+  function describeAbsentNpcs(npcs, nowMinutes) {
+    const now = Number(nowMinutes) || 0;
     const list = asArray(npcs);
     if (!list.length) return '(không có nhân vật nào vắng mặt cần suy diễn)';
 
@@ -99,7 +119,13 @@ Không nhân vật nào có hành động đáng kể thì trả "activities": [
       const lines = [`■ ${clean(npc.name)} — vị trí: ${describePath(npc.location?.path)}`];
 
       if (npc.location?.movingTo) {
-        lines.push(`  đang trên đường tới ${describePath(npc.location.movingTo)}, còn ${npc.location.etaRounds} lượt (${clean(npc.location.travelMode) || 'không rõ phương tiện'})`);
+        // Thời gian còn lại tính theo đồng hồ; dữ liệu cũ chưa có mốc thì mới rơi về đếm lượt.
+        const arriveAt = npc.location.arriveAt;
+        const helper = window.NPC_ENGINE_DATA;
+        const left = (arriveAt !== null && arriveAt !== undefined && helper)
+          ? `còn ${helper.describeDuration(arriveAt - now)}`
+          : `còn ${npc.location.etaRounds} lượt`;
+        lines.push(`  đang trên đường tới ${describePath(npc.location.movingTo)}, ${left} (${clean(npc.location.travelMode) || 'không rõ phương tiện'})`);
       }
       if (npc.faction?.name) {
         lines.push(`  thế lực: ${clean(npc.faction.name)}${npc.faction.role ? ' — ' + clean(npc.faction.role) : ''}${npc.faction.standing ? ' (' + clean(npc.faction.standing) + ')' : ''}`);
@@ -121,7 +147,8 @@ Không nhân vật nào có hành động đáng kể thì trả "activities": [
         } else if (intent.due) {
           lines.push(`  dự định ĐẾN HẠN, phải kết lại dứt điểm lượt này: ${clean(intent.action)}`);
         } else {
-          lines.push(`  dự định đang treo: ${clean(intent.action)} (còn ${intent.etaRounds || 0} lượt)`);
+          const detail = window.NPC_ENGINE_DATA?.describeSchedule?.(intent.schedule, now) || '';
+          lines.push(`  dự định đang treo: ${clean(intent.action)}${detail ? ' — ' + detail : ''}`);
         }
       }
 
@@ -196,7 +223,7 @@ Không nhân vật nào có hành động đáng kể thì trả "activities": [
     const scopeNote = skipped
       ? `\n\nCòn ${skipped} nhân vật vắng mặt khác lượt này KHÔNG cần suy diễn — họ giữ nguyên trạng thái. Đừng nhắc tới họ, cũng đừng bịa hoạt động cho họ.`
       : '';
-    sections.push(`【NHÂN VẬT VẮNG MẶT CẦN SUY DIỄN】\n${describeAbsentNpcs(opts.absentNpcs)}${scopeNote}`);
+    sections.push(`【NHÂN VẬT VẮNG MẶT CẦN SUY DIỄN】\n${describeAbsentNpcs(opts.absentNpcs, opts.nowMinutes)}${scopeNote}`);
 
     const limit = Math.max(0, parseInt(opts.maxActivities) || 0);
     if (limit > 0) {

@@ -38,7 +38,8 @@ window.NPC_ENGINE_DATA = (function() {
   // ========== Khuôn dữ liệu ==========
 
   function emptyLocation() {
-    return { path: [], movingTo: null, etaRounds: 0, travelMode: '', userBelievesAt: '', fogSince: null };
+    // arriveAt: mốc phút truyện mà nhân vật tới nơi. etaRounds giữ lại cho dữ liệu cũ.
+    return { path: [], movingTo: null, arriveAt: null, etaRounds: 0, travelMode: '', userBelievesAt: '', fogSince: null };
   }
 
   function newNpc(seed) {
@@ -101,6 +102,8 @@ window.NPC_ENGINE_DATA = (function() {
       // knowledge của từng NPC — không có nó thì không thể nói "nhân vật này CHƯA biết chuyện gì".
       publicFacts: [],
       lastStoryDay: null,
+      // Đồng hồ thế giới: trục thời gian duy nhất, tính bằng phút truyện kể từ đầu chat.
+      clock: { minutes: 0 },
       storyTime: { label: '', day: null, elapsedDays: null, source: 'none' },
       worldLink: { lastWorldRound: 0, lastDigest: '' }
     };
@@ -120,6 +123,7 @@ window.NPC_ENGINE_DATA = (function() {
     target.rumorQueue = asArray(target.rumorQueue);
     target.publicFacts = asArray(target.publicFacts);
     target.lastStoryDay = asLayer(target.lastStoryDay);
+    target.clock = { minutes: Math.max(0, parseInt(target.clock?.minutes) || 0) };
     const time = target.storyTime && typeof target.storyTime === 'object' ? target.storyTime : {};
     target.storyTime = { label: clean(time.label), day: asLayer(time.day), elapsedDays: asLayer(time.elapsedDays), source: clean(time.source) || 'none' };
     const scene = target.scene && typeof target.scene === 'object' && !Array.isArray(target.scene) ? target.scene : {};
@@ -402,6 +406,115 @@ window.NPC_ENGINE_DATA = (function() {
     return state.travelCache[travelKey(from, to)];
   }
 
+  // ========== Đồng hồ thế giới ==========
+  // Trục thời gian duy nhất, tính bằng PHÚT truyện kể từ đầu cuộc trò chuyện. Một lượt hội thoại
+  // không phải một đơn vị thời gian: nó chỉ là lúc quyết toán, còn đồng hồ nhích bao nhiêu là do
+  // chính văn quyết định. Đây là chỗ khác căn bản so với bản cũ đếm bằng "còn N lượt".
+  const MINUTES_PER_DAY = 24 * 60;
+
+  function advanceClock(state, minutes) {
+    const step = Math.max(0, Math.round(Number(minutes) || 0));
+    state.clock = { minutes: Math.max(0, (parseInt(state.clock?.minutes) || 0) + step) };
+    return state.clock.minutes;
+  }
+
+  function clockMinutes(state) {
+    return Math.max(0, parseInt(state.clock?.minutes) || 0);
+  }
+
+  function formatClock(minutes) {
+    const total = Math.max(0, Math.round(Number(minutes) || 0));
+    const day = Math.floor(total / MINUTES_PER_DAY) + 1;
+    const rest = total % MINUTES_PER_DAY;
+    const hour = String(Math.floor(rest / 60)).padStart(2, '0');
+    const minute = String(rest % 60).padStart(2, '0');
+    return `Ngày ${day}, ${hour}:${minute}`;
+  }
+
+  // Quy khoảng thời gian ra phút. Nhận cả ba đơn vị để mô hình muốn báo kiểu nào cũng được.
+  function toMinutes(elapsed) {
+    if (!elapsed || typeof elapsed !== 'object') return null;
+    const days = Number(elapsed.days);
+    const hours = Number(elapsed.hours);
+    const minutes = Number(elapsed.minutes);
+    const parts = [days, hours, minutes].filter(Number.isFinite);
+    if (!parts.length) return null;
+    return Math.max(0, Math.round(
+      (Number.isFinite(days) ? days : 0) * MINUTES_PER_DAY
+      + (Number.isFinite(hours) ? hours : 0) * 60
+      + (Number.isFinite(minutes) ? minutes : 0)
+    ));
+  }
+
+  function describeDuration(minutes) {
+    const total = Math.max(0, Math.round(Number(minutes) || 0));
+    if (total < 1) return 'gần như chưa nhích';
+    if (total < 60) return `${total} phút`;
+    if (total < MINUTES_PER_DAY) {
+      const hours = Math.floor(total / 60);
+      const rest = total % 60;
+      return rest ? `${hours} giờ ${rest} phút` : `${hours} giờ`;
+    }
+    const days = Math.floor(total / MINUTES_PER_DAY);
+    const hours = Math.floor((total % MINUTES_PER_DAY) / 60);
+    return hours ? `${days} ngày ${hours} giờ` : `${days} ngày`;
+  }
+
+  // ========== Bốn kiểu hẹn ==========
+  // Không phải việc gì cũng tiến theo cùng một cách. Rèn một thanh kiếm cần 20 giờ NGỒI RÈN, chứ
+  // không phải 20 giờ trôi qua; một cuộc hẹn thì tới đúng giờ mới xảy ra; chờ hồi âm thì không có
+  // hạn nào cả. Bản cũ quy tất cả về "còn N lượt" nên cái nào cũng sai theo kiểu riêng của nó.
+  const SCHEDULE_MODES = ['natural', 'effort', 'scheduled', 'conditional'];
+
+  function newSchedule(seed) {
+    const source = seed || {};
+    const mode = SCHEDULE_MODES.includes(source.mode) ? source.mode : 'natural';
+    return {
+      mode,
+      dueAt: asLayer(source.dueAt),              // natural + scheduled: mốc phút truyện phải tới
+      needMinutes: Math.max(0, parseInt(source.needMinutes) || 0),   // effort: tổng công cần bỏ ra
+      doneMinutes: Math.max(0, parseInt(source.doneMinutes) || 0),   // effort: đã bỏ ra bao nhiêu
+      condition: clean(source.condition)          // conditional: đợi điều gì
+    };
+  }
+
+  // Một việc đã tới lúc phải kết chưa?
+  function isScheduleDue(schedule, nowMinutes) {
+    if (!schedule) return false;
+    switch (schedule.mode) {
+      case 'effort':
+        return schedule.needMinutes > 0 && schedule.doneMinutes >= schedule.needMinutes;
+      case 'conditional':
+        return false;   // chỉ kết khi mô hình báo điều kiện đã xảy ra
+      case 'scheduled':
+      case 'natural':
+      default:
+        return schedule.dueAt !== null && nowMinutes >= schedule.dueAt;
+    }
+  }
+
+  function describeSchedule(schedule, nowMinutes) {
+    if (!schedule) return '';
+    switch (schedule.mode) {
+      case 'effort': {
+        const left = Math.max(0, schedule.needMinutes - schedule.doneMinutes);
+        // describeDuration(0) trả "gần như chưa nhích", đọc lạc nghĩa trong ngữ cảnh này.
+        const done = schedule.doneMinutes > 0 ? describeDuration(schedule.doneMinutes) : 'chưa bắt đầu';
+        return `cần bỏ công thêm ${describeDuration(left)} (đã làm ${done} / cần ${describeDuration(schedule.needMinutes)})`;
+      }
+      case 'scheduled':
+        return schedule.dueAt === null ? 'hẹn giờ chưa rõ' : `hẹn lúc ${formatClock(schedule.dueAt)}`;
+      case 'conditional':
+        return schedule.condition ? `chờ điều kiện: ${schedule.condition}` : 'chờ điều kiện chưa rõ';
+      case 'natural':
+      default: {
+        if (schedule.dueAt === null) return 'chưa rõ hạn';
+        const left = schedule.dueAt - nowMinutes;
+        return left <= 0 ? 'đã tới hạn' : `còn ${describeDuration(left)}`;
+      }
+    }
+  }
+
   // ========== Dự định đang treo ==========
   // Dự định cũng phải đếm ngược như hành trình. Trước đây nó chỉ được đặt vào rồi đưa vào prompt
   // mỗi lượt mà không bao giờ trừ hay hết hạn, nên một dự định kiểu "đi ăn ngay hôm nay" vẫn được
@@ -409,53 +522,83 @@ window.NPC_ENGINE_DATA = (function() {
   //
   // Vòng đời: còn hạn → đến hạn (phải xử lý dứt điểm trong lượt này) → quá hạn thì bỏ.
   // Cho đúng một lượt ở trạng thái "đến hạn" để mô hình có cơ hội kết lại, không thì treo mãi.
-  function tickIntents(state, storyDay) {
+  // Đếm theo ĐỒNG HỒ, không theo lượt. elapsedMinutes là thời gian truyện vừa trôi qua ở lượt này;
+  // workedMinutes là phần trong đó nhân vật thực sự bỏ công (chỉ dùng cho kiểu 'effort').
+  //
+  // Đường lui: không đọc được thời gian thì elapsedMinutes null, lúc đó vẫn trừ một bước mặc định
+  // để mọi thứ không đứng im vĩnh viễn — thà ước lượng thô còn hơn treo mãi.
+  function tickIntents(state, elapsedMinutes, options) {
     const due = [], expired = [];
-    const today = Number.isFinite(Number(storyDay)) ? Number(storyDay) : null;
+    const now = clockMinutes(state);
+    // asLayer chứ không phải Number.isFinite(Number(v)): Number(null) === 0 nên bản viết thẳng sẽ
+    // coi "không biết" thành "không trôi phút nào" và bước lui không bao giờ chạy.
+    const reported = asLayer(elapsedMinutes);
+    const elapsed = reported !== null
+      ? Math.max(0, Math.round(reported))
+      : Math.max(0, parseInt(options?.fallbackMinutes) || 0);
 
     for (const npc of state.npcs) {
       const intent = npc.pendingIntent;
       if (!intent || !clean(intent.action)) continue;
+      intent.schedule = newSchedule(intent.schedule);
 
-      const eta = Math.max(0, parseInt(intent.etaRounds) || 0);
-      if (eta > 0) { intent.etaRounds = eta - 1; continue; }
+      // Kiểu 'effort' chỉ tiến khi nhân vật thực sự ngồi làm. Mặc định coi như họ có làm, trừ khi
+      // đang đi đường — không ai vừa cưỡi ngựa vừa rèn kiếm được.
+      if (intent.schedule.mode === 'effort') {
+        const busyTravelling = npc.location?.movingTo && (npc.location.arriveAt ?? null) !== null;
+        if (!busyTravelling) intent.schedule.doneMinutes += elapsed;
+      }
 
       // Đã ở trạng thái đến hạn từ lượt trước mà vẫn còn đây: mô hình không kết, bỏ đi.
       if (intent.due === true) { npc.pendingIntent = null; expired.push(npc.id); continue; }
 
-      intent.due = true;
-      intent.etaRounds = 0;
-      due.push(npc.id);
-    }
+      if (isScheduleDue(intent.schedule, now)) {
+        intent.due = true;
+        due.push(npc.id);
+        continue;
+      }
 
-    // Thời gian truyện nhảy xa thì mọi dự định ngắn hạn đều lỗi thời, kể cả cái chưa tới hạn đếm.
-    if (today !== null) {
-      for (const npc of state.npcs) {
-        const intent = npc.pendingIntent;
-        const bornDay = Number(intent?.storyDay);
-        if (!intent || !Number.isFinite(bornDay)) continue;
-        if (today - bornDay >= 1 && !intent.due) { intent.due = true; intent.staleByTime = true; due.push(npc.id); }
+      // Việc ngắn hạn mà thời gian đã trôi qua xa hơn hẳn thì lỗi thời, dù chưa tới mốc hẹn.
+      // Ngưỡng một ngày: một dự định "hôm nay" mà đã sang ngày khác thì nó đã kết thúc rồi.
+      const bornAt = asLayer(intent.bornAt);
+      if (bornAt !== null && intent.schedule.mode !== 'conditional'
+          && now - bornAt >= MINUTES_PER_DAY && !intent.due) {
+        intent.due = true;
+        intent.staleByTime = true;
+        due.push(npc.id);
       }
     }
 
-    return { due: unique(due), expired: unique(expired) };
+    return { due: unique(due), expired: unique(expired), elapsed };
   }
 
   // Trừ dần mỗi lượt. Engine chỉ đếm, không tự phán đoán địa lý — việc đó do AI làm một lần khi
   // hành trình bắt đầu (xem npc-engine-offscreen.js).
+  // Hành trình cũng chạy theo đồng hồ: arriveAt là mốc phút truyện mà nhân vật tới nơi.
+  // Giữ đường lui cho dữ liệu cũ còn dùng etaRounds — trừ dần một bước mỗi lượt như trước.
   function tickTravel(state) {
     const arrived = [];
+    const now = clockMinutes(state);
+
     for (const npc of state.npcs) {
       const location = npc.location;
-      if (!location.movingTo || location.etaRounds <= 0) continue;
-      location.etaRounds -= 1;
-      if (location.etaRounds <= 0) {
-        location.path = asArray(location.movingTo).length ? clone(location.movingTo) : location.path;
-        location.movingTo = null;
-        location.etaRounds = 0;
-        location.travelMode = '';
-        arrived.push(npc.id);
+      if (!location.movingTo) continue;
+
+      const arriveAt = asLayer(location.arriveAt);
+      if (arriveAt !== null) {
+        if (now < arriveAt) continue;
+      } else {
+        // Dữ liệu cũ: không có mốc thời gian, đếm lượt như bản trước.
+        const eta = Math.max(0, parseInt(location.etaRounds) || 0);
+        if (eta > 1) { location.etaRounds = eta - 1; continue; }
       }
+
+      location.path = asArray(location.movingTo).length ? clone(location.movingTo) : location.path;
+      location.movingTo = null;
+      location.arriveAt = null;
+      location.etaRounds = 0;
+      location.travelMode = '';
+      arrived.push(npc.id);
     }
     return arrived;
   }
@@ -489,6 +632,16 @@ window.NPC_ENGINE_DATA = (function() {
     getTravel,
     setTravel,
     tickTravel,
-    tickIntents
+    tickIntents,
+    MINUTES_PER_DAY,
+    SCHEDULE_MODES,
+    advanceClock,
+    clockMinutes,
+    formatClock,
+    toMinutes,
+    describeDuration,
+    newSchedule,
+    isScheduleDue,
+    describeSchedule
   };
 })();

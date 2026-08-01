@@ -392,9 +392,11 @@ const baseSettings = () => config.getSettings(true);
   time = engine.readStoryTime(state, { time: { label: 'sáng hôm sau', elapsedDays: 1 } });
   check('cộng dồn tiếp qua nhiều lượt', time.day === 4 && time.elapsed === 1);
 
-  // Mô hình không trả gì thì không suy đoán bừa.
-  time = engine.readStoryTime(state, {});
-  check('mô hình im lặng thì không có số liệu', time.elapsed === null && time.source === 'none');
+  // Mô hình không trả gì thì đánh dấu rõ là không có nguồn, nhưng đồng hồ vẫn phải nhích một bước
+  // mặc định — đứng im vĩnh viễn thì mọi lịch hẹn treo mãi, tệ hơn là ước lượng thô.
+  time = engine.readStoryTime(state, {}, { fallbackMinutesPerTurn: 20 });
+  check('mô hình im lặng thì đánh dấu không có nguồn', time.source === 'none');
+  check('nhưng đồng hồ vẫn nhích theo bước lui', time.elapsedMinutes === 20);
 
   // Có cấu hình regex thì ưu tiên nó, vì tất định hơn.
   const withRegex = data.defaultState();
@@ -424,8 +426,8 @@ const baseSettings = () => config.getSettings(true);
 
   const extract = global.NPC_ENGINE_PROMPT.SYSTEM_PROMPT;
   check('prompt trích xuất đòi đọc thời gian', extract.includes('ĐỌC THỜI GIAN'));
-  check('prompt trích xuất có trường elapsedDays', extract.includes('elapsedDays'));
-  check('nêu ví dụ quy đổi cụ thể', extract.includes('"Ba ngày sau" ghi 3'));
+  check('prompt trích xuất xin cả ngày giờ phút', extract.includes('"elapsed": { "days": 0, "hours": 0, "minutes": 0 }'));
+  check('nêu ví dụ quy đổi cụ thể', extract.includes('Nửa giờ sau'));
   check('không có căn cứ thì cấm bịa', extract.includes('đừng bịa'));
 
   // Mô hình cần biết mốc của lượt trước mới tính được chênh lệch.
@@ -608,7 +610,13 @@ const baseSettings = () => config.getSettings(true);
   check('prompt hoạt động ngầm là chuỗi', typeof offscreen === 'string');
   check('prompt hoạt động ngầm nêu thế giới quan', offscreen.includes('tu tiên'));
   check('prompt hoạt động ngầm dịch mức chủ động thành lời', offscreen.includes('Vừa phải'));
-  check('prompt hoạt động ngầm đòi ước lượng số lượt', offscreen.includes('etaRounds'));
+  check('prompt hoạt động ngầm đòi ước lượng thời lượng chuyến đi',
+    offscreen.includes('"duration": { "days": 0, "hours": 0, "minutes": 0 }'));
+  // Bốn kiểu hẹn: chọn sai kiểu thì việc xong sai lúc.
+  check('prompt nêu đủ bốn kiểu hẹn',
+    ['natural', 'effort', 'scheduled', 'conditional'].every(mode => offscreen.includes(`"${mode}"`)));
+  check('prompt giải thích vì sao chọn sai kiểu là hỏng',
+    offscreen.includes('dù thợ rèn đang đi xa'));
 
   // Lỗi người dùng báo: dự định "ngay hôm nay" bị viết tiếp sau khi truyện đã nhảy ba ngày.
   // Mô hình cần biết đã trôi qua bao lâu GIỮA HAI LƯỢT, không chỉ tổng số ngày từ đầu truyện.

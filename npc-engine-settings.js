@@ -50,6 +50,7 @@ window.NPC_ENGINE_SETTINGS = (function() {
     // ===== Di chuyển =====
     worldScale: 'auto',
     travelCacheEnabled: true,
+    fallbackMinutesPerTurn: 20,
 
     // ===== Nối với Công Cụ Thế Giới =====
     npcLinkEnabled: true,
@@ -115,6 +116,7 @@ window.NPC_ENGINE_SETTINGS = (function() {
 
       worldScale: pick(merged.worldScale, WORLD_SCALES, DEFAULTS.worldScale),
       worldEngineNpcLimit: clampInt(merged.worldEngineNpcLimit, 0, 50, DEFAULTS.worldEngineNpcLimit),
+      fallbackMinutesPerTurn: clampInt(merged.fallbackMinutesPerTurn, 0, 10080, DEFAULTS.fallbackMinutesPerTurn),
 
       backfillBatchSize: clampInt(merged.backfillBatchSize, 1, 50, DEFAULTS.backfillBatchSize),
       backfillRetries: clampInt(merged.backfillRetries, 0, 10, DEFAULTS.backfillRetries),

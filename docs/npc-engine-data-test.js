@@ -252,28 +252,96 @@ function check(label, condition) {
   check('đếm thêm lượt nữa không đổi gì', data.tickTravel(state).length === 0);
 }
 
-// ===== Dự định đang treo phải đếm ngược và hết hạn =====
-// Lỗi người dùng báo: NPC rủ nhau đi ăn "ngay hôm nay", ba ngày sau truyện vẫn viết cảnh họ đang
-// ăn. Nguyên nhân là pendingIntent chỉ được đặt vào và đưa vào prompt mỗi lượt, không bao giờ
-// bị trừ hay hết hạn — mô hình đọc thấy dòng đó thì viết tiếp cảnh đó.
+// ===== Đồng hồ thế giới =====
+// Trục thời gian duy nhất, tính bằng phút truyện. Một lượt hội thoại không phải một đơn vị thời
+// gian: nó chỉ là lúc quyết toán, còn đồng hồ nhích bao nhiêu là do chính văn quyết định.
+{
+  const state = data.defaultState();
+  check('đồng hồ khởi đầu ở 0', data.clockMinutes(state) === 0);
+
+  data.advanceClock(state, 90);
+  check('nhích được theo phút', data.clockMinutes(state) === 90);
+  data.advanceClock(state, 0);
+  check('nhích 0 thì đứng yên', data.clockMinutes(state) === 90);
+  data.advanceClock(state, -50);
+  check('không lùi được về quá khứ', data.clockMinutes(state) === 90);
+
+  check('hiển thị ngày giờ đọc được', data.formatClock(0) === 'Ngày 1, 00:00');
+  check('đổi ngày đúng mốc', data.formatClock(data.MINUTES_PER_DAY) === 'Ngày 2, 00:00');
+  check('hiển thị giờ phút đúng', data.formatClock(14 * 60 + 30) === 'Ngày 1, 14:30');
+
+  // Quy đổi khoảng thời gian: nhận cả ba đơn vị để mô hình báo kiểu nào cũng được.
+  check('quy đổi ngày', data.toMinutes({ days: 3 }) === 3 * data.MINUTES_PER_DAY);
+  check('quy đổi giờ và phút', data.toMinutes({ hours: 2, minutes: 30 }) === 150);
+  check('quy đổi hỗn hợp', data.toMinutes({ days: 1, hours: 1 }) === data.MINUTES_PER_DAY + 60);
+  check('không có số liệu thì trả null', data.toMinutes({}) === null);
+  check('không phải đối tượng thì trả null', data.toMinutes(null) === null);
+
+  check('mô tả khoảng ngắn', data.describeDuration(25) === '25 phút');
+  check('mô tả khoảng vài giờ', data.describeDuration(150) === '2 giờ 30 phút');
+  check('mô tả khoảng nhiều ngày', data.describeDuration(3 * data.MINUTES_PER_DAY) === '3 ngày');
+  check('mô tả khoảng gần như không nhích', data.describeDuration(0) === 'gần như chưa nhích');
+}
+
+// ===== Bốn kiểu hẹn =====
+// Không phải việc gì cũng tiến theo cùng một cách. Rèn kiếm cần giờ NGỒI RÈN chứ không phải giờ
+// trôi qua; cuộc hẹn thì tới đúng giờ mới xảy ra; chờ hồi âm thì không có hạn nào cả.
+{
+  const now = 1000;
+
+  const natural = data.newSchedule({ mode: 'natural', dueAt: now + 120 });
+  check('trôi tự nhiên: chưa tới hạn thì chưa đến', !data.isScheduleDue(natural, now));
+  check('trôi tự nhiên: qua mốc thì đến hạn', data.isScheduleDue(natural, now + 120));
+
+  const effort = data.newSchedule({ mode: 'effort', needMinutes: 300, doneMinutes: 100 });
+  check('giờ công: chưa đủ công thì chưa xong', !data.isScheduleDue(effort, now + 99999));
+  effort.doneMinutes = 300;
+  check('giờ công: đủ công thì xong, bất kể đồng hồ', data.isScheduleDue(effort, 0));
+
+  const scheduled = data.newSchedule({ mode: 'scheduled', dueAt: 5000 });
+  check('hẹn giờ: chưa tới giờ thì chưa xảy ra', !data.isScheduleDue(scheduled, 4999));
+  check('hẹn giờ: tới giờ thì xảy ra', data.isScheduleDue(scheduled, 5000));
+
+  const conditional = data.newSchedule({ mode: 'conditional', condition: 'chờ hồi âm' });
+  check('chờ điều kiện: không bao giờ tự đến hạn', !data.isScheduleDue(conditional, 999999));
+
+  check('kiểu lạ thì quy về trôi tự nhiên', data.newSchedule({ mode: 'bịa' }).mode === 'natural');
+
+  // Mô tả phải nói rõ còn thiếu gì, để nhìn vào hồ sơ là hiểu.
+  check('mô tả giờ công nêu phần còn thiếu',
+    data.describeSchedule(data.newSchedule({ mode: 'effort', needMinutes: 300, doneMinutes: 60 }), now)
+      .includes('cần bỏ công thêm 4 giờ'));
+  check('mô tả giờ công khi chưa bắt đầu thì nói rõ',
+    data.describeSchedule(data.newSchedule({ mode: 'effort', needMinutes: 300 }), now).includes('chưa bắt đầu'));
+  check('mô tả trôi tự nhiên nêu thời gian còn lại',
+    data.describeSchedule(natural, now).includes('còn 2 giờ'));
+  check('mô tả chờ điều kiện nêu điều kiện',
+    data.describeSchedule(conditional, now).includes('chờ hồi âm'));
+}
+
+// ===== Dự định chạy theo đồng hồ, không theo lượt =====
 {
   const state = data.defaultState();
   const npc = data.upsertNpc(state, { name: 'NPC A', tier: 'core' });
-  npc.pendingIntent = { action: 'Đi ăn lòng nướng', etaRounds: 2, layer: 5, storyDay: 3 };
+  data.advanceClock(state, 600);   // 10 giờ truyện đã trôi
 
-  data.tickIntents(state, 3);
-  check('còn hạn thì trừ dần', npc.pendingIntent.etaRounds === 1);
-  check('chưa tới hạn thì chưa đánh dấu', !npc.pendingIntent.due);
+  npc.pendingIntent = {
+    action: 'Đi ăn lòng nướng',
+    schedule: data.newSchedule({ mode: 'natural', dueAt: 600 + 120 }),
+    bornAt: 600
+  };
 
-  data.tickIntents(state, 3);
-  check('trừ tiếp về 0', npc.pendingIntent.etaRounds === 0);
+  data.advanceClock(state, 60);
+  let result = data.tickIntents(state, 60);
+  check('chưa tới hạn thì chưa đánh dấu', !npc.pendingIntent.due && !result.due.length);
 
-  const due = data.tickIntents(state, 3);
-  check('hết lượt thì đánh dấu đến hạn', npc.pendingIntent.due === true);
-  check('báo cáo danh sách đến hạn', due.due.includes(npc.id));
+  data.advanceClock(state, 60);
+  result = data.tickIntents(state, 60);
+  check('tới hạn thì đánh dấu đến hạn', npc.pendingIntent.due === true);
+  check('báo cáo danh sách đến hạn', result.due.includes(npc.id));
 
-  // Cho đúng một lượt ở trạng thái đến hạn để mô hình kết lại; không kết thì bỏ.
-  const expired = data.tickIntents(state, 3);
+  // Cho đúng một lượt để mô hình kết lại; không kết thì bỏ.
+  const expired = data.tickIntents(state, 30);
   check('đến hạn mà không được kết thì bị bỏ', npc.pendingIntent === null);
   check('báo cáo danh sách quá hạn', expired.expired.includes(npc.id));
 }
@@ -282,28 +350,106 @@ function check(label, condition) {
 {
   const state = data.defaultState();
   const npc = data.upsertNpc(state, { name: 'NPC A', tier: 'core' });
-  // Dự định còn tận 5 lượt nữa mới tới hạn đếm, nhưng truyện đã sang ngày khác.
-  npc.pendingIntent = { action: 'Rủ NPC B đi ăn ngay hôm nay', etaRounds: 5, layer: 5, storyDay: 3 };
+  data.advanceClock(state, 500);
 
-  data.tickIntents(state, 6);
-  check('nhảy ngày thì đánh dấu lỗi thời dù còn hạn đếm', npc.pendingIntent.staleByTime === true);
+  // Hẹn tận một tuần nữa, nhưng đây là việc "hôm nay" — truyện nhảy qua ngày là nó hết ý nghĩa.
+  npc.pendingIntent = {
+    action: 'Rủ NPC B đi ăn ngay hôm nay',
+    schedule: data.newSchedule({ mode: 'natural', dueAt: 500 + 7 * data.MINUTES_PER_DAY }),
+    bornAt: 500
+  };
+
+  data.advanceClock(state, 3 * data.MINUTES_PER_DAY);
+  data.tickIntents(state, 3 * data.MINUTES_PER_DAY);
+  check('nhảy ngày thì đánh dấu lỗi thời dù chưa tới hạn hẹn', npc.pendingIntent.staleByTime === true);
   check('lỗi thời cũng tính là đến hạn', npc.pendingIntent.due === true);
 
   // Cùng ngày thì không đụng tới.
   const same = data.defaultState();
   const other = data.upsertNpc(same, { name: 'NPC C', tier: 'core' });
-  other.pendingIntent = { action: 'Việc trong ngày', etaRounds: 3, layer: 5, storyDay: 4 };
-  data.tickIntents(same, 4);
+  data.advanceClock(same, 400);
+  other.pendingIntent = {
+    action: 'Việc trong ngày',
+    schedule: data.newSchedule({ mode: 'natural', dueAt: 400 + 600 }),
+    bornAt: 400
+  };
+  data.advanceClock(same, 120);
+  data.tickIntents(same, 120);
   check('cùng ngày thì không đánh dấu lỗi thời', !other.pendingIntent.staleByTime);
-  check('cùng ngày thì vẫn trừ bình thường', other.pendingIntent.etaRounds === 2);
-
-  // Không parse được ngày truyện thì chỉ đếm theo lượt, không suy đoán bừa.
-  const noDay = data.defaultState();
-  const third = data.upsertNpc(noDay, { name: 'NPC D', tier: 'core' });
-  third.pendingIntent = { action: 'Việc gì đó', etaRounds: 2, layer: 5, storyDay: 3 };
-  data.tickIntents(noDay, null);
-  check('không có ngày truyện thì không đánh dấu lỗi thời', !third.pendingIntent.staleByTime);
+  check('cùng ngày thì vẫn treo bình thường', other.pendingIntent.due !== true);
 }
+
+// ===== Giờ công chỉ tiến khi nhân vật thực sự làm =====
+{
+  const state = data.defaultState();
+  const npc = data.upsertNpc(state, { name: 'Thợ Rèn', tier: 'core' });
+  npc.pendingIntent = {
+    action: 'Rèn Đoạn Triều Kiếm',
+    schedule: data.newSchedule({ mode: 'effort', needMinutes: 600 }),
+    bornAt: 0
+  };
+
+  data.tickIntents(state, 240);
+  check('đang ở nhà thì công được cộng', npc.pendingIntent.schedule.doneMinutes === 240);
+
+  // Lên đường thì không rèn được nữa.
+  npc.location.movingTo = ['Đại Chu', 'Quan Trung', 'Trường An'];
+  npc.location.arriveAt = 99999;
+  data.tickIntents(state, 300);
+  check('đang đi đường thì không cộng công', npc.pendingIntent.schedule.doneMinutes === 240);
+
+  // Về tới nơi thì làm tiếp.
+  npc.location.movingTo = null;
+  npc.location.arriveAt = null;
+  data.tickIntents(state, 400);
+  check('về tới nơi thì làm tiếp', npc.pendingIntent.schedule.doneMinutes === 640);
+  check('đủ công thì đến hạn', npc.pendingIntent.due === true);
+}
+
+// ===== Hành trình chạy theo đồng hồ =====
+{
+  const state = data.defaultState();
+  const npc = data.upsertNpc(state, { name: 'Lý Mộ Bạch', tier: 'core' });
+  npc.location.path = ['Đại Chu', 'Giang Nam', 'Dương Châu'];
+  npc.location.movingTo = ['Đại Chu', 'Quan Trung', 'Trường An'];
+  npc.location.arriveAt = 12 * 60;    // 12 giờ đường
+
+  data.advanceClock(state, 5 * 60);
+  check('chưa tới giờ thì chưa tới nơi', data.tickTravel(state).length === 0);
+  check('vị trí chưa đổi', npc.location.path[2] === 'Dương Châu');
+
+  data.advanceClock(state, 7 * 60);
+  check('đủ giờ thì tới nơi', data.tickTravel(state).includes(npc.id));
+  check('vị trí cập nhật thành đích', npc.location.path[2] === 'Trường An');
+  check('xoá mốc tới nơi', npc.location.arriveAt === null);
+
+  // Dữ liệu cũ còn dùng etaRounds thì vẫn đếm lượt như trước.
+  const legacy = data.defaultState();
+  const old = data.upsertNpc(legacy, { name: 'Người Cũ', tier: 'core' });
+  old.location.path = ['A'];
+  old.location.movingTo = ['B'];
+  old.location.etaRounds = 2;
+  old.location.arriveAt = null;
+  check('dữ liệu cũ: lượt đầu chưa tới', data.tickTravel(legacy).length === 0);
+  check('dữ liệu cũ: trừ dần', old.location.etaRounds === 1);
+  check('dữ liệu cũ: lượt sau thì tới', data.tickTravel(legacy).includes(old.id));
+}
+
+// ===== Đường lui khi không đọc được thời gian =====
+{
+  const state = data.defaultState();
+  const npc = data.upsertNpc(state, { name: 'NPC A', tier: 'core' });
+  npc.pendingIntent = {
+    action: 'Việc gì đó',
+    schedule: data.newSchedule({ mode: 'effort', needMinutes: 100 }),
+    bornAt: 0
+  };
+  // elapsedMinutes null: không có căn cứ nào từ chính văn.
+  const result = data.tickIntents(state, null, { fallbackMinutes: 20 });
+  check('không đọc được thời gian thì vẫn nhích một bước mặc định', result.elapsed === 20);
+  check('công vẫn được cộng theo bước mặc định', npc.pendingIntent.schedule.doneMinutes === 20);
+}
+
 
 // ===== Bộ nhớ đệm hành trình =====
 {

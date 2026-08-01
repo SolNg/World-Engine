@@ -281,10 +281,19 @@ window.NPC_ENGINE = (function() {
 
       const destination = asArray(activity.move?.to).map(clean).filter(Boolean);
       if (destination.length) {
-        const eta = Math.max(0, parseInt(activity.move.etaRounds) || 0);
         const travelMode = clean(activity.move.travelMode);
-        if (eta > 0) {
+        // Ưu tiên thời lượng theo đồng hồ; etaRounds chỉ còn là đường lui cho phản hồi kiểu cũ.
+        const travelMinutes = data().toMinutes(activity.move.duration);
+        const eta = Math.max(0, parseInt(activity.move.etaRounds) || 0);
+        if (travelMinutes !== null && travelMinutes > 0) {
           npc.location.movingTo = destination;
+          npc.location.arriveAt = data().clockMinutes(state) + travelMinutes;
+          npc.location.etaRounds = 0;
+          npc.location.travelMode = travelMode;
+          if (!npc.location.fogSince) npc.location.fogSince = currentLayer;
+        } else if (eta > 0) {
+          npc.location.movingTo = destination;
+          npc.location.arriveAt = null;
           npc.location.etaRounds = eta;
           npc.location.travelMode = travelMode;
           // Người chơi không đi cùng thì không biết nhân vật đã rời đi — sương mù bắt đầu từ đây.
@@ -305,11 +314,20 @@ window.NPC_ENGINE = (function() {
       }
 
       if (activity.intent?.action) {
+        // Lịch hẹn theo đồng hồ thế giới, bốn kiểu tuỳ bản chất công việc.
+        const now = data().clockMinutes(state);
+        const need = data().toMinutes(activity.intent.duration);
+        const mode = data().SCHEDULE_MODES.includes(activity.intent.mode) ? activity.intent.mode : 'natural';
         npc.pendingIntent = {
           action: clean(activity.intent.action),
-          etaRounds: Math.max(0, parseInt(activity.intent.etaRounds) || 0),
-          layer: currentLayer,
-          storyDay: asLayer(core()?.getLastStoryDay?.())
+          schedule: data().newSchedule({
+            mode,
+            dueAt: (mode === 'natural' || mode === 'scheduled') && need !== null ? now + need : null,
+            needMinutes: mode === 'effort' ? (need || 0) : 0,
+            condition: clean(activity.intent.condition)
+          }),
+          bornAt: now,
+          layer: currentLayer
         };
       }
 
@@ -690,7 +708,6 @@ window.NPC_ENGINE = (function() {
         lastDigest: clean(payload?.worldDigest)
       };
 
-      const arrived = data().tickTravel(state);
       const previousTime = state.storyTime || {};
 
       // Sổ Tay Thế Giới: các mục người dùng đã chọn ở tab Worldbook, phạm vi lưu riêng của engine này.
@@ -719,10 +736,13 @@ window.NPC_ENGINE = (function() {
       const acknowledged = acknowledgeFacts(state, extraction?.acknowledgedFacts);
 
       // Đọc thời gian PHẢI làm sau trích xuất, vì chính mô hình là thứ đọc ra nó từ chính văn.
-      const time = readStoryTime(state, extraction);
+      // Đây cũng là chỗ duy nhất làm đồng hồ thế giới nhích lên.
+      const time = readStoryTime(state, extraction, st);
 
-      // Đếm ngược dự định đang treo: còn hạn → đến hạn → quá hạn thì bỏ.
-      const intents = data().tickIntents(state, time.day);
+      // Hành trình và lịch hẹn đều chạy theo đồng hồ, nên phải đếm SAU khi đồng hồ đã nhích.
+      const arrived = data().tickTravel(state);
+      const intents = data().tickIntents(state, time.elapsedMinutes,
+        { fallbackMinutes: st.fallbackMinutesPerTurn });
 
       // --- Pha 2: hoạt động ngầm cho NPC trọng yếu đang vắng mặt ---
       let offscreen = { acted: [], rumors: [], moves: [] };
@@ -752,6 +772,9 @@ window.NPC_ENGINE = (function() {
           travelCache: state.travelCache,
           worldScale: st.worldScale,
           elapsedDays: time.elapsed,
+          elapsedMinutes: time.elapsedMinutes,
+          clockLabel: data().formatClock(time.nowMinutes),
+          nowMinutes: time.nowMinutes,
           timeLabel: time.label,
           previousTimeLabel: previousTime.label,
           dueIntentIds: intents.due,
@@ -1098,33 +1121,48 @@ window.NPC_ENGINE = (function() {
   // giống vậy — engine đã gửi nguyên văn hội thoại đi rồi, hỏi luôn là xong.
   //
   // Thứ tự ưu tiên: bộ parse theo regex nếu người dùng có cấu hình (tất định), sau đó tới mô hình.
-  function readStoryTime(state, extraction) {
+  function readStoryTime(state, extraction, st) {
     const parsedDay = core()?.getLastStoryDay?.();
     const reported = extraction?.time || {};
     const label = clean(reported.label);
-    const modelElapsed = Number(reported.elapsedDays);
-    const hasModelElapsed = Number.isFinite(modelElapsed) && modelElapsed >= 0;
     const previousDay = asLayer(state.lastStoryDay);
 
-    let day = asLayer(parsedDay);
-    let elapsed = null;
-    let source = 'none';
+    // Mô hình báo ngày/giờ/phút; bản cũ chỉ có elapsedDays nên vẫn đọc được.
+    let elapsedMinutes = data().toMinutes(reported.elapsed);
+    if (elapsedMinutes === null && Number.isFinite(Number(reported.elapsedDays))) {
+      elapsedMinutes = Math.max(0, Math.round(Number(reported.elapsedDays))) * data().MINUTES_PER_DAY;
+    }
 
+    let day = asLayer(parsedDay);
+    let source = elapsedMinutes === null ? 'none' : 'model';
+
+    // Bộ parse theo regex của Công Cụ Thế Giới tất định hơn, nên nó thắng khi có cấu hình.
     if (day !== null && previousDay !== null) {
-      elapsed = Math.max(0, day - previousDay);
+      elapsedMinutes = Math.max(0, day - previousDay) * data().MINUTES_PER_DAY;
       source = 'regex';
-    } else if (hasModelElapsed) {
-      elapsed = Math.max(0, Math.round(modelElapsed));
-      source = 'model';
-      // Không cấu hình regex thì tự cộng dồn một bộ đếm ngày dựa trên báo cáo của mô hình.
-      if (day === null) day = (previousDay ?? 0) + elapsed;
     } else if (day !== null) {
       source = 'regex';
     }
 
-    if (day !== null) state.lastStoryDay = day;
-    state.storyTime = { label, day, elapsedDays: elapsed, source };
-    return { day, elapsed, label, source };
+    // Không đọc được gì thì vẫn nhích một bước mặc định, thà ước lượng thô còn hơn đứng im
+    // vĩnh viễn — mọi lịch hẹn đều treo nếu đồng hồ không bao giờ chạy.
+    const fallback = Math.max(0, parseInt(st?.fallbackMinutesPerTurn) || 0);
+    const advanced = elapsedMinutes === null ? fallback : elapsedMinutes;
+    data().advanceClock(state, advanced);
+
+    const nowMinutes = data().clockMinutes(state);
+    if (day === null) day = Math.floor(nowMinutes / data().MINUTES_PER_DAY);
+    state.lastStoryDay = day;
+    state.storyTime = {
+      label,
+      day,
+      elapsedDays: Math.floor(advanced / data().MINUTES_PER_DAY),
+      elapsedMinutes: advanced,
+      nowMinutes,
+      clockLabel: data().formatClock(nowMinutes),
+      source
+    };
+    return { day, elapsed: Math.floor(advanced / data().MINUTES_PER_DAY), elapsedMinutes: advanced, nowMinutes, label, source };
   }
 
   // ================= Chữa dữ liệu =================

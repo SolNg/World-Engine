@@ -60,7 +60,7 @@ Chỉ xuất một khối JSON hợp lệ, không kèm giải thích, không kè
   "acknowledgedFacts": ["id của những sự việc hậu trường đã thực sự được nhắc tới trong đoạn này"],
   "time": {
     "label": "mốc thời gian của đoạn này theo đúng cách chính văn nói, ví dụ: đêm cùng ngày / sáng hôm sau / ba ngày sau / Rằm tháng Giêng",
-    "elapsedDays": 0,
+    "elapsed": { "days": 0, "hours": 0, "minutes": 0 },
     "note": "căn cứ nào trong chính văn cho biết điều đó"
   }
 }
@@ -83,7 +83,8 @@ Phần tư liệu bên dưới có thể liệt kê những sự việc engine �
 Trường "time" rất quan trọng, phải điền cho mọi lượt.
 
 - "label": mốc thời gian của đoạn vừa đọc, viết theo đúng cách chính văn diễn đạt.
-- "elapsedDays": số NGÀY đã trôi qua so với mốc thời gian của lượt trước (nêu ở phần tư liệu bên dưới). Cùng ngày hoặc chỉ vài giờ thì ghi 0. Sang hôm sau ghi 1. "Ba ngày sau" ghi 3. "Một tuần sau" ghi 7. Không rõ thì ghi 0.
+- "elapsed": khoảng thời gian đã trôi qua so với mốc của lượt trước, tách thành ngày/giờ/phút. Một đoạn hội thoại ngắn thường là 5-30 phút. "Nửa giờ sau" ghi hours 0 minutes 30. "Sáng hôm sau" ghi days 1. "Ba ngày sau" ghi days 3. Chỉ điền phần có căn cứ, phần còn lại để 0.
+- Đây là thứ quyết định nhân vật vắng mặt làm được bao nhiêu việc, nên ước lượng sát chứ đừng ghi bừa 0.
 - Căn cứ vào chữ trong chính văn: "sáng hôm sau", "ba ngày sau", "tuần kế tiếp", ngày tháng cụ thể, hoặc chuyển cảnh có nêu thời gian. Không có căn cứ thì đừng bịa, cứ ghi 0.
 
 Không có nhân vật nào đáng lưu thì trả "npcs": [] — đó là kết quả hợp lệ.`;
