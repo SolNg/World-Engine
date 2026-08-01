@@ -14,6 +14,8 @@ window.WORLD_ENGINE_UI = (function() {
   let _npcView = 'home';
   let _npcSelectedNavView = null;
   const _npcExpanded = new Set();
+  // Kết quả xem tại chỗ, chỉ giữ trong bộ nhớ phiên — không phải dữ liệu của cuộc trò chuyện.
+  let _npcPeek = {};
   let _npcEditingId = null;      // id nhân vật đang mở trình soạn; chuỗi rỗng = đang thêm mới
   let _npcExpandScope = '';      // chat nào đang mở: đổi chat thì quên hết trạng thái gập/mở cũ
   let _panelFlipping = false;
@@ -5735,7 +5737,8 @@ window.WORLD_ENGINE_UI = (function() {
     const actions = options?.archived
       ? `<button class="we-btn we-btn-sm we-npc-edit" data-npc-id="${h(key)}">Sửa</button>
          <button class="we-btn we-btn-sm we-npc-revive" data-npc-id="${h(key)}">Đưa trở lại</button>`
-      : `<button class="we-btn we-btn-sm we-npc-edit" data-npc-id="${h(key)}">Sửa</button>
+      : `<button class="we-btn we-btn-sm we-npc-peek" data-npc-id="${h(key)}">Đang làm gì?</button>
+         <button class="we-btn we-btn-sm we-npc-edit" data-npc-id="${h(key)}">Sửa</button>
          <button class="we-btn we-btn-sm we-npc-pin" data-npc-id="${h(key)}">${npc.pinned ? 'Bỏ ghim' : 'Ghim'}</button>
          <button class="we-btn we-btn-sm we-npc-tier" data-npc-id="${h(key)}">${npc.tier === 'core' ? 'Hạ xuống ngoại vi' : 'Nâng lên trọng yếu'}</button>
          <button class="we-btn we-btn-sm we-npc-archive" data-npc-id="${h(key)}">Đưa vào kho</button>`;
@@ -5758,6 +5761,7 @@ window.WORLD_ENGINE_UI = (function() {
       <div class="we-npc-card-body"${collapsed ? ' hidden' : ''}>
         ${axes.join('')}
         ${log ? `<div class="we-npc-log"><div class="we-npc-axis-key">Hoạt động ngầm</div>${log}</div>` : ''}
+        ${_npcPeek[key] ? `<div class="we-npc-peek">${h(_npcPeek[key])}</div>` : ''}
         <div class="we-npc-actions">${actions}</div>
       </div>
     </div>`;
@@ -5771,6 +5775,7 @@ window.WORLD_ENGINE_UI = (function() {
       _npcExpandScope = scope;
       _npcExpanded.clear();
       _npcEditingId = null;
+      _npcPeek = {};
     }
     const state = npcData()?.loadState?.() || {};
     const meta = NPC_VIEW_META[view] || { title: 'Nhân Vật', poem: '' };
@@ -6238,6 +6243,24 @@ window.WORLD_ENGINE_UI = (function() {
       button.onclick = () => mutate(button.dataset.npcId, (npc, state) => {
         npcData().reviveNpc(state, npc.id);
       });
+    });
+
+    // Xem tại chỗ: chỉ để đọc, không đổi trạng thái, không tiến thời gian, không gửi vào chat.
+    document.querySelectorAll('.we-npc-peek').forEach(button => {
+      button.onclick = async () => {
+        const id = button.dataset.npcId;
+        button.disabled = true;
+        button.textContent = 'Đang xem...';
+        try {
+          const result = await window.NPC_ENGINE?.peekNpc?.(id);
+          if (result?.text) _npcPeek[id] = result.text;
+          else showToast('Không nhận được nội dung', true);
+        } catch (error) {
+          showToast('Xem thất bại: ' + (error?.message || error), true);
+        } finally {
+          refresh();
+        }
+      };
     });
 
     // ===== Trình soạn hồ sơ =====

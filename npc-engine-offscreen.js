@@ -246,6 +246,55 @@ Không nhân vật nào có hành động đáng kể thì trả "activities": [
     return SYSTEM_PROMPT + '\n\n' + buildUserPrompt(options);
   }
 
+  // ===== Xem tại chỗ =====
+  // Chỉ để NGƯỜI CHƠI nhìn trộm nhân vật đang làm gì lúc này. Không đổi trạng thái, không tiến
+  // thời gian, không gửi vào chat — nên prompt cũng phải nói rõ là đừng quyết định gì cả, nếu
+  // không mô hình sẽ tự ý cho nhân vật hành động rồi lượt sau hai bên lệch nhau.
+  const PEEK_PROMPT = `Bạn là bộ quan sát của "Công Cụ Nhân Vật". Nhiệm vụ: viết một đoạn ngắn tả nhân vật này đang làm gì NGAY LÚC NÀY, theo ngôi thứ nhất, như nhìn trộm qua khe cửa.
+
+【QUY TẮC】
+- Chỉ MÔ TẢ hiện trạng. Không quyết định điều gì mới, không cho nhân vật bắt đầu việc gì, không đổi vị trí, không kết thúc dự định đang treo.
+- Bám sát hồ sơ được cung cấp: nhân vật đang ở đâu, đang dở việc gì, tâm trạng ra sao với người chơi.
+- Ngôi thứ nhất, giọng nội tâm. 2-4 câu, không dài dòng.
+- Đây là đoạn chỉ người chơi đọc ở hậu trường, không phải nội dung sẽ đưa vào truyện. Đừng viết như một cảnh truyện có đối thoại.
+
+Chỉ xuất phần văn xuôi, không JSON, không tiêu đề, không giải thích.`;
+
+  function buildPeekPrompt(options) {
+    const opts = options || {};
+    const npc = opts.npc || {};
+    const helper = window.NPC_ENGINE_DATA;
+    const now = Number(opts.nowMinutes) || 0;
+
+    const lines = [`Tên: ${clean(npc.name)}`];
+    const identity = helper?.describeIdentity?.(npc);
+    if (identity) lines.push(`Nhân dạng: ${identity}`);
+    lines.push(`Đang ở: ${describePath(npc.location?.path)}`);
+    if (npc.location?.movingTo) lines.push(`Đang trên đường tới: ${describePath(npc.location.movingTo)}`);
+    if (npc.faction?.name) lines.push(`Thế lực: ${clean(npc.faction.name)}${npc.faction.role ? ' — ' + clean(npc.faction.role) : ''}`);
+
+    const goals = asArray(npc.goals).slice(0, 3)
+      .map(goal => `${clean(goal.text)} (${clean(goal.progress) || 'đang tiến hành'})`).filter(Boolean);
+    if (goals.length) lines.push(`Mục tiêu: ${goals.join('; ')}`);
+
+    if (npc.pendingIntent?.action) {
+      const detail = helper?.describeSchedule?.(npc.pendingIntent.schedule, now) || '';
+      lines.push(`Dự định đang treo: ${clean(npc.pendingIntent.action)}${detail ? ' — ' + detail : ''}`);
+    }
+    if (npc.relations?.user?.attitude) lines.push(`Thái độ với người chơi: ${clean(npc.relations.user.attitude)}`);
+    if (npc.status?.condition) lines.push(`Trạng thái: ${clean(npc.status.condition)}`);
+
+    const recent = asArray(npc.offscreenLog).slice(-3).map(entry => clean(entry.action)).filter(Boolean);
+    if (recent.length) lines.push(`Vừa làm: ${recent.join(' → ')}`);
+
+    const sections = [`【HỒ SƠ NHÂN VẬT】\n${lines.join('\n')}`];
+    if (clean(opts.clockLabel)) sections.push(`【THỜI ĐIỂM】\n${clean(opts.clockLabel)}`);
+    if (clean(opts.worldDigest)) sections.push(`【TÌNH HÌNH THẾ GIỚI】\n${clean(opts.worldDigest)}`);
+    sections.push('Hãy viết đoạn quan sát theo đúng quy tắc trên.');
+
+    return PEEK_PROMPT + '\n\n' + sections.join('\n\n');
+  }
+
   return {
     SYSTEM_PROMPT,
     describeAggressiveness,
@@ -253,6 +302,8 @@ Không nhân vật nào có hành động đáng kể thì trả "activities": [
     describeTravelCache,
     buildUserPrompt,
     buildMessages,
-    buildPrompt
+    buildPrompt,
+    buildPeekPrompt,
+    PEEK_PROMPT
   };
 })();

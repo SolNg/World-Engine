@@ -175,6 +175,11 @@ check('ba nấc che vị trí đều có trong ô chọn',
   check('có nút Sửa trên thẻ nhân vật', ui.includes('we-npc-edit'));
   check('có nút Thêm Nhân Vật', ui.includes('we-npc-add'));
   check('có nút Xoá hẳn', ui.includes('we-npc-delete'));
+  check('có nút xem tại chỗ', ui.includes('we-npc-peek'));
+  // Kết quả xem chỉ nằm trong bộ nhớ phiên, không phải dữ liệu của cuộc trò chuyện.
+  check('kết quả xem không lưu vào trạng thái chat', /let _npcPeek = \{\};/.test(ui));
+  check('đổi chat thì quên kết quả xem cũ',
+    /_npcExpandScope !== scope[\s\S]{0,260}_npcPeek = \{\}/.test(ui));
   check('tầng dữ liệu có hàm xoá', fs.readFileSync(path.join(root, 'npc-engine-data.js'), 'utf8').includes('function removeNpc('));
 
   // Sửa được đủ sáu trục, nếu không thì vẫn có trục chữa không nổi.
@@ -353,7 +358,7 @@ for (const cls of ['we-hint', 'we-btn-sm', 'we-switch-row']) {
     'we-npc-pin', 'we-npc-tier', 'we-npc-archive', 'we-npc-revive',
     'we-npc-nav-row', 'we-npc-nav-list',
     // Nút của trình soạn: kiểu dáng lấy từ .we-btn, lớp riêng chỉ để gắn sự kiện.
-    'we-npc-edit', 'we-npc-add', 'we-npc-save', 'we-npc-delete', 'we-npc-cancel-edit'
+    'we-npc-edit', 'we-npc-add', 'we-npc-save', 'we-npc-delete', 'we-npc-cancel-edit', 'we-npc-peek'
   ]);
   const used = new Set();
   for (const attribute of ui.match(/class="[^"]*"/g) || []) {

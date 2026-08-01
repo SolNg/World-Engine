@@ -3934,3 +3934,15 @@
   letter-spacing: 0.04em;
   color: var(--we-gold);
 }
+.we-npc-peek {
+  margin-top: 10px;
+  padding: 9px 11px;
+  font-size: 12px;
+  line-height: 1.65;
+  font-style: italic;
+  white-space: pre-wrap;
+  color: var(--we-text2);
+  background: var(--we-bg2);
+  border-left: 2px solid var(--we-accent);
+  border-radius: 0 6px 6px 0;
+}

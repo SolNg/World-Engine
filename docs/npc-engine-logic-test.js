@@ -509,6 +509,52 @@ const baseSettings = () => config.getSettings(true);
   check('không ai bị bỏ qua thì không thêm ghi chú thừa', !noSkip.includes('KHÔNG cần suy diễn'));
 }
 
+// ===== Xem tại chỗ =====
+// Nhìn trộm xem nhân vật đang làm gì. Điểm mấu chốt: KHÔNG đổi trạng thái, KHÔNG tiến đồng hồ —
+// nếu không thì mỗi lần tò mò nhìn một cái là thế giới lại tự nhảy một bước.
+{
+  const state = data.defaultState();
+  const npc = data.upsertNpc(state, { name: 'Lý Mộ Bạch', tier: 'core', significance: 85 });
+  data.mergeIdentity(npc, { gender: 'nam', ageStage: 'trung niên' });
+  npc.location.path = ['Đại Chu', 'Giang Nam', 'Dương Châu'];
+  npc.pendingIntent = {
+    action: 'Chiêu mộ tử sĩ',
+    schedule: data.newSchedule({ mode: 'effort', needMinutes: 600, doneMinutes: 120 }),
+    bornAt: 0
+  };
+  npc.offscreenLog.push({ round: 3, action: 'Gặp một tay kiếm khách ở bến đò' });
+
+  const prompt = global.NPC_ENGINE_OFFSCREEN.buildPeekPrompt({
+    npc, nowMinutes: 600, clockLabel: 'Ngày 1, 10:00', worldDigest: 'Kinh đô giới nghiêm'
+  });
+
+  check('prompt xem kèm tên nhân vật', prompt.includes('Lý Mộ Bạch'));
+  check('prompt xem kèm nhân dạng đã chốt', prompt.includes('trung niên'));
+  check('prompt xem kèm vị trí', prompt.includes('Dương Châu'));
+  check('prompt xem kèm dự định và tiến độ', prompt.includes('Chiêu mộ tử sĩ') && prompt.includes('cần bỏ công thêm'));
+  check('prompt xem kèm việc vừa làm', prompt.includes('bến đò'));
+  check('prompt xem kèm thời điểm', prompt.includes('Ngày 1, 10:00'));
+
+  // Đây là chỗ dễ hỏng nhất: mô hình rất hay tự ý cho nhân vật hành động khi được hỏi
+  // "đang làm gì", rồi lượt sau trạng thái thật và văn bản lệch nhau.
+  check('prompt cấm quyết định điều mới', prompt.includes('Không quyết định điều gì mới'));
+  check('prompt cấm đổi vị trí', prompt.includes('không đổi vị trí'));
+  check('prompt cấm kết dự định đang treo', prompt.includes('không kết thúc dự định đang treo'));
+  check('prompt yêu cầu ngôi thứ nhất', prompt.includes('ngôi thứ nhất'));
+  check('prompt nói rõ đây là nội dung hậu trường', prompt.includes('không phải nội dung sẽ đưa vào truyện'));
+
+  // Engine phải cố ý không lưu trạng thái — kiểm bằng mã nguồn vì đây là điều KHÔNG xảy ra.
+  const source = fs.readFileSync(path.join(root, 'npc-engine.js'), 'utf8');
+  const from = source.indexOf('async function peekNpc(');
+  const body = from >= 0 ? source.slice(from, source.indexOf('\n  }', from)) : '';
+  check('cắt được thân hàm peekNpc', body.length > 200);
+  // Bắt LỜI GỌI chứ không bắt chữ, vì chính dòng chú thích cũng chứa tên hàm.
+  check('xem thì không lưu trạng thái', !/data\(\)\.saveState\(/.test(body));
+  check('xem thì không tiến đồng hồ', !/advanceClock\(/.test(body));
+  check('xem thì không đụng tới lịch hẹn', !/tickIntents\(/.test(body) && !/tickTravel\(/.test(body));
+  check('có ghi chú giải thích vì sao không lưu', body.includes('Cố ý KHÔNG saveState'));
+}
+
 // ===== Đối soát và chữa dữ liệu =====
 // Sau nhiều lượt, dữ liệu tích tụ những chỗ không nhất quán mà không thao tác nào tự dọn:
 // quan hệ trỏ tới người đã xoá, tri thức trỏ tới sự thật không còn, id trùng nhau.

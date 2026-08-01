@@ -1165,6 +1165,51 @@ window.NPC_ENGINE = (function() {
     return { day, elapsed: Math.floor(advanced / data().MINUTES_PER_DAY), elapsedMinutes: advanced, nowMinutes, label, source };
   }
 
+  // ================= Xem tại chỗ =================
+  // Nhìn trộm xem nhân vật đang làm gì lúc này. KHÔNG lưu trạng thái, KHÔNG tiến đồng hồ,
+  // KHÔNG gửi vào chat — chỉ trả về văn xuôi cho người chơi đọc ở bảng điều khiển.
+  async function peekNpc(idOrName) {
+    const st = settings(true);
+    if (st.engineEnabled === false) throw new Error('Công Cụ Nhân Vật đang tắt');
+    if (running) throw new Error('Đang có tác vụ chạy, vui lòng đợi');
+
+    const state = data().loadState();
+    const npc = data().findNpc(state, idOrName);
+    if (!npc) throw new Error('Không tìm thấy nhân vật này');
+
+    const worldState = core()?.loadState?.() || {};
+    const nowMinutes = data().clockMinutes(state);
+
+    running = true;
+    runningLabel = 'Quan sát nhân vật';
+    abortController = new AbortController();
+    notifyBusyChanged();
+    setStatus(`Đang xem ${npc.name} làm gì...`);
+
+    try {
+      const raw = await window.WORLD_ENGINE_API.callApi(
+        window.NPC_ENGINE_OFFSCREEN.buildPeekPrompt({
+          npc,
+          nowMinutes,
+          clockLabel: data().formatClock(nowMinutes),
+          worldDigest: clean(worldState.worldDigest)
+        }),
+        st.maxTokens, st.temperature, abortController?.signal, st
+      );
+      setStatus(`Đã xem ${npc.name}`);
+      // Cố ý KHÔNG saveState: xem là xem, không phải một lượt diễn biến.
+      return { name: npc.name, text: clean(raw) };
+    } catch (error) {
+      setStatus('Xem thất bại: ' + (error?.message || error), true);
+      throw error;
+    } finally {
+      running = false;
+      runningLabel = '';
+      abortController = null;
+      notifyBusyChanged();
+    }
+  }
+
   // ================= Chữa dữ liệu =================
 
   // Quét và sửa những chỗ không nhất quán tích tụ sau nhiều lượt: id trùng, tham chiếu tới nhân vật
@@ -1303,6 +1348,7 @@ window.NPC_ENGINE = (function() {
     stopBackfill,
     getBackfillStatus: () => clone(backfillStatus),
     reconcileHistory,
+    peekNpc,
     readStoryTime,
     repairState,
     buildWorldEngineContext,
