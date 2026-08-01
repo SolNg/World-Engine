@@ -53,6 +53,18 @@ window.NPC_ENGINE_DATA = (function() {
       firstSeenLayer: asLayer(source.firstSeenLayer),
       lastSeenLayer: asLayer(source.lastSeenLayer),
 
+      // Neo nhân dạng: những thứ KHÔNG được trôi theo thời gian. Mô hình chỉ được điền vào ô còn
+      // trống, không bao giờ được sửa ô đã có — nếu không, qua vài chục lượt nó sẽ lặng lẽ đổi
+      // giới tính, tuổi hay chủng tộc của một nhân vật mà chẳng ai để ý. Muốn sửa thì sửa tay.
+      identity: {
+        gender: clean(source.identity && source.identity.gender),
+        pronouns: clean(source.identity && source.identity.pronouns),
+        species: clean(source.identity && source.identity.species),
+        ageStage: clean(source.identity && source.identity.ageStage),
+        appearance: clean(source.identity && source.identity.appearance),
+        socialRole: clean(source.identity && source.identity.socialRole)
+      },
+
       location: { ...emptyLocation(), ...(source.location || {}) },
       goals: asArray(source.goals),
       faction: source.faction || { name: '', role: '', standing: '' },
@@ -286,6 +298,35 @@ window.NPC_ENGINE_DATA = (function() {
     return npc;
   }
 
+  // Gộp neo nhân dạng theo nguyên tắc ĐIỀN MỘT LẦN: ô trống thì nhận giá trị mới, ô đã có thì giữ
+  // nguyên. Đây chính là cơ chế chống trôi — mô hình không có đường nào ghi đè lên thứ đã chốt.
+  // Trả về danh sách ô vừa được điền, để nơi gọi biết có gì thay đổi.
+  function mergeIdentity(npc, incoming) {
+    const filled = [];
+    if (!npc || !incoming || typeof incoming !== 'object') return filled;
+    for (const field of ['gender', 'pronouns', 'species', 'ageStage', 'appearance', 'socialRole']) {
+      const value = clean(incoming[field]);
+      if (!value || clean(npc.identity[field])) continue;
+      npc.identity[field] = value;
+      filled.push(field);
+    }
+    return filled;
+  }
+
+  // Mô tả nhân dạng thành một dòng, dùng cho prompt và cho ràng buộc gửi AI chính.
+  function describeIdentity(npc) {
+    const identity = npc?.identity || {};
+    const parts = [
+      clean(identity.gender),
+      clean(identity.pronouns) ? `xưng hô: ${clean(identity.pronouns)}` : '',
+      clean(identity.species),
+      clean(identity.ageStage),
+      clean(identity.socialRole),
+      clean(identity.appearance)
+    ].filter(Boolean);
+    return parts.join(' · ');
+  }
+
   // Xoá hẳn khỏi cả danh sách hoạt động lẫn kho. Dùng khi mô hình nhận nhầm một nhân vật không
   // có thật, hoặc gộp nhầm hai người thành một — khác với archiveNpc là "đã chết nhưng vẫn tính".
   function removeNpc(state, idOrName) {
@@ -440,6 +481,8 @@ window.NPC_ENGINE_DATA = (function() {
     archiveNpc,
     reviveNpc,
     removeNpc,
+    mergeIdentity,
+    describeIdentity,
     enforceCoreLimit,
     proximity,
     travelKey,

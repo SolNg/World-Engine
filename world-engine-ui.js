@@ -5580,6 +5580,19 @@ window.WORLD_ENGINE_UI = (function() {
           `<input class="we-npc-f-significance" type="number" min="0" max="100" value="${h(String(npc.significance || 0))}" style="width:100%;">`)}</div>
       </div>
       ${row(`<label class="we-switch-row"><input class="we-npc-f-pinned" type="checkbox" ${npc.pinned ? 'checked' : ''}> Ghim bậc (mô hình không đổi được)</label>`)}
+      <div class="we-npc-editor-group">Nhân dạng cố định — mô hình chỉ điền vào ô trống, không sửa được ô đã có</div>
+      <div style="display:flex;gap:6px;">
+        <div style="flex:1;">${field('Giới tính', `<input class="we-npc-f-gender" type="text" value="${u(npc.identity?.gender || '')}" style="width:100%;">`)}</div>
+        <div style="flex:1;">${field('Xưng hô', `<input class="we-npc-f-pronouns" type="text" value="${u(npc.identity?.pronouns || '')}" placeholder="cô ấy / anh ấy / họ" style="width:100%;">`)}</div>
+      </div>
+      <div style="display:flex;gap:6px;">
+        <div style="flex:1;">${field('Chủng tộc', `<input class="we-npc-f-species" type="text" value="${u(npc.identity?.species || '')}" style="width:100%;">`)}</div>
+        <div style="flex:1;">${field('Độ tuổi', `<input class="we-npc-f-agestage" type="text" value="${u(npc.identity?.ageStage || '')}" placeholder="thiếu niên / thanh niên / trung niên" style="width:100%;">`)}</div>
+      </div>
+      <div style="display:flex;gap:6px;">
+        <div style="flex:1;">${field('Thân phận xã hội', `<input class="we-npc-f-socialrole" type="text" value="${u(npc.identity?.socialRole || '')}" style="width:100%;">`)}</div>
+        <div style="flex:1;">${field('Ngoại hình cố định', `<input class="we-npc-f-appearance" type="text" value="${u(npc.identity?.appearance || '')}" style="width:100%;">`)}</div>
+      </div>
       ${field('Vị trí (phân cấp, ngăn bằng ›)',
         `<input class="we-npc-f-path" type="text" value="${u(npcPath(location.path) === 'chưa rõ' ? '' : npcPath(location.path))}" placeholder="Đại Chu › Giang Nam › Dương Châu" style="width:100%;">`,
         'Từ lớn tới nhỏ: quốc gia › vùng › thành › địa điểm. Độ gần giữa hai nhân vật suy ra từ đây.')}
@@ -5633,6 +5646,15 @@ window.WORLD_ENGINE_UI = (function() {
       ...base,
       name: names[0] || base.name,
       aliases: names.slice(1),
+      // Sửa tay thì ĐƯỢC ghi đè nhân dạng — hạn chế "chỉ điền một lần" chỉ áp cho mô hình.
+      identity: {
+        gender: value('.we-npc-f-gender'),
+        pronouns: value('.we-npc-f-pronouns'),
+        species: value('.we-npc-f-species'),
+        ageStage: value('.we-npc-f-agestage'),
+        socialRole: value('.we-npc-f-socialrole'),
+        appearance: value('.we-npc-f-appearance')
+      },
       tier: value('.we-npc-f-tier') === 'core' ? 'core' : 'peripheral',
       significance: Math.min(100, Math.max(0, parseInt(value('.we-npc-f-significance')) || 0)),
       pinned: checked('.we-npc-f-pinned'),
@@ -5935,6 +5957,8 @@ window.WORLD_ENGINE_UI = (function() {
         'Cho AI biết ai đang ở đâu, ai đang trên đường và còn mấy lượt nữa mới tới. Kèm ràng buộc cứng: nhân vật đang đi đường thì <b>không được cho xuất hiện ở đích</b> trước hạn.')
       + toggle('we-npc-inject-knowledge', 'Ràng buộc tri thức', settings.injectKnowledge !== false,
         'Liệt kê những gì mỗi nhân vật <b>chưa</b> biết, để họ không nhắc tới chuyện chưa từng tới tai mình — kể cả cái chết của người khác. Trục tốn token nhất nhưng cũng là thứ tạo cảm giác thế giới sống mạnh nhất.')
+      + toggle('we-npc-inject-identity', 'Nhân dạng cố định', settings.injectIdentity !== false,
+        'Nhắc AI chính viết đúng giới tính, cách xưng hô, chủng tộc và độ tuổi của nhân vật đang có mặt. Rất ngắn về token mà chặn được loại lỗi người đọc nhận ra ngay.')
       + toggle('we-npc-inject-rumor', 'Tin đồn', settings.injectRumor !== false,
         'Kết quả hoạt động ngầm nào đủ lộ liễu thì lan thành tin đồn và được đưa vào prompt, cho AI có chất liệu để nhân vật bàn tán.')
       + select('we-npc-fog', 'Che vị trí thật', settings.locationFogMode, [
@@ -6344,6 +6368,7 @@ window.WORLD_ENGINE_UI = (function() {
     bindToggle('we-npc-inject-location', 'injectLocation');
     bindToggle('we-npc-inject-knowledge', 'injectKnowledge');
     bindToggle('we-npc-inject-rumor', 'injectRumor');
+    bindToggle('we-npc-inject-identity', 'injectIdentity');
     bindToggle('we-npc-travel-cache', 'travelCacheEnabled');
     bindToggle('we-npc-link', 'npcLinkEnabled');
     bindToggle('we-npc-to-world', 'injectIntoWorldEngine');
@@ -6371,7 +6396,7 @@ window.WORLD_ENGINE_UI = (function() {
       'we-npc-aggressiveness': 'offscreenAggressiveness',
       'we-npc-inject': 'injectIntoPrompt', 'we-npc-time-anchor': 'timeAnchorEnabled',
       'we-npc-inject-location': 'injectLocation', 'we-npc-inject-knowledge': 'injectKnowledge',
-      'we-npc-inject-rumor': 'injectRumor', 'we-npc-fog': 'locationFogMode',
+      'we-npc-inject-rumor': 'injectRumor', 'we-npc-inject-identity': 'injectIdentity', 'we-npc-fog': 'locationFogMode',
       'we-npc-knowledge-scope': 'knowledgeInjectScope', 'we-npc-knowledge-limit': 'knowledgeInjectLimit',
       'we-npc-inject-max-chars': 'injectMaxChars',
       'we-npc-backfill-end': 'backfillEndLayer', 'we-npc-backfill-batch': 'backfillBatchSize',

@@ -41,6 +41,7 @@ window.NPC_ENGINE_SETTINGS = (function() {
     injectLocation: true,
     injectKnowledge: true,
     injectRumor: true,
+    injectIdentity: true,
     locationFogMode: 'fog',
     knowledgeInjectScope: 'in-scene',
     knowledgeInjectLimit: 5,

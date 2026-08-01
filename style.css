@@ -3926,3 +3926,11 @@
   letter-spacing: 0.08em;
   color: var(--we-text3);
 }
+.we-npc-editor-group {
+  margin: 12px 0 6px;
+  padding-top: 10px;
+  border-top: 1px solid var(--we-hairline);
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  color: var(--we-gold);
+}

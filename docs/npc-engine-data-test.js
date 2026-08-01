@@ -81,6 +81,40 @@ function check(label, condition) {
   check('cập nhật ghi đè giá trị', state.npcs[0].significance === 90);
 }
 
+// ===== Neo nhân dạng: điền một lần, mô hình không ghi đè được =====
+// Qua vài chục lượt, mô hình hoàn toàn có thể lặng lẽ đổi giới tính, tuổi hay chủng tộc của một
+// nhân vật mà không ai để ý. Nhân dạng là thứ KHÔNG trôi theo thời gian.
+{
+  const state = data.defaultState();
+  const npc = data.upsertNpc(state, { name: 'Rias Gremory', tier: 'core' });
+
+  let filled = data.mergeIdentity(npc, { gender: 'nữ', pronouns: 'cô ấy', species: 'Ác ma' });
+  check('điền được vào ô trống', npc.identity.gender === 'nữ' && npc.identity.species === 'Ác ma');
+  check('báo cáo đúng số ô vừa điền', filled.length === 3);
+
+  // Mô hình đổi ý ở lượt sau: phải bị bỏ qua hoàn toàn.
+  filled = data.mergeIdentity(npc, { gender: 'nam', species: 'Thiên sứ', ageStage: 'thiếu niên' });
+  check('không ghi đè giới tính đã chốt', npc.identity.gender === 'nữ');
+  check('không ghi đè chủng tộc đã chốt', npc.identity.species === 'Ác ma');
+  check('vẫn điền được ô còn trống', npc.identity.ageStage === 'thiếu niên');
+  check('chỉ báo cáo ô thật sự được điền', filled.length === 1 && filled[0] === 'ageStage');
+
+  // Giá trị rỗng không xoá được thứ đã có.
+  data.mergeIdentity(npc, { gender: '', pronouns: '   ' });
+  check('chuỗi rỗng không xoá dữ liệu đã chốt', npc.identity.gender === 'nữ' && npc.identity.pronouns === 'cô ấy');
+
+  const described = data.describeIdentity(npc);
+  check('mô tả nhân dạng gộp đủ các trường',
+    described.includes('nữ') && described.includes('cô ấy') && described.includes('Ác ma'));
+  check('nhân vật chưa có nhân dạng thì mô tả rỗng',
+    data.describeIdentity(data.upsertNpc(state, { name: 'Vô Danh' })) === '');
+
+  // Lưu rồi đọc lại phải giữ nguyên.
+  data.saveState(state);
+  check('nhân dạng sống sót qua lưu/đọc',
+    data.findNpc(data.loadState(), 'Rias Gremory').identity.species === 'Ác ma');
+}
+
 // ===== Trần NPC trọng yếu =====
 {
   const state = data.defaultState();

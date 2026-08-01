@@ -44,6 +44,7 @@ Chỉ xuất một khối JSON hợp lệ, không kèm giải thích, không kè
       "tier": "core hoặc peripheral",
       "significance": 0,
       "present": true,
+      "identity": { "gender": "giới tính", "pronouns": "cách xưng hô", "species": "chủng tộc", "ageStage": "độ tuổi", "appearance": "đặc điểm ngoại hình cố định", "socialRole": "thân phận xã hội" },
       "location": { "path": ["quốc gia", "vùng", "thành", "địa điểm"] },
       "goals": [{ "text": "mục tiêu", "priority": 1, "progress": "chớm nảy / đang tiến hành / gần hoàn tất / đã hoàn tất / thất bại" }],
       "faction": { "name": "tên thế lực", "role": "vai trò", "standing": "đang lên / ổn định / đang xuống" },
@@ -62,6 +63,13 @@ Chỉ xuất một khối JSON hợp lệ, không kèm giải thích, không kè
     "note": "căn cứ nào trong chính văn cho biết điều đó"
   }
 }
+
+【NHÂN DẠNG — CHỈ ĐIỀN, KHÔNG SỬA】
+Trường "identity" là những thứ KHÔNG đổi theo thời gian: giới tính, cách xưng hô, chủng tộc, độ tuổi, ngoại hình cố định, thân phận xã hội.
+
+- Nhân vật MỚI: điền đầy đủ những gì chính văn nêu ra. Không nêu thì để trống, đừng đoán.
+- Nhân vật ĐÃ CÓ trong hồ sơ: chỉ điền vào ô còn trống. Ô đã có giá trị thì bỏ qua, không được sửa dù bạn nghĩ nó sai — hệ thống sẽ tự bỏ mọi thay đổi lên ô đã chốt.
+- Đây là cơ chế chống trôi: qua vài chục lượt, nhân vật không được lặng lẽ đổi giới tính, tuổi hay chủng tộc.
 
 【ĐỌC THỜI GIAN】
 Trường "time" rất quan trọng, phải điền cho mọi lượt.
@@ -99,6 +107,8 @@ Không có nhân vật nào đáng lưu thì trả "npcs": [] — đó là kết
       const goal = asArray(npc.goals)[0];
       if (goal?.text) bits.push(`mục tiêu: ${clean(goal.text)} (${clean(goal.progress) || 'đang tiến hành'})`);
 
+      const identity = window.NPC_ENGINE_DATA?.describeIdentity?.(npc);
+      if (identity) bits.push(`nhân dạng đã chốt: ${identity}`);
       if (npc.relations?.user?.attitude) bits.push(`với người chơi: ${clean(npc.relations.user.attitude)}`);
       if (npc.status?.alive === false) bits.push('ĐÃ CHẾT');
 

@@ -146,6 +146,9 @@ window.NPC_ENGINE = (function() {
 
       const npc = data().upsertNpc(state, { ...patch, id: existing?.id });
 
+      // Nhân dạng: chỉ điền vào ô trống, không bao giờ ghi đè ô đã chốt.
+      data().mergeIdentity(npc, incoming.identity);
+
       // Tri thức là trường cộng dồn: nối thêm và đóng dấu tầng, không ghi đè.
       for (const item of asArray(incoming.knowledge)) {
         const fact = clean(item?.fact);
@@ -360,6 +363,19 @@ window.NPC_ENGINE = (function() {
     return `【Vị trí nhân vật】${head}\n${lines.join('\n')}`;
   }
 
+  // Nhân dạng của nhân vật đang có mặt: gửi cho AI chính để nó không viết sai giới tính, xưng hô,
+  // chủng tộc hay độ tuổi. Rẻ về token mà chặn được loại lỗi người đọc nhận ra ngay.
+  function buildIdentityBlock(state, st) {
+    if (st.injectIdentity === false) return '';
+    const scope = state.npcs.filter(npc => asArray(state.scene?.presentIds).includes(npc.id));
+    const lines = scope.map(npc => {
+      const text = data().describeIdentity(npc);
+      return text ? `${npc.name}: ${text}` : '';
+    }).filter(Boolean);
+    if (!lines.length) return '';
+    return `【Nhân dạng cố định】\n${lines.join('\n')}\nViết đúng giới tính, cách xưng hô và độ tuổi như trên. Đây là thiết lập đã chốt, không được đổi.`;
+  }
+
   function buildKnowledgeBlock(state, st) {
     if (st.knowledgeInjectScope === 'none') return '';
 
@@ -410,6 +426,8 @@ window.NPC_ENGINE = (function() {
     // AI dễ vi phạm nhất nên đứng trên; tin đồn chỉ là chất liệu trang trí nên xuống cuối.
     const ordered = [
       st.timeAnchorEnabled !== false ? buildTimeAnchor(state, context) : '',
+      // Nhân dạng đứng ngay sau neo thời gian: ngắn nhất mà sai thì người đọc nhận ra ngay lập tức.
+      buildIdentityBlock(state, st),
       st.injectLocation !== false ? buildLocationBlock(state, st) : '',
       st.injectKnowledge !== false ? buildKnowledgeBlock(state, st) : '',
       st.injectRumor !== false ? buildRumorBlock(state, st) : ''
