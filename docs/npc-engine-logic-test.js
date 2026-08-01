@@ -238,7 +238,8 @@ const baseSettings = () => config.getSettings(true);
   const state = data.defaultState();
   const present = data.upsertNpc(state, { name: 'Lý Mộ Bạch', tier: 'core', significance: 85 });
   const absent = data.upsertNpc(state, { name: 'Vương Ngũ', tier: 'core', significance: 80 });
-  const fact = engine.addPublicFact(state, 'Người chơi đã giết Trương Tam', 20, 'death');
+  // Phải đánh dấu đã vào chính văn thì mới tính vào ràng buộc tri thức.
+  const fact = engine.addPublicFact(state, 'Người chơi đã giết Trương Tam', 20, 'death', { acknowledged: true });
   state.scene = { layer: 20, location: [], presentIds: [present.id] };
 
   const inScene = engine.buildInjectionText(state, { ...baseSettings(), knowledgeInjectScope: 'in-scene' }, {});
@@ -255,6 +256,50 @@ const baseSettings = () => config.getSettings(true);
   present.knowledge.push({ fact: fact.text, source: 'nghe đồn', certainty: 'ngờ vực', layer: 21, factId: fact.id });
   const afterLearning = engine.buildInjectionText(state, { ...baseSettings(), knowledgeInjectScope: 'in-scene' }, {});
   check('biết rồi thì thôi ràng buộc', !afterLearning.includes('Lý Mộ Bạch CHƯA biết'));
+}
+
+// ===== Sự việc hậu trường chưa vào chính văn thì chưa tồn tại trong truyện =====
+// Ý lấy từ world-backstage: "xảy ra ở hậu trường" khác "trong truyện đã biết". Kết quả chỉ được
+// thừa nhận khi đã viết vào chính văn hoặc để lại dấu vết cảm nhận được.
+{
+  const state = data.defaultState();
+  const npc = data.upsertNpc(state, { name: 'Lý Mộ Bạch', tier: 'core', significance: 85 });
+  state.scene = { layer: 20, location: [], presentIds: [npc.id] };
+
+  const backstage = engine.addPublicFact(state, 'Thanh Long hội đã đốt kho lương', 20, 'tin đồn');
+  check('mặc định là chưa vào chính văn', backstage.acknowledged === false);
+
+  const hidden = engine.buildInjectionText(state, { ...baseSettings(), knowledgeInjectScope: 'in-scene' }, {});
+  // Đây mới là điểm quan trọng: ràng buộc "nhân vật chưa biết X" chính là đang KỂ X cho AI chính.
+  // Với chuyện còn giấu, làm vậy là tự tiết lộ tình tiết lẽ ra vẫn nằm sau màn.
+  check('chuyện hậu trường không lọt vào ràng buộc tri thức', !hidden.includes('CHƯA biết'));
+
+  engine.acknowledgeFacts(state, [backstage.id]);
+  check('sau khi được kể ra thì đánh dấu đã thừa nhận',
+    state.publicFacts.find(item => item.id === backstage.id).acknowledged === true);
+
+  const shown = engine.buildInjectionText(state, { ...baseSettings(), knowledgeInjectScope: 'in-scene' }, {});
+  check('vào chính văn rồi thì mới tính vào ràng buộc', shown.includes('Lý Mộ Bạch CHƯA biết'));
+
+  // Id không tồn tại thì không làm gì cả, không ném lỗi.
+  check('id lạ thì bỏ qua', engine.acknowledgeFacts(state, ['fact:404']).length === 0);
+  check('danh sách rỗng thì bỏ qua', engine.acknowledgeFacts(state, []).length === 0);
+}
+
+// ===== Tin đồn tách hai loại: chất liệu và chuyện đã có =====
+{
+  const state = data.defaultState();
+  data.upsertNpc(state, { name: 'Lý Mộ Bạch', tier: 'core', significance: 85 });
+  state.rumorQueue.push({ text: 'Kho lương bị đốt', layer: 20, factId: 'fact:1', acknowledged: false });
+  state.rumorQueue.push({ text: 'Thái thú đã chết', layer: 19, factId: 'fact:2', acknowledged: true });
+
+  const text = engine.buildInjectionText(state, baseSettings(), {});
+  check('nêu rõ chuyện chưa ai kể là chất liệu', text.includes('Chưa ai kể ra'));
+  check('nêu rõ chuyện đã thành sự thật trong truyện', text.includes('Đã thành chuyện trong truyện'));
+  check('chất liệu nằm đúng nhóm chưa kể',
+    text.indexOf('Kho lương bị đốt') > text.indexOf('Chưa ai kể ra'));
+  check('chuyện cũ nằm đúng nhóm đã kể',
+    text.indexOf('Thái thú đã chết') > text.indexOf('Đã thành chuyện trong truyện'));
 }
 
 // ===== Khối chèn: neo thời gian và công tắc =====

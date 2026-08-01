@@ -175,7 +175,9 @@ window.NPC_ENGINE = (function() {
       const npc = data().findNpc(state, name);
       if (!npc || npc.tier !== 'core') continue;
       data().archiveNpc(state, name, clean(death.reason), currentLayer);
-      const fact = addPublicFact(state, `${name} đã chết${death.reason ? ' (' + clean(death.reason) + ')' : ''}`, currentLayer, 'death');
+      // Cái chết diễn ra trước mặt người chơi thì đã là chính văn rồi, thừa nhận ngay.
+      const fact = addPublicFact(state, `${name} đã chết${death.reason ? ' (' + clean(death.reason) + ')' : ''}`,
+        currentLayer, 'death', { acknowledged: true });
       result.deaths.push(npc.id);
       result.facts.push(fact.id);
       // Người chứng kiến cái chết thì đương nhiên đã biết.
@@ -202,12 +204,52 @@ window.NPC_ENGINE = (function() {
     return 'fact:' + ((used.length ? Math.max(...used) : 0) + 1);
   }
 
-  function addPublicFact(state, text, layer, kind) {
+  // Sự việc xảy ra ở hậu trường KHÁC với sự việc trong truyện đã biết.
+  // Một chuyện engine suy diễn ra mà chưa từng được viết vào chính văn thì người chơi chưa đọc thấy,
+  // nhân vật trong truyện cũng chưa có đường nào biết được. Nó chỉ trở thành "chuyện của thiên hạ"
+  // khi AI chính thật sự kể ra, hoặc để lại dấu vết cảm nhận được.
+  //
+  // acknowledged = false: mới có ở hậu trường, dùng làm chất liệu cho AI viết.
+  // acknowledged = true : đã vào chính văn, từ đây mới tính vào ràng buộc tri thức.
+  function addPublicFact(state, text, layer, kind, options) {
     const existing = state.publicFacts.find(fact => normalized(fact.text) === normalized(text));
-    if (existing) return existing;
-    const fact = { id: nextFactId(state), text: clean(text), layer: asLayer(layer), kind: clean(kind) || 'sự kiện' };
+    if (existing) {
+      if (options?.acknowledged === true) existing.acknowledged = true;
+      return existing;
+    }
+    const fact = {
+      id: nextFactId(state),
+      text: clean(text),
+      layer: asLayer(layer),
+      kind: clean(kind) || 'sự kiện',
+      // Chuyện diễn ra ngay trước mặt người chơi thì đã là chính văn rồi, thừa nhận luôn.
+      acknowledged: options?.acknowledged === true
+    };
     state.publicFacts.push(fact);
     return fact;
+  }
+
+  // Đánh dấu những sự việc hậu trường vừa được AI chính kể vào chính văn.
+  // Danh sách id do pha trích xuất của lượt kế tiếp báo về.
+  function acknowledgeFacts(state, ids) {
+    const wanted = new Set(asArray(ids).map(clean).filter(Boolean));
+    if (!wanted.size) return [];
+    const done = [];
+    for (const fact of asArray(state.publicFacts)) {
+      if (!wanted.has(fact.id) || fact.acknowledged) continue;
+      fact.acknowledged = true;
+      done.push(fact.id);
+    }
+    // Tin đồn và nhật ký hoạt động ngầm gắn với sự việc đó cũng được thừa nhận theo.
+    for (const rumor of asArray(state.rumorQueue)) {
+      if (wanted.has(rumor.factId)) rumor.acknowledged = true;
+    }
+    for (const npc of state.npcs) {
+      for (const entry of asArray(npc.offscreenLog)) {
+        if (wanted.has(entry.factId)) entry.acknowledged = true;
+      }
+    }
+    return done;
   }
 
   // ================= Gộp kết quả hoạt động ngầm =================
@@ -286,7 +328,10 @@ window.NPC_ENGINE = (function() {
         const text = clean(activity.rumorText) || action;
         if (text) {
           const fact = addPublicFact(state, text, currentLayer, 'tin đồn');
-          state.rumorQueue.push({ text, layer: currentLayer, sourceId: npc.id, factId: fact.id, delivered: false });
+          state.rumorQueue.push({ text, layer: currentLayer, sourceId: npc.id, factId: fact.id, acknowledged: false });
+          // Gắn nhật ký với sự việc, để khi được thừa nhận thì cả hai cùng đổi trạng thái.
+          const entry = npc.offscreenLog[npc.offscreenLog.length - 1];
+          if (entry) entry.factId = fact.id;
           result.rumors.push(text);
         }
       }
@@ -383,7 +428,11 @@ window.NPC_ENGINE = (function() {
       ? state.npcs.filter(npc => npc.tier === 'core' && !npc.status.archived)
       : state.npcs.filter(npc => asArray(state.scene.presentIds).includes(npc.id));
 
-    if (!scope.length || !state.publicFacts.length) return '';
+    // Chỉ những sự việc ĐÃ VÀO CHÍNH VĂN mới tính. Chuyện engine suy diễn ra ở hậu trường mà chưa
+    // ai kể thì chưa tồn tại trong truyện — ràng buộc "nhân vật chưa biết" về nó là vô nghĩa, mà
+    // còn tệ hơn: nó tiết lộ cho AI chính một tình tiết lẽ ra vẫn đang giấu.
+    const known = state.publicFacts.filter(fact => fact.acknowledged === true);
+    if (!scope.length || !known.length) return '';
 
     const limit = Math.max(0, parseInt(st.knowledgeInjectLimit) || 0);
     const lines = [];
@@ -392,7 +441,7 @@ window.NPC_ENGINE = (function() {
       const knownFactIds = new Set(npc.knowledge.map(item => item.factId).filter(Boolean));
       const knownTexts = new Set(npc.knowledge.map(item => normalized(item.fact)));
 
-      const unknown = state.publicFacts
+      const unknown = known
         .filter(fact => !knownFactIds.has(fact.id) && !knownTexts.has(normalized(fact.text)))
         .sort((a, b) => (b.layer ?? 0) - (a.layer ?? 0))
         .slice(0, limit)
@@ -407,13 +456,22 @@ window.NPC_ENGINE = (function() {
 
   function buildRumorBlock(state, st) {
     const limit = Math.max(1, parseInt(st.knowledgeInjectLimit) || 5);
-    const rumors = asArray(state.rumorQueue)
-      .sort((a, b) => (b.layer ?? 0) - (a.layer ?? 0))
-      .slice(0, limit)
-      .map(item => clean(item.text))
-      .filter(Boolean);
-    if (!rumors.length) return '';
-    return `【Tin đồn đang lan】\n${rumors.map(text => '· ' + text).join('\n')}`;
+    const sorted = asArray(state.rumorQueue).sort((a, b) => (b.layer ?? 0) - (a.layer ?? 0)).slice(0, limit);
+    if (!sorted.length) return '';
+
+    // Tách hai loại: chuyện chưa ai kể là CHẤT LIỆU để AI dùng nếu muốn; chuyện đã kể rồi là
+    // sự thật đã có trong truyện. Gộp chung thì AI không phân biệt được cái nào nó đã viết ra.
+    const fresh = sorted.filter(item => item.acknowledged !== true).map(item => clean(item.text)).filter(Boolean);
+    const settled = sorted.filter(item => item.acknowledged === true).map(item => clean(item.text)).filter(Boolean);
+
+    const parts = [];
+    if (fresh.length) {
+      parts.push(`Chưa ai kể ra (chất liệu, dùng khi hợp cảnh):\n${fresh.map(text => '· ' + text).join('\n')}`);
+    }
+    if (settled.length) {
+      parts.push(`Đã thành chuyện trong truyện:\n${settled.map(text => '· ' + text).join('\n')}`);
+    }
+    return `【Tin đồn】\n${parts.join('\n')}`;
   }
 
   const INJECTION_HEADER = '【TRẠNG THÁI NHÂN VẬT NỀN】';
@@ -650,9 +708,13 @@ window.NPC_ENGINE = (function() {
         tonePrompt: st.tonePrompt,
         nameBlacklist: st.nameBlacklist,
         previousTimeLabel: previousTime.label,
+        pendingFacts: asArray(state.publicFacts).filter(fact => fact.acknowledged !== true).slice(-12),
         storyDay: asLayer(state.lastStoryDay)
       }), st);
       const merged = mergeExtraction(state, extraction, layer);
+
+      // Sự việc hậu trường vừa được AI chính kể ra thì từ đây mới tính là chuyện trong truyện.
+      const acknowledged = acknowledgeFacts(state, extraction?.acknowledgedFacts);
 
       // Đọc thời gian PHẢI làm sau trích xuất, vì chính mô hình là thứ đọc ra nó từ chính văn.
       const time = readStoryTime(state, extraction);
@@ -712,6 +774,7 @@ window.NPC_ENGINE = (function() {
         `${core_} trọng yếu`,
         offscreen.acted.length ? `${offscreen.acted.length} hoạt động ngầm` : '',
         offscreen.rumors.length ? `${offscreen.rumors.length} tin đồn` : '',
+        acknowledged.length ? `${acknowledged.length} chuyện vào truyện` : '',
         merged.deaths.length ? `${merged.deaths.length} qua đời` : ''
       ].filter(Boolean).join(' · ');
       setStatus('Hoàn tất — ' + summary);
@@ -1122,6 +1185,7 @@ window.NPC_ENGINE = (function() {
     mergeExtraction,
     applyOffscreen,
     addPublicFact,
+    acknowledgeFacts,
     INJECTION_NAME
   };
 })();

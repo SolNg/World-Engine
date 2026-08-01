@@ -57,6 +57,7 @@ Chỉ xuất một khối JSON hợp lệ, không kèm giải thích, không kè
     }
   ],
   "deaths": [{ "name": "tên", "reason": "nguyên nhân" }],
+  "acknowledgedFacts": ["id của những sự việc hậu trường đã thực sự được nhắc tới trong đoạn này"],
   "time": {
     "label": "mốc thời gian của đoạn này theo đúng cách chính văn nói, ví dụ: đêm cùng ngày / sáng hôm sau / ba ngày sau / Rằm tháng Giêng",
     "elapsedDays": 0,
@@ -70,6 +71,13 @@ Trường "identity" là những thứ KHÔNG đổi theo thời gian: giới t�
 - Nhân vật MỚI: điền đầy đủ những gì chính văn nêu ra. Không nêu thì để trống, đừng đoán.
 - Nhân vật ĐÃ CÓ trong hồ sơ: chỉ điền vào ô còn trống. Ô đã có giá trị thì bỏ qua, không được sửa dù bạn nghĩ nó sai — hệ thống sẽ tự bỏ mọi thay đổi lên ô đã chốt.
 - Đây là cơ chế chống trôi: qua vài chục lượt, nhân vật không được lặng lẽ đổi giới tính, tuổi hay chủng tộc.
+
+【SỰ VIỆC HẬU TRƯỜNG ĐANG CHỜ】
+Phần tư liệu bên dưới có thể liệt kê những sự việc engine đã suy diễn ở hậu trường nhưng CHƯA từng được kể ra trong truyện.
+
+- Đọc đoạn hội thoại và xét xem sự việc nào trong danh sách đó đã thực sự được nhắc tới, được nhân vật cảm nhận, hoặc để lại dấu vết nhìn thấy được.
+- Chỉ những cái đó mới đưa id vào "acknowledgedFacts".
+- Không nhắc tới thì đừng đưa vào. Đây là căn cứ để hệ thống biết chuyện nào đã thành sự thật trong truyện, chuyện nào vẫn còn nằm sau màn.
 
 【ĐỌC THỜI GIAN】
 Trường "time" rất quan trọng, phải điền cho mọi lượt.
@@ -129,6 +137,13 @@ Không có nhân vật nào đáng lưu thì trả "npcs": [] — đó là kết
     }
 
     sections.push(`【HỒ SƠ NHÂN VẬT HIỆN CÓ】\n${describeKnownNpcs(opts.npcs, opts.knownLimit)}`);
+
+    // Sự việc hậu trường chưa ai kể: mô hình cần biết để báo lại cái nào vừa được nhắc tới.
+    const pending = asArray(opts.pendingFacts).slice(0, 12);
+    if (pending.length) {
+      sections.push(`【SỰ VIỆC HẬU TRƯỜNG CHƯA AI KỂ】\n${pending
+        .map(fact => `${clean(fact.id)}: ${clean(fact.text)}`).join('\n')}`);
+    }
 
     if (clean(opts.worldDigest)) {
       sections.push(`【TÓM TẮT DIỄN BIẾN THẾ GIỚI LƯỢT NÀY】\n${clean(opts.worldDigest)}`);
