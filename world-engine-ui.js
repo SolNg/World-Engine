@@ -5449,11 +5449,6 @@ window.WORLD_ENGINE_UI = (function() {
     catch (error) { return 'night'; }
   }
 
-  const NPC_IDENTITY_LABELS = {
-    gender: 'giới tính', pronouns: 'cách xưng hô', species: 'chủng tộc',
-    ageStage: 'độ tuổi', appearance: 'ngoại hình', socialRole: 'thân phận'
-  };
-
   const NPC_VIEW_META = {
     core: { title: 'Trọng Yếu', poem: 'Người đáng nhớ thì thế gian nhớ' },
     peripheral: { title: 'Ngoại Vi', poem: 'Chưa rõ chí hướng, hãy còn đợi thời' },
@@ -5587,7 +5582,7 @@ window.WORLD_ENGINE_UI = (function() {
           `<input class="we-npc-f-significance" type="number" min="0" max="100" value="${h(String(npc.significance || 0))}" style="width:100%;">`)}</div>
       </div>
       ${row(`<label class="we-switch-row"><input class="we-npc-f-pinned" type="checkbox" ${npc.pinned ? 'checked' : ''}> Ghim bậc (mô hình không đổi được)</label>`)}
-      <div class="we-npc-editor-group">Nhân dạng cố định — mô hình chỉ điền vào ô trống, không sửa được ô đã có</div>
+      <div class="we-npc-editor-group">Nhân dạng — engine đọc từ chính văn; sửa tay ở đây thì lượt sau vẫn giữ, trừ khi truyện nói khác</div>
       <div style="display:flex;gap:6px;">
         <div style="flex:1;">${field('Giới tính', `<input class="we-npc-f-gender" type="text" value="${u(npc.identity?.gender || '')}" style="width:100%;">`)}</div>
         <div style="flex:1;">${field('Xưng hô', `<input class="we-npc-f-pronouns" type="text" value="${u(npc.identity?.pronouns || '')}" placeholder="cô ấy / anh ấy / họ" style="width:100%;">`)}</div>
@@ -5653,7 +5648,7 @@ window.WORLD_ENGINE_UI = (function() {
       ...base,
       name: names[0] || base.name,
       aliases: names.slice(1),
-      // Sửa tay thì ĐƯỢC ghi đè nhân dạng — hạn chế "chỉ điền một lần" chỉ áp cho mô hình.
+      // Sửa tay ghi thẳng vào hồ sơ, kể cả xoá trắng một ô — khác với mô hình, ô trống ở đây là cố ý.
       identity: {
         gender: value('.we-npc-f-gender'),
         pronouns: value('.we-npc-f-pronouns'),
@@ -5702,10 +5697,6 @@ window.WORLD_ENGINE_UI = (function() {
     if (npc.pinned) badges.push('<span class="we-npc-badge we-npc-badge-pin">ghim</span>');
     if (inTransit) badges.push(`<span class="we-npc-badge we-npc-badge-move">đi đường · ${location.etaRounds} lượt</span>`);
     if (npc.status?.alive === false) badges.push('<span class="we-npc-badge we-npc-badge-dead">đã chết</span>');
-    const proposals = Array.isArray(npc.identityProposals) ? npc.identityProposals : [];
-    if (proposals.length) {
-      badges.push(`<span class="we-npc-badge we-npc-badge-ask">${proposals.length} đề nghị</span>`);
-    }
 
     const axes = [];
     axes.push(`<div class="we-npc-axis"><span class="we-npc-axis-key">Vị trí</span><span>${h(npcPath(location.path))}${
@@ -5770,15 +5761,6 @@ window.WORLD_ENGINE_UI = (function() {
       <div class="we-npc-card-body"${collapsed ? ' hidden' : ''}>
         ${axes.join('')}
         ${log ? `<div class="we-npc-log"><div class="we-npc-axis-key">Hoạt động ngầm</div>${log}</div>` : ''}
-        ${proposals.map(item => `<div class="we-npc-proposal">
-          <div class="we-npc-proposal-head">Chính văn có vẻ nói khác về <b>${h(NPC_IDENTITY_LABELS[item.field] || item.field)}</b></div>
-          <div class="we-npc-proposal-diff">${h(item.from)} → <b>${h(item.to)}</b></div>
-          <div class="we-npc-proposal-reason">${h(item.reason)}</div>
-          <div class="we-npc-proposal-actions">
-            <button class="we-btn we-btn-sm we-npc-proposal-no" data-npc-id="${h(key)}" data-field="${h(item.field)}">Giữ nguyên</button>
-            <button class="we-btn we-btn-sm we-btn-primary we-npc-proposal-yes" data-npc-id="${h(key)}" data-field="${h(item.field)}">Đổi theo</button>
-          </div>
-        </div>`).join('')}
         ${_npcPeek[key] ? `<div class="we-npc-peek">${h(_npcPeek[key])}</div>` : ''}
         <div class="we-npc-actions">${actions}</div>
       </div>
@@ -5896,7 +5878,7 @@ window.WORLD_ENGINE_UI = (function() {
     { version: '1.0.0', date: '2026-08-02', items: [
       'Đồng hồ thế giới thay cho đếm lượt: trạng thái đếm bằng PHÚT truyện, mô hình tự đọc thời gian trôi qua từ chính văn. Một lượt hội thoại không còn là một đơn vị thời gian — nó chỉ là lúc quyết toán.',
       'Bốn kiểu hẹn theo bản chất công việc: trôi tự nhiên (đi đường, chờ đợi), giờ công hiệu lực (rèn đồ, nghiên cứu — chỉ tiến khi nhân vật thực sự ngồi làm), hẹn giờ cố định (cuộc họp, hạn chót), chờ điều kiện (chờ hồi âm, chờ nguyên liệu).',
-      'Neo nhân dạng: giới tính, xưng hô, chủng tộc, độ tuổi, ngoại hình và thân phận chỉ điền được một lần. Mô hình không ghi đè được ô đã chốt, chặn việc nhân vật lặng lẽ trôi giới tính hay tuổi qua vài chục lượt.',
+      'Theo dõi nhân dạng: giới tính, xưng hô, chủng tộc, độ tuổi, ngoại hình và thân phận được gửi kèm vào mọi lượt để AI chính không viết sai. Nhân dạng bám theo chính văn — truyện lột mặt nạ hay tiết lộ thân phận thật thì hồ sơ đổi theo, còn lượt nào truyện không đả động tới thì giữ nguyên. Prompt cấm suy giới tính từ ngoại hình, y phục, thân thể hay chủng tộc.',
       'Phân biệt sự việc hậu trường với sự việc trong truyện đã biết: chuyện engine suy diễn ra chỉ được thừa nhận khi AI chính thật sự kể vào chính văn. Trước đó nó không lọt vào ràng buộc tri thức — nếu không, ràng buộc lại chính là đường tiết lộ tình tiết đang giấu.',
       'Engine tự chấm điểm chọn nhân vật cho pha hoạt động ngầm theo mức liên quan: dự định đến hạn, vừa được nhắc tới, đang đi đường, ở gần cảnh của người chơi, cộng phần thưởng cho người lâu chưa có diễn biến. Số còn lại giữ nguyên trạng thái, không bịa hoạt động.',
       'Thêm nút Đang làm gì trên từng thẻ nhân vật: xem đoạn tự sự ngôi thứ nhất mà không gửi vào chat, không đổi trạng thái, không tiến thời gian.',
@@ -6031,7 +6013,7 @@ window.WORLD_ENGINE_UI = (function() {
         'Cho AI biết ai đang ở đâu, ai đang trên đường và còn mấy lượt nữa mới tới. Kèm ràng buộc cứng: nhân vật đang đi đường thì <b>không được cho xuất hiện ở đích</b> trước hạn.')
       + toggle('we-npc-inject-knowledge', 'Ràng buộc tri thức', settings.injectKnowledge !== false,
         'Liệt kê những gì mỗi nhân vật <b>chưa</b> biết, để họ không nhắc tới chuyện chưa từng tới tai mình — kể cả cái chết của người khác. Trục tốn token nhất nhưng cũng là thứ tạo cảm giác thế giới sống mạnh nhất.')
-      + toggle('we-npc-inject-identity', 'Nhân dạng cố định', settings.injectIdentity !== false,
+      + toggle('we-npc-inject-identity', 'Nhân dạng nhân vật', settings.injectIdentity !== false,
         'Nhắc AI chính viết đúng giới tính, cách xưng hô, chủng tộc và độ tuổi của nhân vật đang có mặt. Rất ngắn về token mà chặn được loại lỗi người đọc nhận ra ngay.')
       + toggle('we-npc-inject-rumor', 'Tin đồn', settings.injectRumor !== false,
         'Kết quả hoạt động ngầm nào đủ lộ liễu thì lan thành tin đồn và được đưa vào prompt, cho AI có chất liệu để nhân vật bàn tán.')
@@ -6310,20 +6292,6 @@ window.WORLD_ENGINE_UI = (function() {
         npcData().archiveNpc(state, npc.id, npc.status?.condition, window.WORLD_ENGINE_CORE?.getChatLayer?.());
       });
     });
-    // Đề nghị đổi nhân dạng: chỉ đổi khi người chơi bấm đồng ý. Không có gì đổi âm thầm.
-    document.querySelectorAll('.we-npc-proposal-yes').forEach(button => {
-      button.onclick = () => mutate(button.dataset.npcId, npc => {
-        const done = npcData().applyIdentityProposal(npc, button.dataset.field);
-        if (done) showToast(`Đã đổi ${NPC_IDENTITY_LABELS[done.field] || done.field} thành "${done.to}"`);
-      });
-    });
-    document.querySelectorAll('.we-npc-proposal-no').forEach(button => {
-      button.onclick = () => mutate(button.dataset.npcId, npc => {
-        npcData().dismissIdentityProposal(npc, button.dataset.field);
-        showToast('Đã giữ nguyên hồ sơ');
-      });
-    });
-
     document.querySelectorAll('.we-npc-revive').forEach(button => {
       button.onclick = () => mutate(button.dataset.npcId, (npc, state) => {
         npcData().reviveNpc(state, npc.id);

@@ -374,8 +374,7 @@ for (const cls of ['we-hint', 'we-btn-sm', 'we-switch-row']) {
     'we-npc-pin', 'we-npc-tier', 'we-npc-archive', 'we-npc-revive',
     'we-npc-nav-row', 'we-npc-nav-list',
     // Nút của trình soạn: kiểu dáng lấy từ .we-btn, lớp riêng chỉ để gắn sự kiện.
-    'we-npc-edit', 'we-npc-add', 'we-npc-save', 'we-npc-delete', 'we-npc-cancel-edit', 'we-npc-peek',
-    'we-npc-proposal-yes', 'we-npc-proposal-no'
+    'we-npc-edit', 'we-npc-add', 'we-npc-save', 'we-npc-delete', 'we-npc-cancel-edit', 'we-npc-peek'
   ]);
   const used = new Set();
   for (const attribute of ui.match(/class="[^"]*"/g) || []) {

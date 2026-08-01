@@ -66,7 +66,7 @@ window.NPC_ENGINE = (function() {
   // Tách riêng khỏi phần gọi API để kiểm thử được mà không cần mạng.
 
   function mergeExtraction(state, parsed, layer) {
-    const result = { added: [], updated: [], deaths: [], facts: [], identityProposals: [] };
+    const result = { added: [], updated: [], deaths: [], facts: [] };
     if (!parsed || typeof parsed !== 'object') return result;
 
     const st = settings();
@@ -148,12 +148,8 @@ window.NPC_ENGINE = (function() {
 
       const npc = data().upsertNpc(state, { ...patch, id: existing?.id });
 
-      // Nhân dạng: chỉ điền vào ô trống, không bao giờ ghi đè ô đã chốt.
+      // Nhân dạng bám theo chính văn: có giá trị mới thì ghi đè, bỏ trống thì giữ nguyên cái cũ.
       data().mergeIdentity(npc, incoming.identity);
-
-      // Chính văn tiết lộ nhân dạng khác thì mô hình được ĐỀ NGHỊ, không được tự sửa.
-      const proposal = data().proposeIdentityChange(npc, incoming.identityChange, currentLayer);
-      if (proposal) result.identityProposals.push({ id: npc.id, name: npc.name, ...proposal });
 
       // Tri thức là trường cộng dồn: nối thêm và đóng dấu tầng, không ghi đè.
       for (const item of asArray(incoming.knowledge)) {
@@ -442,7 +438,7 @@ window.NPC_ENGINE = (function() {
       return text ? `${npc.name}: ${text}` : '';
     }).filter(Boolean);
     if (!lines.length) return '';
-    return `【Nhân dạng cố định】\n${lines.join('\n')}\nViết đúng giới tính, cách xưng hô và độ tuổi như trên. Đây là thiết lập đã chốt, không được đổi.`;
+    return `【Nhân dạng nhân vật】\n${lines.join('\n')}\nViết đúng giới tính, cách xưng hô và độ tuổi như trên. Truyện chưa nói khác thì đừng đổi.`;
   }
 
   function buildKnowledgeBlock(state, st) {
@@ -813,8 +809,7 @@ window.NPC_ENGINE = (function() {
         offscreen.acted.length ? `${offscreen.acted.length} hoạt động ngầm` : '',
         offscreen.rumors.length ? `${offscreen.rumors.length} tin đồn` : '',
         acknowledged.length ? `${acknowledged.length} chuyện vào truyện` : '',
-        merged.deaths.length ? `${merged.deaths.length} qua đời` : '',
-        merged.identityProposals.length ? `${merged.identityProposals.length} đề nghị đổi nhân dạng` : ''
+        merged.deaths.length ? `${merged.deaths.length} qua đời` : ''
       ].filter(Boolean).join(' · ');
       setStatus('Hoàn tất — ' + summary);
 

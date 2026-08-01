@@ -45,7 +45,6 @@ Chỉ xuất một khối JSON hợp lệ, không kèm giải thích, không kè
       "significance": 0,
       "present": true,
       "identity": { "gender": "giới tính", "pronouns": "cách xưng hô", "species": "chủng tộc", "ageStage": "độ tuổi", "appearance": "đặc điểm ngoại hình cố định", "socialRole": "thân phận xã hội" },
-      "identityChange": { "field": "tên trường cần đổi", "value": "giá trị mới", "reason": "câu trong chính văn cho biết điều đó" },
       "location": { "path": ["quốc gia", "vùng", "thành", "địa điểm"] },
       "goals": [{ "text": "mục tiêu", "priority": 1, "progress": "chớm nảy / đang tiến hành / gần hoàn tất / đã hoàn tất / thất bại" }],
       "faction": { "name": "tên thế lực", "role": "vai trò", "standing": "đang lên / ổn định / đang xuống" },
@@ -66,16 +65,15 @@ Chỉ xuất một khối JSON hợp lệ, không kèm giải thích, không kè
   }
 }
 
-【NHÂN DẠNG — CHỈ ĐIỀN, KHÔNG SỬA】
-Trường "identity" là những thứ KHÔNG đổi theo thời gian: giới tính, cách xưng hô, chủng tộc, độ tuổi, ngoại hình cố định, thân phận xã hội.
+【NHÂN DẠNG — BÁM SÁT CHÍNH VĂN】
+Trường "identity" gồm giới tính, cách xưng hô, chủng tộc, độ tuổi, ngoại hình cố định, thân phận xã hội.
 
-- Nhân vật MỚI: điền đầy đủ những gì chính văn nêu ra. Không nêu thì để trống, đừng đoán.
-- Nhân vật ĐÃ CÓ trong hồ sơ: chỉ điền vào ô còn trống. Ô đã có giá trị thì bỏ qua, không được sửa dù bạn nghĩ nó sai — hệ thống sẽ tự bỏ mọi thay đổi lên ô đã chốt.
-- Đây là cơ chế chống trôi: qua vài chục lượt, nhân vật không được lặng lẽ đổi giới tính, tuổi hay chủng tộc.
+- CHỈ điền những gì chính văn thực sự nêu ra hoặc cho thấy rõ ràng. Chính văn không đả động tới thì ĐỂ TRỐNG — tuyệt đối không suy từ tên riêng, không đoán theo văn cảnh, không điền cho đủ ô.
+- Hồ sơ đã có sẵn giá trị mà chính văn lượt này không nhắc gì tới trường đó: BỎ TRỐNG, đừng chép lại. Bỏ trống nghĩa là "không có gì mới", hệ thống sẽ giữ nguyên giá trị cũ.
+- Chỉ điền giá trị KHÁC với hồ sơ khi chính văn thật sự cho thấy điều đó: người cải trang bị lột mặt nạ, thân phận thật được nói ra, nhân vật biến hình. Lúc đó hệ thống sẽ cập nhật theo.
+- Ngoại hình, y phục, thân thể hay chủng tộc KHÔNG phải căn cứ để phán đoán giới tính. Chính văn tả váy áo, tả giọng nói, tả vóc dáng — đó là ngoại hình, không phải lời khai giới tính. Chỉ điền "gender" khi chính văn xưng hô hoặc nói thẳng ra.
 
-Nếu chính văn lượt này THẬT SỰ tiết lộ nhân dạng khác với hồ sơ — người cải trang bị lột mặt nạ, thân phận thật được nói ra, nhân vật biến hình — thì điền vào "identityChange" kèm câu chữ trong chính văn làm căn cứ. Đây chỉ là ĐỀ NGHỊ: hệ thống giữ nguyên hồ sơ và hỏi người chơi, không tự đổi.
-
-Chỉ dùng "identityChange" khi có căn cứ rõ ràng trong chính văn. Bạn thấy hồ sơ "có vẻ sai" mà không có câu nào chứng minh thì đừng điền — đó là suy đoán, không phải tiết lộ.
+Điền bừa vào đây gây hại lâu dài hơn bỏ trống: một nhân vật bị đoán nhầm giới tính ở lượt này sẽ được viết sai ở mọi lượt sau.
 
 【SỰ VIỆC HẬU TRƯỜNG ĐANG CHỜ】
 Phần tư liệu bên dưới có thể liệt kê những sự việc engine đã suy diễn ở hậu trường nhưng CHƯA từng được kể ra trong truyện.
@@ -122,7 +120,7 @@ Không có nhân vật nào đáng lưu thì trả "npcs": [] — đó là kết
       if (goal?.text) bits.push(`mục tiêu: ${clean(goal.text)} (${clean(goal.progress) || 'đang tiến hành'})`);
 
       const identity = window.NPC_ENGINE_DATA?.describeIdentity?.(npc);
-      if (identity) bits.push(`nhân dạng đã chốt: ${identity}`);
+      if (identity) bits.push(`nhân dạng đang lưu: ${identity}`);
       if (npc.relations?.user?.attitude) bits.push(`với người chơi: ${clean(npc.relations.user.attitude)}`);
       if (npc.status?.alive === false) bits.push('ĐÃ CHẾT');
 

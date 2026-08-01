@@ -529,7 +529,7 @@ const baseSettings = () => config.getSettings(true);
   });
 
   check('prompt xem kèm tên nhân vật', prompt.includes('Lý Mộ Bạch'));
-  check('prompt xem kèm nhân dạng đã chốt', prompt.includes('trung niên'));
+  check('prompt xem kèm nhân dạng', prompt.includes('trung niên'));
   check('prompt xem kèm vị trí', prompt.includes('Dương Châu'));
   check('prompt xem kèm dự định và tiến độ', prompt.includes('Chiêu mộ tử sĩ') && prompt.includes('cần bỏ công thêm'));
   check('prompt xem kèm việc vừa làm', prompt.includes('bến đò'));

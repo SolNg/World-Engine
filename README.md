@@ -68,7 +68,9 @@ Mô hình chấm điểm 0–100, nhưng **ngưỡng lên bậc do bạn đặt*
 
 Vị trí · mục tiêu · thế lực · quan hệ với người chơi và với NPC khác · tri thức · trạng thái.
 
-Cộng một khối **neo nhân dạng** riêng: giới tính, cách xưng hô, chủng tộc, độ tuổi, ngoại hình cố định, thân phận xã hội. Những trường này **chỉ điền được một lần** — mô hình không ghi đè được ô đã chốt, chặn việc nhân vật lặng lẽ đổi giới tính hay trẻ hoá qua vài chục lượt. Bạn sửa tay thì vẫn đổi được bình thường.
+Cộng một khối **nhân dạng** riêng: giới tính, cách xưng hô, chủng tộc, độ tuổi, ngoại hình cố định, thân phận xã hội. Khối này được gửi kèm vào mọi lượt để AI chính không viết sai — đây là loại lỗi người đọc nhận ra ngay lập tức.
+
+Nhân dạng **bám theo chính văn**, không khoá cứng: truyện lột mặt nạ người cải trang, nói ra thân phận thật hay cho nhân vật biến hình thì hồ sơ đổi theo. Lượt nào chính văn không đả động tới nhân dạng thì hệ thống giữ nguyên giá trị cũ, nên nó không nhảy qua nhảy lại. Prompt cấm mô hình suy giới tính từ ngoại hình, y phục, thân thể hay chủng tộc — đó mới là chỗ hở khiến nhân vật trôi giới tính. Bạn sửa tay thì vẫn đổi được bình thường.
 
 #### Đồng hồ thế giới
 
@@ -100,7 +102,7 @@ Chuyện engine suy diễn ra ở hậu trường **chưa tồn tại trong truy
 Engine không kể lể nhật ký vào prompt, chỉ đưa ràng buộc cứng, có trần độ dài và cắt theo mức thiết yếu:
 
 - **Neo thời gian** — ngày truyện, số lượt, vài diễn biến nền gần nhất
-- **Nhân dạng cố định** — viết đúng giới tính, xưng hô, độ tuổi của nhân vật đang có mặt
+- **Nhân dạng nhân vật** — viết đúng giới tính, xưng hô, độ tuổi của nhân vật đang có mặt
 - **Vị trí** — ai đang ở đâu, ai chưa thể có mặt. Ba nấc che vị trí thật: AI biết hết, chỉ biết chỗ người chơi *tưởng* (kèm gợi ý mơ hồ), hoặc mù hoàn toàn
 - **Tri thức** — với nhân vật trong cảnh, liệt kê những gì họ **chưa** biết
 - **Tin đồn** — tách rõ chuyện chưa ai kể (chất liệu) với chuyện đã thành sự thật trong truyện
@@ -177,7 +179,7 @@ Hai engine đánh số **độc lập với nhau**. Xem nhật ký cập nhật 
 ## 🙏 Ghi công
 
 - Dự án gốc **世界引擎 / World Engine** — tác giả **Disnight**, giấy phép MIT.
-- Một số ý tưởng của Công Cụ Nhân Vật — đồng hồ thế giới, bốn kiểu hẹn, neo nhân dạng, tách sự việc hậu trường khỏi sự việc trong truyện đã biết, chọn nhân vật theo mức liên quan — tham khảo từ [**world-backstage**](https://github.com/h675786161-prog/world-backstage) của **h675786161-prog**, giấy phép MIT. Phần cài đặt được viết lại theo khuôn dữ liệu của kho này, không chép mã.
+- Một số ý tưởng của Công Cụ Nhân Vật — đồng hồ thế giới, bốn kiểu hẹn, theo dõi nhân dạng, tách sự việc hậu trường khỏi sự việc trong truyện đã biết, chọn nhân vật theo mức liên quan — tham khảo từ [**world-backstage**](https://github.com/h675786161-prog/world-backstage) của **h675786161-prog**, giấy phép MIT. Phần cài đặt được viết lại theo khuôn dữ liệu của kho này, không chép mã.
 
 ---
 

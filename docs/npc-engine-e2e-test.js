@@ -67,7 +67,7 @@ const scripted = [
       intent: { action: 'Luyện thành thục Boosted Gear', mode: 'effort', duration: { hours: 20 } }
     }]
   }),
-  // Lượt 2 — trích xuất: mô hình cố đổi giới tính Rias, và báo đã kể tin đồn
+  // Lượt 2 — trích xuất: chính văn tiết lộ nhân dạng khác, và báo đã kể tin đồn
   JSON.stringify({
     scene: { location: ['Nhật Bản', 'Kuoh', 'Học viện Kuoh'], presentNames: ['Rias Gremory'] },
     time: { label: 'ba ngày sau', elapsed: { days: 3 } },
@@ -93,7 +93,7 @@ const scripted = [
   let st = D.loadState();
 
   ok('trích xuất được hai nhân vật', st.npcs.length === 2);
-  ok('nhân dạng được chốt lần đầu', D.findNpc(st, 'Rias Gremory').identity.gender === 'nữ');
+  ok('nhân dạng được ghi nhận lần đầu', D.findNpc(st, 'Rias Gremory').identity.gender === 'nữ');
   ok('đồng hồ nhích đúng 30 phút', D.clockMinutes(st) === 30);
   ok('người vắng mặt được đẩy hoạt động ngầm', r1.acted.length === 1);
   ok('lịch hẹn ghi đúng kiểu giờ công',
@@ -101,16 +101,18 @@ const scripted = [
   ok('tin đồn sinh ra nhưng CHƯA vào chính văn',
     st.publicFacts.length === 1 && st.publicFacts[0].acknowledged === false);
   ok('sự việc chưa thừa nhận không lọt vào ràng buộc tri thức', !injected.includes('CHƯA biết'));
-  ok('ràng buộc nhân dạng có trong khối chèn', injected.includes('Nhân dạng cố định'));
+  ok('ràng buộc nhân dạng có trong khối chèn', injected.includes('Nhân dạng nhân vật'));
 
   console.log('\n=== LƯỢT 2 (truyện nhảy 3 ngày) ===');
   chat.push({ is_user: true, mes: 'Ba ngày sau' }, { is_user: false, name: 'Rias', mes: 'Ba ngày sau, Rias nhắc lại lời đồn.' });
   await E.ingestWorldEvolution({ layer: 3, dialogue: 'Ba ngày sau, Rias nhắc lại lời đồn về nhà Hyoudou.', worldDigest: 'Kinh đô giới nghiêm' });
   st = D.loadState();
 
-  ok('mô hình KHÔNG đổi được giới tính đã chốt', D.findNpc(st, 'Rias Gremory').identity.gender === 'nữ');
-  ok('mô hình KHÔNG đổi được chủng tộc đã chốt', D.findNpc(st, 'Rias Gremory').identity.species === 'Ác ma');
-  ok('nhưng điền được ô còn trống', D.findNpc(st, 'Rias Gremory').identity.socialRole === 'Chủ tịch hội học sinh');
+  ok('chính văn nói khác thì nhân dạng đổi theo', D.findNpc(st, 'Rias Gremory').identity.gender === 'nam');
+  ok('chủng tộc cũng đổi theo', D.findNpc(st, 'Rias Gremory').identity.species === 'Thiên sứ');
+  ok('ô còn trống vẫn điền được', D.findNpc(st, 'Rias Gremory').identity.socialRole === 'Chủ tịch hội học sinh');
+  // Lượt này mô hình không nhắc gì tới xưng hô, nên giá trị cũ phải còn nguyên — im lặng không phải là xoá.
+  ok('trường không được nhắc thì giữ nguyên', D.findNpc(st, 'Rias Gremory').identity.pronouns === 'cô ấy');
   ok('đồng hồ nhảy đúng 3 ngày', D.clockMinutes(st) === 30 + 3 * D.MINUTES_PER_DAY);
   ok('sự việc được báo là đã kể thì thành đã thừa nhận',
     st.publicFacts[0].acknowledged === true);
@@ -124,7 +126,7 @@ const scripted = [
   console.log('\n=== KIỂM CHỨNG CHÉO ===');
   const lastPrompt = responses[responses.length - 1] || responses[responses.length - 2] || '';
   ok('prompt có kèm tư liệu Sổ Tay Thế Giới', responses.some(p => p.includes('Trường An là kinh đô')));
-  ok('prompt trích xuất kèm nhân dạng đã chốt', responses.some(p => p.includes('nhân dạng đã chốt')));
+  ok('prompt trích xuất kèm nhân dạng đang lưu', responses.some(p => p.includes('nhân dạng đang lưu')));
   ok('prompt kèm danh sách sự việc chờ thừa nhận', responses.some(p => p.includes('SỰ VIỆC HẬU TRƯỜNG CHƯA AI KỂ')));
   ok('bảng điểm chọn nhân vật có ghi lý do',
     (E.getLastSelection() || []).some(item => (item.reasons || []).length > 0));

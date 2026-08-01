@@ -54,9 +54,9 @@ window.NPC_ENGINE_DATA = (function() {
       firstSeenLayer: asLayer(source.firstSeenLayer),
       lastSeenLayer: asLayer(source.lastSeenLayer),
 
-      // Neo nhân dạng: những thứ KHÔNG được trôi theo thời gian. Mô hình chỉ được điền vào ô còn
-      // trống, không bao giờ được sửa ô đã có — nếu không, qua vài chục lượt nó sẽ lặng lẽ đổi
-      // giới tính, tuổi hay chủng tộc của một nhân vật mà chẳng ai để ý. Muốn sửa thì sửa tay.
+      // Nhân dạng: giới tính, xưng hô, chủng tộc, độ tuổi, ngoại hình cố định, thân phận xã hội.
+      // Tách riêng khỏi các trục khác vì đây là thứ AI chính viết sai thì người đọc nhận ra ngay,
+      // nên nó được gửi kèm vào mọi lượt thay vì chỉ nằm trong hồ sơ.
       identity: {
         gender: clean(source.identity && source.identity.gender),
         pronouns: clean(source.identity && source.identity.pronouns),
@@ -82,8 +82,6 @@ window.NPC_ENGINE_DATA = (function() {
         archivedLayer: asLayer(source.status && source.status.archivedLayer)
       },
 
-      // Đề nghị đổi nhân dạng do mô hình nêu, CHỜ người chơi duyệt. Không tự áp dụng bao giờ.
-      identityProposals: asArray(source.identityProposals),
       offscreenLog: asArray(source.offscreenLog),
       pendingIntent: source.pendingIntent || null
     };
@@ -304,56 +302,24 @@ window.NPC_ENGINE_DATA = (function() {
     return npc;
   }
 
-  // Gộp neo nhân dạng theo nguyên tắc ĐIỀN MỘT LẦN: ô trống thì nhận giá trị mới, ô đã có thì giữ
-  // nguyên. Đây chính là cơ chế chống trôi — mô hình không có đường nào ghi đè lên thứ đã chốt.
-  // Trả về danh sách ô vừa được điền, để nơi gọi biết có gì thay đổi.
   const IDENTITY_FIELDS = ['gender', 'pronouns', 'species', 'ageStage', 'appearance', 'socialRole'];
 
+  // Nhân dạng đi theo chính văn: mô hình gửi giá trị mới thì ghi đè, như mọi trục khác.
+  // Trách nhiệm "đừng đoán bừa" nằm ở prompt, không nằm ở khoá dữ liệu.
+  //
+  // Một điều KHÔNG đổi: giá trị rỗng không xoá được thứ đã có. Prompt dặn mô hình chỉ ghi phần
+  // thay đổi, nên lượt nào nó im lặng về nhân dạng thì đó là "không có gì mới", không phải "xoá đi".
+  // Đây đúng lớp lỗi từng làm mất điểm nhân vật chính hồi trước.
   function mergeIdentity(npc, incoming) {
-    const filled = [];
-    if (!npc || !incoming || typeof incoming !== 'object') return filled;
+    const changed = [];
+    if (!npc || !incoming || typeof incoming !== 'object') return changed;
     for (const field of IDENTITY_FIELDS) {
       const value = clean(incoming[field]);
-      if (!value || clean(npc.identity[field])) continue;
+      if (!value || normalized(npc.identity[field]) === normalized(value)) continue;
       npc.identity[field] = value;
-      filled.push(field);
+      changed.push(field);
     }
-    return filled;
-  }
-
-  // Chính văn có thể tiết lộ nhân dạng khác thật: người cải trang bị lột mặt nạ, hoặc lần chốt đầu
-  // sai vì cảnh mơ hồ. Nhưng cho mô hình tự sửa thì cơ chế chống trôi mất sạch ý nghĩa.
-  //
-  // Nên đề nghị được GHI LẠI chứ không áp dụng: hồ sơ giữ nguyên, giao diện hiện dấu chờ duyệt,
-  // người chơi bấm đồng ý thì mới đổi. Không có gì đổi âm thầm sau lưng.
-  function proposeIdentityChange(npc, change, layer) {
-    if (!npc || !change || typeof change !== 'object') return null;
-    const field = clean(change.field);
-    const value = clean(change.value);
-    const reason = clean(change.reason);
-    if (!IDENTITY_FIELDS.includes(field) || !value || !reason) return null;
-
-    const current = clean(npc.identity[field]);
-    if (!current || normalized(current) === normalized(value)) return null;   // chưa chốt hoặc không đổi gì
-
-    npc.identityProposals = asArray(npc.identityProposals).filter(item => item.field !== field);
-    const proposal = { field, from: current, to: value, reason, layer: asLayer(layer) };
-    npc.identityProposals.push(proposal);
-    return proposal;
-  }
-
-  function applyIdentityProposal(npc, field) {
-    const proposal = asArray(npc?.identityProposals).find(item => item.field === field);
-    if (!proposal) return null;
-    npc.identity[proposal.field] = proposal.to;
-    npc.identityProposals = npc.identityProposals.filter(item => item.field !== field);
-    return proposal;
-  }
-
-  function dismissIdentityProposal(npc, field) {
-    const before = asArray(npc?.identityProposals).length;
-    npc.identityProposals = asArray(npc?.identityProposals).filter(item => item.field !== field);
-    return before !== npc.identityProposals.length;
+    return changed;
   }
 
   // Mô tả nhân dạng thành một dòng, dùng cho prompt và cho ràng buộc gửi AI chính.
@@ -666,9 +632,6 @@ window.NPC_ENGINE_DATA = (function() {
     mergeIdentity,
     describeIdentity,
     IDENTITY_FIELDS,
-    proposeIdentityChange,
-    applyIdentityProposal,
-    dismissIdentityProposal,
     enforceCoreLimit,
     proximity,
     travelKey,
