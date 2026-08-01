@@ -218,6 +218,59 @@ function check(label, condition) {
   check('đếm thêm lượt nữa không đổi gì', data.tickTravel(state).length === 0);
 }
 
+// ===== Dự định đang treo phải đếm ngược và hết hạn =====
+// Lỗi người dùng báo: NPC rủ nhau đi ăn "ngay hôm nay", ba ngày sau truyện vẫn viết cảnh họ đang
+// ăn. Nguyên nhân là pendingIntent chỉ được đặt vào và đưa vào prompt mỗi lượt, không bao giờ
+// bị trừ hay hết hạn — mô hình đọc thấy dòng đó thì viết tiếp cảnh đó.
+{
+  const state = data.defaultState();
+  const npc = data.upsertNpc(state, { name: 'NPC A', tier: 'core' });
+  npc.pendingIntent = { action: 'Đi ăn lòng nướng', etaRounds: 2, layer: 5, storyDay: 3 };
+
+  data.tickIntents(state, 3);
+  check('còn hạn thì trừ dần', npc.pendingIntent.etaRounds === 1);
+  check('chưa tới hạn thì chưa đánh dấu', !npc.pendingIntent.due);
+
+  data.tickIntents(state, 3);
+  check('trừ tiếp về 0', npc.pendingIntent.etaRounds === 0);
+
+  const due = data.tickIntents(state, 3);
+  check('hết lượt thì đánh dấu đến hạn', npc.pendingIntent.due === true);
+  check('báo cáo danh sách đến hạn', due.due.includes(npc.id));
+
+  // Cho đúng một lượt ở trạng thái đến hạn để mô hình kết lại; không kết thì bỏ.
+  const expired = data.tickIntents(state, 3);
+  check('đến hạn mà không được kết thì bị bỏ', npc.pendingIntent === null);
+  check('báo cáo danh sách quá hạn', expired.expired.includes(npc.id));
+}
+
+// ===== Nhảy thời gian làm dự định ngắn hạn lỗi thời =====
+{
+  const state = data.defaultState();
+  const npc = data.upsertNpc(state, { name: 'NPC A', tier: 'core' });
+  // Dự định còn tận 5 lượt nữa mới tới hạn đếm, nhưng truyện đã sang ngày khác.
+  npc.pendingIntent = { action: 'Rủ NPC B đi ăn ngay hôm nay', etaRounds: 5, layer: 5, storyDay: 3 };
+
+  data.tickIntents(state, 6);
+  check('nhảy ngày thì đánh dấu lỗi thời dù còn hạn đếm', npc.pendingIntent.staleByTime === true);
+  check('lỗi thời cũng tính là đến hạn', npc.pendingIntent.due === true);
+
+  // Cùng ngày thì không đụng tới.
+  const same = data.defaultState();
+  const other = data.upsertNpc(same, { name: 'NPC C', tier: 'core' });
+  other.pendingIntent = { action: 'Việc trong ngày', etaRounds: 3, layer: 5, storyDay: 4 };
+  data.tickIntents(same, 4);
+  check('cùng ngày thì không đánh dấu lỗi thời', !other.pendingIntent.staleByTime);
+  check('cùng ngày thì vẫn trừ bình thường', other.pendingIntent.etaRounds === 2);
+
+  // Không parse được ngày truyện thì chỉ đếm theo lượt, không suy đoán bừa.
+  const noDay = data.defaultState();
+  const third = data.upsertNpc(noDay, { name: 'NPC D', tier: 'core' });
+  third.pendingIntent = { action: 'Việc gì đó', etaRounds: 2, layer: 5, storyDay: 3 };
+  data.tickIntents(noDay, null);
+  check('không có ngày truyện thì không đánh dấu lỗi thời', !third.pendingIntent.staleByTime);
+}
+
 // ===== Bộ nhớ đệm hành trình =====
 {
   const state = data.defaultState();

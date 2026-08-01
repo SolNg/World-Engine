@@ -24,6 +24,15 @@ Ghi rõ "travelMode" là phương tiện di chuyển.
 【TÍNH NHẤT QUÁN】
 Nếu phần tư liệu có sẵn số lượt cho một tuyến đường đã đi trước đây, hãy dùng lại đúng con số đó, trừ khi hoàn cảnh lần này khác hẳn (đi gấp, phương tiện tốt hơn, đường bị chặn). Cùng một tuyến đường không được lúc nhanh lúc chậm bất nhất.
 
+【THỜI GIAN VÀ DỰ ĐỊNH ĐANG TREO — QUAN TRỌNG】
+Nhân vật có dự định từ lượt trước thì phải xử lý theo thời gian đã thực sự trôi qua, KHÔNG được chép lại nguyên văn dự định đó như thể chưa có gì xảy ra.
+
+- Dự định đánh dấu "ĐẾN HẠN" bắt buộc phải kết lại dứt điểm trong lượt này: đã làm xong, đã bỏ dở, đã thất bại, hay đã bị việc khác chen ngang. Không được để nó treo tiếp.
+- Dự định đánh dấu "ĐÃ LỖI THỜI" là dự định ngắn hạn nhưng truyện đã nhảy qua nhiều ngày. Chuyện đó hoặc đã diễn ra xong từ lâu, hoặc đã bị bỏ quên. Tuyệt đối không viết như thể nó đang diễn ra ngay lúc này.
+- Một cuộc hẹn "ngay hôm nay" mà truyện đã sang ngày khác thì nó đã kết thúc rồi, không phải vẫn đang tiếp diễn.
+
+Với nhân vật có dự định đến hạn hoặc lỗi thời, phần "action" phải mô tả KẾT CỤC của dự định đó, và trường "intent" chỉ điền khi họ có dự định MỚI.
+
 【TIN ĐỒN】
 Hành động nào đủ lộ liễu để lan tới tai người khác thì đánh dấu "becameRumor": true và viết "rumorText" theo giọng tin đồn — không chắc chắn, không đầy đủ, đúng như cách tin tức thật sự lan truyền. Hành động bí mật thì để false.
 
@@ -88,8 +97,17 @@ Không nhân vật nào có hành động đáng kể thì trả "activities": [
 
       if (npc.relations?.user?.attitude) lines.push(`  với người chơi: ${clean(npc.relations.user.attitude)}`);
       if (npc.status?.condition) lines.push(`  trạng thái: ${clean(npc.status.condition)}`);
-      if (npc.pendingIntent?.action) {
-        lines.push(`  dự định đang treo: ${clean(npc.pendingIntent.action)} (còn ${npc.pendingIntent.etaRounds || 0} lượt)`);
+      // Dự định đến hạn hoặc lỗi thời phải nêu bật, nếu không mô hình chỉ đọc thấy một dòng
+      // trung tính rồi chép lại nguyên văn — đó là cách một cuộc hẹn "ngay hôm nay" kéo dài ba ngày.
+      const intent = npc.pendingIntent;
+      if (intent?.action) {
+        if (intent.staleByTime) {
+          lines.push(`  dự định ĐÃ LỖI THỜI (đặt ra từ ngày truyện trước): ${clean(intent.action)} — phải kết lại, không được viết như đang diễn ra`);
+        } else if (intent.due) {
+          lines.push(`  dự định ĐẾN HẠN, phải kết lại dứt điểm lượt này: ${clean(intent.action)}`);
+        } else {
+          lines.push(`  dự định đang treo: ${clean(intent.action)} (còn ${intent.etaRounds || 0} lượt)`);
+        }
       }
 
       const recent = asArray(npc.offscreenLog).slice(-2)
@@ -119,8 +137,23 @@ Không nhân vật nào có hành động đáng kể thì trả "activities": [
 
     sections.push(`【MỨC CHỦ ĐỘNG】\n${describeAggressiveness(opts.aggressiveness)}`);
 
-    if (Number.isFinite(Number(opts.storyDay))) {
-      sections.push(`【THỜI GIAN TRUYỆN】\nĐã trôi qua ${Number(opts.storyDay)} ngày kể từ đầu truyện.`);
+    // Khoảng thời gian trôi qua GIỮA HAI LƯỢT mới là thứ quyết định nhân vật làm được bao nhiêu việc.
+    // Chỉ nói tổng số ngày từ đầu truyện thì mô hình không biết truyện vừa nhảy ba ngày hay vài phút.
+    if (Number.isFinite(Number(opts.storyDay)) || Number.isFinite(Number(opts.elapsedDays))) {
+      const lines = [];
+      if (Number.isFinite(Number(opts.storyDay))) lines.push(`Đã trôi qua ${Number(opts.storyDay)} ngày kể từ đầu truyện.`);
+
+      const elapsed = Number(opts.elapsedDays);
+      if (Number.isFinite(elapsed)) {
+        if (elapsed <= 0) {
+          lines.push('So với lượt trước, thời gian truyện gần như chưa nhích: nhân vật chỉ làm được những việc ngắn.');
+        } else if (elapsed === 1) {
+          lines.push('So với lượt trước đã sang ngày mới. Mọi việc dự định làm "hôm nay" của ngày cũ đều đã kết thúc.');
+        } else {
+          lines.push(`So với lượt trước đã trôi qua ${elapsed} ngày. Đây là một quãng dài: nhân vật đủ thời gian làm nhiều việc, đi xa, hoặc đổi ý. Mọi dự định ngắn hạn của ngày cũ đều đã xong hoặc đã bị bỏ.`);
+        }
+      }
+      sections.push(`【THỜI GIAN TRUYỆN】\n${lines.join('\n')}`);
     }
 
     // Tư liệu nền đặt trước diễn biến: nhân vật hành động trong một thế giới có sẵn luật lệ, thế lực

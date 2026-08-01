@@ -85,6 +85,7 @@ window.NPC_ENGINE_DATA = (function() {
       // Những chuyện "thiên hạ có thể biết". Ràng buộc tri thức là phép trừ giữa danh sách này và
       // knowledge của từng NPC — không có nó thì không thể nói "nhân vật này CHƯA biết chuyện gì".
       publicFacts: [],
+      lastStoryDay: null,
       worldLink: { lastWorldRound: 0, lastDigest: '' }
     };
   }
@@ -102,6 +103,7 @@ window.NPC_ENGINE_DATA = (function() {
       ? target.travelCache : {};
     target.rumorQueue = asArray(target.rumorQueue);
     target.publicFacts = asArray(target.publicFacts);
+    target.lastStoryDay = asLayer(target.lastStoryDay);
     const scene = target.scene && typeof target.scene === 'object' && !Array.isArray(target.scene) ? target.scene : {};
     target.scene = {
       layer: asLayer(scene.layer),
@@ -353,6 +355,45 @@ window.NPC_ENGINE_DATA = (function() {
     return state.travelCache[travelKey(from, to)];
   }
 
+  // ========== Dự định đang treo ==========
+  // Dự định cũng phải đếm ngược như hành trình. Trước đây nó chỉ được đặt vào rồi đưa vào prompt
+  // mỗi lượt mà không bao giờ trừ hay hết hạn, nên một dự định kiểu "đi ăn ngay hôm nay" vẫn được
+  // nhắc lại nguyên văn sau khi truyện đã nhảy ba ngày — mô hình đọc thấy thì viết tiếp cảnh đó.
+  //
+  // Vòng đời: còn hạn → đến hạn (phải xử lý dứt điểm trong lượt này) → quá hạn thì bỏ.
+  // Cho đúng một lượt ở trạng thái "đến hạn" để mô hình có cơ hội kết lại, không thì treo mãi.
+  function tickIntents(state, storyDay) {
+    const due = [], expired = [];
+    const today = Number.isFinite(Number(storyDay)) ? Number(storyDay) : null;
+
+    for (const npc of state.npcs) {
+      const intent = npc.pendingIntent;
+      if (!intent || !clean(intent.action)) continue;
+
+      const eta = Math.max(0, parseInt(intent.etaRounds) || 0);
+      if (eta > 0) { intent.etaRounds = eta - 1; continue; }
+
+      // Đã ở trạng thái đến hạn từ lượt trước mà vẫn còn đây: mô hình không kết, bỏ đi.
+      if (intent.due === true) { npc.pendingIntent = null; expired.push(npc.id); continue; }
+
+      intent.due = true;
+      intent.etaRounds = 0;
+      due.push(npc.id);
+    }
+
+    // Thời gian truyện nhảy xa thì mọi dự định ngắn hạn đều lỗi thời, kể cả cái chưa tới hạn đếm.
+    if (today !== null) {
+      for (const npc of state.npcs) {
+        const intent = npc.pendingIntent;
+        const bornDay = Number(intent?.storyDay);
+        if (!intent || !Number.isFinite(bornDay)) continue;
+        if (today - bornDay >= 1 && !intent.due) { intent.due = true; intent.staleByTime = true; due.push(npc.id); }
+      }
+    }
+
+    return { due: unique(due), expired: unique(expired) };
+  }
+
   // Trừ dần mỗi lượt. Engine chỉ đếm, không tự phán đoán địa lý — việc đó do AI làm một lần khi
   // hành trình bắt đầu (xem npc-engine-offscreen.js).
   function tickTravel(state) {
@@ -398,6 +439,7 @@ window.NPC_ENGINE_DATA = (function() {
     travelKey,
     getTravel,
     setTravel,
-    tickTravel
+    tickTravel,
+    tickIntents
   };
 })();

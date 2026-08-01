@@ -257,7 +257,8 @@ window.NPC_ENGINE = (function() {
         npc.pendingIntent = {
           action: clean(activity.intent.action),
           etaRounds: Math.max(0, parseInt(activity.intent.etaRounds) || 0),
-          layer: currentLayer
+          layer: currentLayer,
+          storyDay: asLayer(core()?.getLastStoryDay?.())
         };
       }
 
@@ -610,6 +611,16 @@ window.NPC_ENGINE = (function() {
       const arrived = data().tickTravel(state);
       const storyDay = core()?.getLastStoryDay?.();
 
+      // Đã trôi qua bao nhiêu ngày truyện kể từ lượt trước. Không có con số này thì mô hình không
+      // biết truyện vừa nhảy thời gian, và sẽ viết tiếp những dự định ngắn hạn như thể vẫn cùng ngày.
+      const previousDay = asLayer(state.lastStoryDay);
+      const elapsedDays = (Number.isFinite(Number(storyDay)) && previousDay !== null)
+        ? Math.max(0, Number(storyDay) - previousDay) : null;
+      if (Number.isFinite(Number(storyDay))) state.lastStoryDay = Number(storyDay);
+
+      // Đếm ngược dự định đang treo: còn hạn → đến hạn → quá hạn thì bỏ.
+      const intents = data().tickIntents(state, storyDay);
+
       // Sổ Tay Thế Giới: các mục người dùng đã chọn ở tab Worldbook, phạm vi lưu riêng của engine này.
       // Mục kiểu từ khoá chỉ bật khi văn bản quét có nhắc tới, nên hai pha cần hai văn bản quét khác nhau
       // (xem buildWorldbookSection). Cách ly lỗi: lorebook hỏng thì hai pha vẫn phải chạy.
@@ -648,6 +659,8 @@ window.NPC_ENGINE = (function() {
           sceneSummary: describePath(state.scene.location),
           travelCache: state.travelCache,
           worldScale: st.worldScale,
+          elapsedDays,
+          dueIntentIds: intents.due,
           aggressiveness: st.offscreenAggressiveness,
           maxActivities: st.offscreenMaxPerRound,
           storyDay

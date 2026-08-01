@@ -428,6 +428,30 @@ const baseSettings = () => config.getSettings(true);
   check('prompt hoạt động ngầm nêu thế giới quan', offscreen.includes('tu tiên'));
   check('prompt hoạt động ngầm dịch mức chủ động thành lời', offscreen.includes('Vừa phải'));
   check('prompt hoạt động ngầm đòi ước lượng số lượt', offscreen.includes('etaRounds'));
+
+  // Lỗi người dùng báo: dự định "ngay hôm nay" bị viết tiếp sau khi truyện đã nhảy ba ngày.
+  // Mô hình cần biết đã trôi qua bao lâu GIỮA HAI LƯỢT, không chỉ tổng số ngày từ đầu truyện.
+  const jumped = global.NPC_ENGINE_OFFSCREEN.buildPrompt({
+    absentNpcs: [{
+      name: 'NPC A', location: { path: ['Kuoh'] }, goals: [],
+      pendingIntent: { action: 'Rủ NPC B đi ăn ngay hôm nay', etaRounds: 0, due: true, staleByTime: true }
+    }],
+    storyDay: 8, elapsedDays: 3, aggressiveness: 0.5
+  });
+  check('prompt nêu thời gian trôi qua giữa hai lượt', jumped.includes('đã trôi qua 3 ngày'));
+  check('prompt cảnh báo dự định ngắn hạn đã xong hoặc bị bỏ',
+    jumped.includes('dự định ngắn hạn của ngày cũ đều đã xong hoặc đã bị bỏ'));
+  check('prompt nêu bật dự định lỗi thời', jumped.includes('ĐÃ LỖI THỜI'));
+  check('prompt cấm viết như đang diễn ra', jumped.includes('không được viết như đang diễn ra'));
+  check('có quy tắc riêng cho dự định đang treo',
+    jumped.includes('THỜI GIAN VÀ DỰ ĐỊNH ĐANG TREO'));
+
+  const sameDay = global.NPC_ENGINE_OFFSCREEN.buildPrompt({
+    absentNpcs: [{ name: 'NPC A', location: { path: [] }, goals: [] }],
+    storyDay: 3, elapsedDays: 0, aggressiveness: 0.5
+  });
+  check('cùng ngày thì báo thời gian gần như chưa nhích',
+    sameDay.includes('thời gian truyện gần như chưa nhích'));
 }
 
 // ===== Thứ thật sự gửi cho API =====
