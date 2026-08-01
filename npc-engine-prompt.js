@@ -55,8 +55,20 @@ Chỉ xuất một khối JSON hợp lệ, không kèm giải thích, không kè
       "status": { "condition": "tình trạng", "resources": "tài nguyên", "alive": true }
     }
   ],
-  "deaths": [{ "name": "tên", "reason": "nguyên nhân" }]
+  "deaths": [{ "name": "tên", "reason": "nguyên nhân" }],
+  "time": {
+    "label": "mốc thời gian của đoạn này theo đúng cách chính văn nói, ví dụ: đêm cùng ngày / sáng hôm sau / ba ngày sau / Rằm tháng Giêng",
+    "elapsedDays": 0,
+    "note": "căn cứ nào trong chính văn cho biết điều đó"
+  }
 }
+
+【ĐỌC THỜI GIAN】
+Trường "time" rất quan trọng, phải điền cho mọi lượt.
+
+- "label": mốc thời gian của đoạn vừa đọc, viết theo đúng cách chính văn diễn đạt.
+- "elapsedDays": số NGÀY đã trôi qua so với mốc thời gian của lượt trước (nêu ở phần tư liệu bên dưới). Cùng ngày hoặc chỉ vài giờ thì ghi 0. Sang hôm sau ghi 1. "Ba ngày sau" ghi 3. "Một tuần sau" ghi 7. Không rõ thì ghi 0.
+- Căn cứ vào chữ trong chính văn: "sáng hôm sau", "ba ngày sau", "tuần kế tiếp", ngày tháng cụ thể, hoặc chuyển cảnh có nêu thời gian. Không có căn cứ thì đừng bịa, cứ ghi 0.
 
 Không có nhân vật nào đáng lưu thì trả "npcs": [] — đó là kết quả hợp lệ.`;
 
@@ -112,8 +124,17 @@ Không có nhân vật nào đáng lưu thì trả "npcs": [] — đó là kết
       sections.push(`【TÓM TẮT DIỄN BIẾN THẾ GIỚI LƯỢT NÀY】\n${clean(opts.worldDigest)}`);
     }
 
+    // Mô hình cần biết mốc của lượt TRƯỚC thì mới tính được đã trôi qua bao lâu.
+    const timeLines = [];
+    if (clean(opts.previousTimeLabel)) {
+      timeLines.push(`Mốc thời gian của lượt trước: ${clean(opts.previousTimeLabel)}`);
+    }
     if (Number.isFinite(Number(opts.storyDay))) {
-      sections.push(`【THỜI GIAN TRUYỆN】\nĐã trôi qua ${Number(opts.storyDay)} ngày kể từ đầu truyện.`);
+      timeLines.push(`Đã trôi qua ${Number(opts.storyDay)} ngày kể từ đầu truyện.`);
+    }
+    if (timeLines.length) {
+      timeLines.push('Hãy đọc mốc thời gian của đoạn dưới đây và điền vào trường "time".');
+      sections.push(`【THỜI GIAN TRUYỆN】\n${timeLines.join('\n')}`);
     }
 
     sections.push(`【HỘI THOẠI CẦN TRÍCH XUẤT】\n${clean(opts.dialogue) || '(không có nội dung)'}`);

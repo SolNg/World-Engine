@@ -27,7 +27,10 @@ window.NPC_ENGINE = (function() {
   const clean = value => String(value == null ? '' : value).trim();
   const normalized = value => clean(value).toLocaleLowerCase();
   const asArray = value => Array.isArray(value) ? value : [];
-  const asLayer = value => Number.isFinite(Number(value)) ? Number(value) : null;
+  // Number(null) === 0 chứ không phải NaN, nên bản cũ biến "không có tầng" thành "tầng 0".
+  const asLayer = value => (value === null || value === undefined || value === '')
+    ? null
+    : (Number.isFinite(Number(value)) ? Number(value) : null);
 
   function describePath(path) {
     const parts = asArray(path).map(clean).filter(Boolean);
@@ -222,6 +225,7 @@ window.NPC_ENGINE = (function() {
           layer: currentLayer,
           round: state.round,
           action,
+          timeRef: clean(activity.timeRef),
           visibility: clean(activity.visibility) || 'kín đáo',
           becameRumor: activity.becameRumor === true
         });
@@ -609,17 +613,7 @@ window.NPC_ENGINE = (function() {
       };
 
       const arrived = data().tickTravel(state);
-      const storyDay = core()?.getLastStoryDay?.();
-
-      // Đã trôi qua bao nhiêu ngày truyện kể từ lượt trước. Không có con số này thì mô hình không
-      // biết truyện vừa nhảy thời gian, và sẽ viết tiếp những dự định ngắn hạn như thể vẫn cùng ngày.
-      const previousDay = asLayer(state.lastStoryDay);
-      const elapsedDays = (Number.isFinite(Number(storyDay)) && previousDay !== null)
-        ? Math.max(0, Number(storyDay) - previousDay) : null;
-      if (Number.isFinite(Number(storyDay))) state.lastStoryDay = Number(storyDay);
-
-      // Đếm ngược dự định đang treo: còn hạn → đến hạn → quá hạn thì bỏ.
-      const intents = data().tickIntents(state, storyDay);
+      const previousTime = state.storyTime || {};
 
       // Sổ Tay Thế Giới: các mục người dùng đã chọn ở tab Worldbook, phạm vi lưu riêng của engine này.
       // Mục kiểu từ khoá chỉ bật khi văn bản quét có nhắc tới, nên hai pha cần hai văn bản quét khác nhau
@@ -637,9 +631,16 @@ window.NPC_ENGINE = (function() {
         worldbook,
         tonePrompt: st.tonePrompt,
         nameBlacklist: st.nameBlacklist,
-        storyDay
+        previousTimeLabel: previousTime.label,
+        storyDay: asLayer(state.lastStoryDay)
       }), st);
       const merged = mergeExtraction(state, extraction, layer);
+
+      // Đọc thời gian PHẢI làm sau trích xuất, vì chính mô hình là thứ đọc ra nó từ chính văn.
+      const time = readStoryTime(state, extraction);
+
+      // Đếm ngược dự định đang treo: còn hạn → đến hạn → quá hạn thì bỏ.
+      const intents = data().tickIntents(state, time.day);
 
       // --- Pha 2: hoạt động ngầm cho NPC trọng yếu đang vắng mặt ---
       let offscreen = { acted: [], rumors: [], moves: [] };
@@ -659,11 +660,13 @@ window.NPC_ENGINE = (function() {
           sceneSummary: describePath(state.scene.location),
           travelCache: state.travelCache,
           worldScale: st.worldScale,
-          elapsedDays,
+          elapsedDays: time.elapsed,
+          timeLabel: time.label,
+          previousTimeLabel: previousTime.label,
           dueIntentIds: intents.due,
           aggressiveness: st.offscreenAggressiveness,
           maxActivities: st.offscreenMaxPerRound,
-          storyDay
+          storyDay: time.day
         }), st);
         offscreen = applyOffscreen(state, activities, layer);
       }
@@ -921,6 +924,42 @@ window.NPC_ENGINE = (function() {
     }
   }
 
+  // ================= Đọc thời gian truyện =================
+  // Bắt người dùng cấu hình 6 ô regex mới đọc được thời gian là đòi hỏi vô lý, và phần lớn truyện
+  // viết mốc thời gian bằng lời ("ba ngày sau", "sáng hôm sau") chứ không theo khuôn cố định.
+  // Công Cụ Thế Giới giải quyết bằng cách bảo thẳng mô hình tự ước lượng từ chính văn; ở đây làm
+  // giống vậy — engine đã gửi nguyên văn hội thoại đi rồi, hỏi luôn là xong.
+  //
+  // Thứ tự ưu tiên: bộ parse theo regex nếu người dùng có cấu hình (tất định), sau đó tới mô hình.
+  function readStoryTime(state, extraction) {
+    const parsedDay = core()?.getLastStoryDay?.();
+    const reported = extraction?.time || {};
+    const label = clean(reported.label);
+    const modelElapsed = Number(reported.elapsedDays);
+    const hasModelElapsed = Number.isFinite(modelElapsed) && modelElapsed >= 0;
+    const previousDay = asLayer(state.lastStoryDay);
+
+    let day = asLayer(parsedDay);
+    let elapsed = null;
+    let source = 'none';
+
+    if (day !== null && previousDay !== null) {
+      elapsed = Math.max(0, day - previousDay);
+      source = 'regex';
+    } else if (hasModelElapsed) {
+      elapsed = Math.max(0, Math.round(modelElapsed));
+      source = 'model';
+      // Không cấu hình regex thì tự cộng dồn một bộ đếm ngày dựa trên báo cáo của mô hình.
+      if (day === null) day = (previousDay ?? 0) + elapsed;
+    } else if (day !== null) {
+      source = 'regex';
+    }
+
+    if (day !== null) state.lastStoryDay = day;
+    state.storyTime = { label, day, elapsedDays: elapsed, source };
+    return { day, elapsed, label, source };
+  }
+
   // ================= Chữa dữ liệu =================
 
   // Quét và sửa những chỗ không nhất quán tích tụ sau nhiều lượt: id trùng, tham chiếu tới nhân vật
@@ -1057,6 +1096,7 @@ window.NPC_ENGINE = (function() {
     stopBackfill,
     getBackfillStatus: () => clone(backfillStatus),
     reconcileHistory,
+    readStoryTime,
     repairState,
     buildWorldEngineContext,
     // Xuất ra để giao diện và kiểm thử dùng lại mà không phải gọi API.

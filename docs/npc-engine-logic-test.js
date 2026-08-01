@@ -326,6 +326,71 @@ const baseSettings = () => config.getSettings(true);
   check('trần cực chặt vẫn tôn trọng trần', tiny.length <= 120);
 }
 
+// ===== Đọc thời gian từ chính văn =====
+// Bắt người dùng cấu hình 6 ô regex mới đọc được thời gian là đòi hỏi vô lý, và phần lớn truyện
+// viết mốc thời gian bằng lời chứ không theo khuôn. Công Cụ Thế Giới giải quyết bằng cách bảo
+// thẳng mô hình tự ước lượng từ chính văn; engine này làm giống vậy.
+{
+  const state = data.defaultState();
+
+  // Không cấu hình regex: lấy theo báo cáo của mô hình và tự cộng dồn bộ đếm ngày.
+  global.WORLD_ENGINE_CORE.getLastStoryDay = () => null;
+  let time = engine.readStoryTime(state, { time: { label: 'đêm cùng ngày', elapsedDays: 0 } });
+  check('không có regex thì lấy theo mô hình', time.source === 'model');
+  check('cùng ngày thì chưa nhích', time.elapsed === 0);
+  check('bộ đếm ngày bắt đầu từ 0', time.day === 0);
+  check('nhớ lại nhãn thời gian', state.storyTime.label === 'đêm cùng ngày');
+
+  time = engine.readStoryTime(state, { time: { label: 'ba ngày sau', elapsedDays: 3 } });
+  check('nhảy ba ngày thì cộng dồn đúng', time.day === 3 && time.elapsed === 3);
+
+  time = engine.readStoryTime(state, { time: { label: 'sáng hôm sau', elapsedDays: 1 } });
+  check('cộng dồn tiếp qua nhiều lượt', time.day === 4 && time.elapsed === 1);
+
+  // Mô hình không trả gì thì không suy đoán bừa.
+  time = engine.readStoryTime(state, {});
+  check('mô hình im lặng thì không có số liệu', time.elapsed === null && time.source === 'none');
+
+  // Có cấu hình regex thì ưu tiên nó, vì tất định hơn.
+  const withRegex = data.defaultState();
+  withRegex.lastStoryDay = 10;
+  global.WORLD_ENGINE_CORE.getLastStoryDay = () => 17;
+  time = engine.readStoryTime(withRegex, { time: { label: 'gì đó', elapsedDays: 99 } });
+  check('có regex thì ưu tiên regex', time.source === 'regex');
+  check('regex tính chênh lệch đúng', time.day === 17 && time.elapsed === 7);
+  check('bỏ qua con số của mô hình khi có regex', time.elapsed !== 99);
+
+  global.WORLD_ENGINE_CORE.getLastStoryDay = () => 42;
+}
+
+// ===== Prompt phải dạy mô hình co giãn theo thời gian =====
+{
+  const system = global.NPC_ENGINE_OFFSCREEN.SYSTEM_PROMPT;
+  // Đây chính là quy tắc mà Công Cụ Thế Giới đã có từ đầu còn engine này thì thiếu:
+  // một lượt hội thoại không phải một đơn vị thời gian cố định.
+  check('dạy mô hình tự ước lượng thời gian trước', system.includes('ƯỚC LƯỢNG THỜI GIAN TRƯỚC KHI SUY DIỄN'));
+  check('nói rõ một lượt không phải đơn vị thời gian cố định',
+    system.includes('KHÔNG phải một đơn vị thời gian cố định'));
+  check('có thang co giãn hành động theo thời gian',
+    system.includes('Vài phút tới một giờ') && system.includes('Nhiều ngày trở lên'));
+  check('đòi mốc thời gian đối chiếu cho từng hành động', system.includes('timeRef'));
+  check('phân biệt tiếp nối với lặp lại',
+    system.includes('TIẾP NỐI không có nghĩa là LẶP LẠI'));
+
+  const extract = global.NPC_ENGINE_PROMPT.SYSTEM_PROMPT;
+  check('prompt trích xuất đòi đọc thời gian', extract.includes('ĐỌC THỜI GIAN'));
+  check('prompt trích xuất có trường elapsedDays', extract.includes('elapsedDays'));
+  check('nêu ví dụ quy đổi cụ thể', extract.includes('"Ba ngày sau" ghi 3'));
+  check('không có căn cứ thì cấm bịa', extract.includes('đừng bịa'));
+
+  // Mô hình cần biết mốc của lượt trước mới tính được chênh lệch.
+  const withPrevious = global.NPC_ENGINE_PROMPT.buildPrompt({
+    npcs: [], dialogue: 'x', previousTimeLabel: 'đêm rằm tháng Giêng'
+  });
+  check('prompt trích xuất kèm mốc thời gian lượt trước',
+    withPrevious.includes('Mốc thời gian của lượt trước: đêm rằm tháng Giêng'));
+}
+
 // ===== Đối soát và chữa dữ liệu =====
 // Sau nhiều lượt, dữ liệu tích tụ những chỗ không nhất quán mà không thao tác nào tự dọn:
 // quan hệ trỏ tới người đã xoá, tri thức trỏ tới sự thật không còn, id trùng nhau.

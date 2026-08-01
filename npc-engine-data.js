@@ -25,7 +25,10 @@ window.NPC_ENGINE_DATA = (function() {
   const normalized = value => clean(value).toLocaleLowerCase();
   const unique = values => Array.from(new Set((Array.isArray(values) ? values : [values]).map(clean).filter(Boolean)));
   const asArray = value => Array.isArray(value) ? value : [];
-  const asLayer = value => Number.isFinite(Number(value)) ? Number(value) : null;
+  // Number(null) === 0 chứ không phải NaN, nên bản cũ biến "không có tầng" thành "tầng 0".
+  const asLayer = value => (value === null || value === undefined || value === '')
+    ? null
+    : (Number.isFinite(Number(value)) ? Number(value) : null);
 
   function parse(raw, fallback) {
     if (!raw) return clone(fallback);
@@ -86,6 +89,7 @@ window.NPC_ENGINE_DATA = (function() {
       // knowledge của từng NPC — không có nó thì không thể nói "nhân vật này CHƯA biết chuyện gì".
       publicFacts: [],
       lastStoryDay: null,
+      storyTime: { label: '', day: null, elapsedDays: null, source: 'none' },
       worldLink: { lastWorldRound: 0, lastDigest: '' }
     };
   }
@@ -104,6 +108,8 @@ window.NPC_ENGINE_DATA = (function() {
     target.rumorQueue = asArray(target.rumorQueue);
     target.publicFacts = asArray(target.publicFacts);
     target.lastStoryDay = asLayer(target.lastStoryDay);
+    const time = target.storyTime && typeof target.storyTime === 'object' ? target.storyTime : {};
+    target.storyTime = { label: clean(time.label), day: asLayer(time.day), elapsedDays: asLayer(time.elapsedDays), source: clean(time.source) || 'none' };
     const scene = target.scene && typeof target.scene === 'object' && !Array.isArray(target.scene) ? target.scene : {};
     target.scene = {
       layer: asLayer(scene.layer),

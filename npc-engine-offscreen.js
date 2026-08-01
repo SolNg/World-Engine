@@ -24,6 +24,20 @@ Ghi rõ "travelMode" là phương tiện di chuyển.
 【TÍNH NHẤT QUÁN】
 Nếu phần tư liệu có sẵn số lượt cho một tuyến đường đã đi trước đây, hãy dùng lại đúng con số đó, trừ khi hoàn cảnh lần này khác hẳn (đi gấp, phương tiện tốt hơn, đường bị chặn). Cùng một tuyến đường không được lúc nhanh lúc chậm bất nhất.
 
+【ƯỚC LƯỢNG THỜI GIAN TRƯỚC KHI SUY DIỄN — LÀM ĐẦU TIÊN】
+Một lượt hội thoại KHÔNG phải một đơn vị thời gian cố định. Trước khi quyết định bất kỳ hành động nào, hãy tự ước lượng khoảng thời gian cốt truyện đã thực sự trôi qua ở lượt này, căn cứ vào chính văn: nhịp cảnh, lời thoại nhắc tới thời gian, chuyển cảnh, quãng đường di chuyển, mức tiêu hao hành động. Nó có thể là vài phút, vài giờ, một đêm, vài ngày, hoặc gần như không nhích.
+
+Mọi hành động ngầm phải VỪA VẶN với khoảng thời gian đó:
+
+- Vài phút tới một giờ: nhân vật chỉ kịp phản ứng ngắn, di chuyển trong cùng khu vực, nói vài câu. Không xong được việc cần hàng giờ.
+- Nửa ngày tới một ngày: xong được một việc trọn vẹn, đi được trong phạm vi thành.
+- Nhiều ngày trở lên: đi xa được, hoàn tất kế hoạch, đổi ý, xây dựng quan hệ mới. Mọi việc vặt của ngày cũ đều đã kết thúc từ lâu.
+
+Mỗi mục trong "activities" BẮT BUỘC ghi trường "timeRef": mốc thời gian đối chiếu của hành động đó, viết theo cách chính văn diễn đạt (ví dụ: "trong lúc người chơi đang nói chuyện", "tối cùng ngày", "ngày thứ hai sau đó"). Trường này để đối chiếu xem hành động có vừa với thời gian đã trôi qua hay không.
+
+【TIẾP NỐI LIÊN TỤC】
+Hành động lượt này phải tiếp nối hợp lý trạng thái của nhân vật ở lượt trước — nhưng TIẾP NỐI không có nghĩa là LẶP LẠI. Việc đang làm dở ở lượt trước, sau một khoảng thời gian dài, phải có kết cục chứ không được mô tả như vẫn đang diễn ra.
+
 【THỜI GIAN VÀ DỰ ĐỊNH ĐANG TREO — QUAN TRỌNG】
 Nhân vật có dự định từ lượt trước thì phải xử lý theo thời gian đã thực sự trôi qua, KHÔNG được chép lại nguyên văn dự định đó như thể chưa có gì xảy ra.
 
@@ -47,6 +61,7 @@ Chỉ xuất một khối JSON hợp lệ, không kèm giải thích, không kè
     {
       "name": "tên nhân vật",
       "action": "nhân vật đã làm gì, một câu ngắn",
+      "timeRef": "mốc thời gian đối chiếu của hành động này, theo cách chính văn diễn đạt",
       "visibility": "công khai / kín đáo / bí mật",
       "becameRumor": false,
       "rumorText": "nội dung tin đồn nếu becameRumor là true",
