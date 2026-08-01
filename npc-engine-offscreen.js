@@ -190,7 +190,13 @@ Không nhân vật nào có hành động đáng kể thì trả "activities": [
       sections.push(`【SỐ LƯỢT ĐI LẠI ĐÃ BIẾT CỦA CÁC TUYẾN ĐƯỜNG】\n${routes}`);
     }
 
-    sections.push(`【NHÂN VẬT VẮNG MẶT CẦN SUY DIỄN】\n${describeAbsentNpcs(opts.absentNpcs)}`);
+    // Danh sách này do engine chọn sẵn theo mức liên quan, không phải toàn bộ người vắng mặt.
+    // Nói rõ để mô hình không đi tìm những nhân vật khác mà nó biết là có tồn tại.
+    const skipped = Math.max(0, parseInt(opts.skippedCount) || 0);
+    const scopeNote = skipped
+      ? `\n\nCòn ${skipped} nhân vật vắng mặt khác lượt này KHÔNG cần suy diễn — họ giữ nguyên trạng thái. Đừng nhắc tới họ, cũng đừng bịa hoạt động cho họ.`
+      : '';
+    sections.push(`【NHÂN VẬT VẮNG MẶT CẦN SUY DIỄN】\n${describeAbsentNpcs(opts.absentNpcs)}${scopeNote}`);
 
     const limit = Math.max(0, parseInt(opts.maxActivities) || 0);
     if (limit > 0) {

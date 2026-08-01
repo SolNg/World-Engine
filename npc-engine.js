@@ -8,6 +8,8 @@ window.NPC_ENGINE = (function() {
   let lastDebug = { prompt: '', apiResponse: '', parsed: null, error: '' };
   // Số liệu khối chèn lần gần nhất, để tab Gỡ Lỗi cho biết đang tốn bao nhiêu ký tự.
   let lastInjectionInfo = { length: 0, blocks: 0, dropped: 0, maxChars: 0 };
+  // Bảng điểm chọn nhân vật lần gần nhất, để tab Gỡ Lỗi giải thích vì sao ai được đẩy.
+  let lastSelection = [];
 
   // Chống chạy hai lần cho cùng một tin nhắn. Có hai đường dẫn tới cùng một luồng:
   // Công Cụ Thế Giới gọi sang sau khi suy diễn xong (đường chính), và bộ hẹn giờ riêng bên dưới
@@ -730,11 +732,20 @@ window.NPC_ENGINE = (function() {
         npc.status.alive !== false &&
         !asArray(state.scene.presentIds).includes(npc.id));
 
-      if (st.offscreenEnabled !== false && absent.length) {
+      // Engine chọn sẵn ai được đẩy lượt này, thay vì gửi hết rồi để mô hình quyết.
+      const selection = selectOffscreenNpcs(state, absent, {
+        limit: st.offscreenMaxPerRound,
+        dialogue: payload?.dialogue,
+        worldDigest: payload?.worldDigest
+      });
+      lastSelection = selection.scored;
+
+      if (st.offscreenEnabled !== false && selection.chosen.length) {
         runningLabel = 'Suy diễn hoạt động ngầm';
-        setStatus(`Đang suy diễn hoạt động ngầm cho ${absent.length} nhân vật vắng mặt...`);
+        setStatus(`Đang suy diễn hoạt động ngầm cho ${selection.chosen.length}/${absent.length} nhân vật vắng mặt...`);
         const activities = await callModel(window.NPC_ENGINE_OFFSCREEN.buildPrompt({
-          absentNpcs: absent,
+          absentNpcs: selection.chosen,
+          skippedCount: selection.skipped.length,
           worldDigest: clean(payload?.worldDigest),
           worldbook: await buildWorldbookSection(offscreenScanText(absent, payload?.worldDigest), st),
           sceneSummary: describePath(state.scene.location),
@@ -1005,6 +1016,81 @@ window.NPC_ENGINE = (function() {
     }
   }
 
+  // ================= Chọn nhân vật cho pha hoạt động ngầm =================
+  // Gửi toàn bộ NPC vắng mặt rồi bảo mô hình tự chọn có hai cái dở: prompt phình theo số nhân vật,
+  // và việc "ai đáng được đẩy lượt này" bị phó mặc cho mô hình — nó hay chọn theo thứ tự danh sách.
+  //
+  // Engine chấm điểm rồi chọn sẵn. Người không được chọn thì GIỮ NGUYÊN trạng thái, không bịa
+  // hoạt động — đứng yên một lượt là hợp lý, còn bịa ra việc cho đủ người thì phá truyện.
+
+  function scoreOffscreen(npc, context) {
+    let score = 0;
+    const reasons = [];
+
+    // Dự định đến hạn phải được kết trong lượt này, nếu không nó treo tiếp — ưu tiên cao nhất.
+    if (npc.pendingIntent?.due) { score += 100; reasons.push('dự định đến hạn'); }
+    else if (npc.pendingIntent?.action) { score += 25; reasons.push('có dự định'); }
+
+    // Đang đi đường thì cần đếm tiếp, nếu không hành trình đứng im.
+    if (npc.location?.movingTo && npc.location.etaRounds > 0) { score += 40; reasons.push('đang đi đường'); }
+
+    // Được nhắc tới trong chính văn lượt này: người chơi vừa nghĩ tới họ.
+    if (context.mentioned.has(npc.id)) { score += 60; reasons.push('vừa được nhắc tới'); }
+
+    // Ở gần cảnh của người chơi thì dễ giao cắt, đáng theo dõi hơn người ở tận đâu.
+    const near = data().proximity(npc.location?.path, context.sceneLocation);
+    if (near === data().PROXIMITY.SAME_CITY || near === data().PROXIMITY.SAME_SPOT) {
+      score += 30; reasons.push('cùng thành với người chơi');
+    } else if (near === data().PROXIMITY.SAME_REGION) {
+      score += 15; reasons.push('cùng vùng');
+    }
+
+    // Mục tiêu còn dở thì còn chuyện để làm.
+    if (asArray(npc.goals).some(goal => clean(goal?.text) && !/hoàn tất|thất bại/i.test(clean(goal?.progress)))) {
+      score += 20; reasons.push('mục tiêu còn dở');
+    }
+
+    score += Math.round((parseInt(npc.significance) || 0) / 5);   // 0–20 theo mức thiết yếu
+
+    // Công bằng: lâu không được đẩy thì cộng dần, để không phải lúc nào cũng đúng mấy người đó.
+    const lastLog = asArray(npc.offscreenLog).at(-1);
+    const lastRound = parseInt(lastLog?.round);
+    const idle = Number.isFinite(lastRound) ? Math.max(0, context.round - lastRound) : 99;
+    const idleBonus = Math.min(25, idle * 5);
+    if (idleBonus > 0) { score += idleBonus; reasons.push(`lâu chưa có diễn biến (${idle === 99 ? 'chưa lần nào' : idle + ' lượt'})`); }
+
+    return { score, reasons };
+  }
+
+  function selectOffscreenNpcs(state, absent, options) {
+    const limit = Math.max(0, parseInt(options?.limit) || 0);
+    if (!limit) return { chosen: [], skipped: absent.map(npc => npc.id), scored: [] };
+
+    // Tên nào xuất hiện trong chính văn hoặc tóm tắt thế giới lượt này.
+    const haystack = normalized(`${clean(options?.dialogue)}\n${clean(options?.worldDigest)}`);
+    const mentioned = new Set(absent
+      .filter(npc => [npc.name, ...asArray(npc.aliases)]
+        .map(clean).filter(Boolean)
+        .some(name => haystack.includes(normalized(name))))
+      .map(npc => npc.id));
+
+    const context = {
+      mentioned,
+      sceneLocation: asArray(state.scene?.location),
+      round: Math.max(0, parseInt(state.round) || 0)
+    };
+
+    const scored = absent
+      .map(npc => ({ npc, ...scoreOffscreen(npc, context) }))
+      .sort((a, b) => b.score - a.score);
+
+    return {
+      chosen: scored.slice(0, limit).map(item => item.npc),
+      skipped: scored.slice(limit).map(item => item.npc.id),
+      scored: scored.map(item => ({ id: item.npc.id, name: item.npc.name, score: item.score, reasons: item.reasons }))
+    };
+  }
+
   // ================= Đọc thời gian truyện =================
   // Bắt người dùng cấu hình 6 ô regex mới đọc được thời gian là đòi hỏi vô lý, và phần lớn truyện
   // viết mốc thời gian bằng lời ("ba ngày sau", "sáng hôm sau") chứ không theo khuôn cố định.
@@ -1172,6 +1258,8 @@ window.NPC_ENGINE = (function() {
     getRunningLabel: () => backfillRunning ? 'Điền lại hàng loạt' : runningLabel,
     getLastDebug: () => clone(lastDebug),
     getLastInjectionInfo: () => clone(lastInjectionInfo),
+    getLastSelection: () => clone(lastSelection),
+    selectOffscreenNpcs,
     ingestWorldEvolution,
     backfill,
     stopBackfill,

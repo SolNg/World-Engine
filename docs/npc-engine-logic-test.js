@@ -436,6 +436,77 @@ const baseSettings = () => config.getSettings(true);
     withPrevious.includes('Mốc thời gian của lượt trước: đêm rằm tháng Giêng'));
 }
 
+// ===== Chọn nhân vật cho pha hoạt động ngầm =====
+// Gửi hết rồi để mô hình tự chọn thì prompt phình theo số nhân vật, và "ai đáng được đẩy" bị phó
+// mặc cho mô hình — nó hay chọn theo thứ tự danh sách chứ không theo mức liên quan.
+{
+  const state = data.defaultState();
+  state.round = 20;
+  state.scene = { layer: 20, location: ['Đại Chu', 'Giang Nam', 'Dương Châu'], presentIds: [] };
+
+  const mk = (name, patch) => {
+    const npc = data.upsertNpc(state, { name, tier: 'core', significance: 50 });
+    Object.assign(npc, patch || {});
+    return npc;
+  };
+
+  const duong = mk('Người Có Dự Định Đến Hạn');
+  duong.pendingIntent = { action: 'Tập kích kho lương', etaRounds: 0, due: true, layer: 19 };
+
+  const diDuong = mk('Người Đang Đi Đường');
+  diDuong.location.movingTo = ['Đại Chu', 'Quan Trung', 'Trường An'];
+  diDuong.location.etaRounds = 3;
+
+  const nhacToi = mk('Lý Mộ Bạch');
+
+  const genGan = mk('Người Ở Gần');
+  genGan.location.path = ['Đại Chu', 'Giang Nam', 'Dương Châu'];
+
+  const xaLac = mk('Người Ở Rất Xa');
+  xaLac.location.path = ['Bắc Địch', 'Thảo Nguyên', 'Vương Đình'];
+  xaLac.offscreenLog.push({ round: 20, action: 'vừa làm gì đó' });   // vừa được đẩy, không cần nữa
+
+  const absent = state.npcs.slice();
+  const picked = engine.selectOffscreenNpcs(state, absent, {
+    limit: 3,
+    dialogue: 'Người chơi nhắc tới Lý Mộ Bạch trong lúc bàn chuyện.',
+    worldDigest: ''
+  });
+
+  check('chọn đúng số lượng theo trần', picked.chosen.length === 3);
+  check('phần còn lại nằm ở danh sách bỏ qua', picked.skipped.length === 2);
+  check('trả về bảng điểm đầy đủ để giải thích', picked.scored.length === 5);
+
+  const chosenNames = picked.chosen.map(npc => npc.name);
+  check('ưu tiên người có dự định đến hạn', chosenNames.includes('Người Có Dự Định Đến Hạn'));
+  check('ưu tiên người vừa được nhắc tới trong chính văn', chosenNames.includes('Lý Mộ Bạch'));
+  check('người vừa được đẩy lượt trước bị xếp sau', !chosenNames.includes('Người Ở Rất Xa'));
+
+  // Bảng điểm phải nêu được lý do, nếu không thì không ai gỡ lỗi nổi khi chọn sai.
+  const topReasons = picked.scored[0].reasons.join(' ');
+  check('bảng điểm có nêu lý do', topReasons.length > 0);
+  check('nhận ra dự định đến hạn', picked.scored.some(item => item.reasons.includes('dự định đến hạn')));
+  check('nhận ra người đang đi đường', picked.scored.some(item => item.reasons.includes('đang đi đường')));
+  check('nhận ra người vừa được nhắc tới', picked.scored.some(item => item.reasons.includes('vừa được nhắc tới')));
+  check('nhận ra người ở cùng thành', picked.scored.some(item => item.reasons.includes('cùng thành với người chơi')));
+
+  // Trần bằng 0 thì không đẩy ai cả.
+  const none = engine.selectOffscreenNpcs(state, absent, { limit: 0 });
+  check('trần 0 thì không chọn ai', none.chosen.length === 0 && none.skipped.length === 5);
+
+  // Prompt phải nói rõ những người không được chọn thì giữ nguyên.
+  const prompt = global.NPC_ENGINE_OFFSCREEN.buildPrompt({
+    absentNpcs: picked.chosen, skippedCount: picked.skipped.length, aggressiveness: 0.5
+  });
+  check('prompt nêu số người không cần suy diễn', prompt.includes('Còn 2 nhân vật vắng mặt khác'));
+  check('prompt cấm bịa hoạt động cho người bị bỏ qua', prompt.includes('đừng bịa hoạt động cho họ'));
+
+  const noSkip = global.NPC_ENGINE_OFFSCREEN.buildPrompt({
+    absentNpcs: picked.chosen, skippedCount: 0, aggressiveness: 0.5
+  });
+  check('không ai bị bỏ qua thì không thêm ghi chú thừa', !noSkip.includes('KHÔNG cần suy diễn'));
+}
+
 // ===== Đối soát và chữa dữ liệu =====
 // Sau nhiều lượt, dữ liệu tích tụ những chỗ không nhất quán mà không thao tác nào tự dọn:
 // quan hệ trỏ tới người đã xoá, tri thức trỏ tới sự thật không còn, id trùng nhau.

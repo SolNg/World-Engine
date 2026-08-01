@@ -5944,8 +5944,8 @@ window.WORLD_ENGINE_UI = (function() {
 
     const offscreenBody = toggle('we-npc-offscreen', 'Cho phép nhân vật vắng mặt tự hành động', settings.offscreenEnabled !== false,
         'Đây là tính năng chính của engine. Mỗi lượt, các nhân vật trọng yếu <b>không có mặt trong cảnh</b> sẽ tự hành động theo mục tiêu của họ và theo diễn biến thế giới vừa xảy ra. Tắt thì engine chỉ còn ghi chép thụ động những gì đã diễn ra trên màn hình.')
-      + num('we-npc-offscreen-max', 'Số nhân vật hành động tối đa mỗi lượt', settings.offscreenMaxPerRound,
-        'Chặn trên cho mỗi lượt. Một lượt hội thoại là khoảng thời gian ngắn — để 2–3 thì thế giới chuyển động vừa phải; để cao thì mọi thứ biến động dồn dập, dễ rối truyện.')
+      + num('we-npc-offscreen-max', 'Số nhân vật được đẩy mỗi lượt', settings.offscreenMaxPerRound,
+        'Engine tự chấm điểm rồi chọn bấy nhiêu người liên quan nhất: ai có dự định đến hạn, ai đang đi đường, ai vừa được nhắc tới trong chính văn, ai ở gần cảnh của người chơi, cộng phần thưởng cho người lâu chưa có diễn biến. Số còn lại <b>giữ nguyên trạng thái, không bịa hoạt động</b> — đứng yên một lượt là hợp lý, bịa việc cho đủ người mới phá truyện. Để 3–4 là vừa.')
       + num('we-npc-aggressiveness', 'Mức chủ động (0 đến 1)', settings.offscreenAggressiveness,
         'Dịch thành lời chỉ dẫn cho mô hình chứ không phải công thức. <b>0.2</b> hầu hết án binh bất động, chỉ ai có lý do cấp bách mới động thủ. <b>0.5</b> ai có mục tiêu rõ thì tiến hành, số còn lại giữ nguyên. <b>0.9</b> ráo riết theo đuổi, cục diện chuyển biến nhanh. Truyện chậm rãi nên để 0.3, truyện tranh đoạt để 0.7.');
 
@@ -6120,6 +6120,16 @@ window.WORLD_ENGINE_UI = (function() {
     return length + " / " + info.maxChars + " ký tự" + dropped;
   }
 
+  // Vì sao ai được đẩy hoạt động ngầm lượt vừa rồi. Không có bảng này thì khi engine chọn sai
+  // người, không có cách nào biết nó nghĩ gì.
+  function describeNpcSelection() {
+    const list = window.NPC_ENGINE?.getLastSelection?.() || [];
+    if (!list.length) return 'chưa có lượt nào';
+    return list.slice(0, 6)
+      .map(item => item.name + ' (' + item.score + '): ' + (item.reasons || []).join(', '))
+      .join(' | ');
+  }
+
   function renderNpcDebug() {
     const debug = window.NPC_ENGINE?.getLastDebug?.() || {};
     const state = npcData()?.loadState?.() || {};
@@ -6134,7 +6144,8 @@ window.WORLD_ENGINE_UI = (function() {
       ['Sự thật công khai', (state.publicFacts || []).length],
       ['Tin đồn', (state.rumorQueue || []).length],
       ['Tuyến đường đã biết', Object.keys(state.travelCache || {}).length],
-      ['Độ dài khối chèn', describeInjectionSize()]
+      ['Độ dài khối chèn', describeInjectionSize()],
+      ['Chọn đẩy lượt gần nhất', describeNpcSelection()]
     ].map(([label, value]) => `<div class="we-npc-axis"><span class="we-npc-axis-key">${h(label)}</span><span>${h(String(value))}</span></div>`).join('');
 
     const block = (title, content) => content
