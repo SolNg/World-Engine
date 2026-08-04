@@ -129,6 +129,39 @@ check('dùng đúng khoá cờ ẩn của Công Cụ Ký Ức',
   check('chuỗi mốc khớp với nội dung engine thật sự chèn', npcEngine.includes('【TRẠNG THÁI NHÂN VẬT NỀN】'));
 }
 
+// ===== Gói chẩn đoán: bản chép đi phải sạch nguyên văn =====
+// Bản chép sinh ra để dán vào issue công khai. Lọt nguyên văn truyện vào đó là rò dữ liệu người
+// dùng, mà lại rò đúng lúc họ đang cố giúp báo lỗi.
+{
+  const diagSource = fs.readFileSync(path.join(root, 'world-engine-diag.js'), 'utf8');
+  check('có hàm chép chẩn đoán', /function copy\(scope\)/.test(diagSource));
+  check('xuất cả copy và redactProse', /return \{ collect, download, copy, redactProse \}/.test(diagSource));
+
+  // Chạy thật hàm lược bỏ, đừng chỉ nhìn mã: đây là chỗ sai thì hậu quả không thu hồi được.
+  const vm = require('vm');
+  const sandbox = { window: {}, navigator: { userAgent: 'test' }, SillyTavern: { getContext: () => ({}) },
+                    document: {}, localStorage: { getItem: () => null } };
+  sandbox.globalThis = sandbox;
+  vm.createContext(sandbox);
+  vm.runInContext(diagSource, sandbox);
+  const diag = sandbox.window.WORLD_ENGINE_DIAG;
+  check('module chẩn đoán nạp được', !!diag?.redactProse);
+
+  const prose = 'Liễu Như Yên ngồi túc trực ngay cạnh giường của Lâm Thần không rời nửa bước.';
+  const redacted = diag.redactProse({
+    extraction: { lastPrompt: prose, lastRawResult: prose, isRunning: false },
+    injection: { text: prose },
+    npcState: { coreCount: 3 }
+  });
+  check('bỏ nguyên văn khỏi prompt trích xuất', !redacted.extraction.lastPrompt.includes('Liễu Như Yên'));
+  check('bỏ nguyên văn khỏi phản hồi thô', !redacted.extraction.lastRawResult.includes('Liễu Như Yên'));
+  check('bỏ nguyên văn khỏi khối chèn', !redacted.injection.text.includes('Liễu Như Yên'));
+  // Độ dài là manh mối thật khi gỡ lỗi tràn ngữ cảnh, giữ lại.
+  check('giữ lại độ dài đã lược', redacted.extraction.lastPrompt.includes(String(prose.length)));
+  check('không đụng tới số đếm', redacted.npcState.coreCount === 3);
+  check('không đụng tới trường không phải chuỗi', redacted.extraction.isRunning === false);
+}
+
 if (failures > 0) {
   console.error(`npc-engine wiring tests FAILED (${failures} lỗi)`);
   process.exit(1);

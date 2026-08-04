@@ -3826,6 +3826,26 @@
   border: 1px solid var(--we-hairline);
   border-radius: 4px;
 }
+/* ---- Sổ mâu thuẫn ---- */
+.we-npc-conflict {
+  padding: 8px 11px;
+  margin-bottom: 6px;
+  font-size: 12px;
+  line-height: 1.55;
+  background: var(--we-card);
+  border: 1px solid var(--we-hairline);
+  border-left: 2px solid var(--we-gold);
+  border-radius: 8px;
+}
+.we-npc-conflict-head { color: var(--we-text3); font-size: 11px; }
+.we-npc-conflict-diff { margin-top: 3px; color: var(--we-text2); }
+.we-npc-conflict-note {
+  margin-top: 3px;
+  font-size: 11px;
+  font-style: italic;
+  color: var(--we-text3);
+}
+
 /* Thẻ chỉ hiện được một phần thì phải nói rõ còn bao nhiêu, đừng cắt im lặng. */
 .we-npc-more {
   margin-top: 4px;

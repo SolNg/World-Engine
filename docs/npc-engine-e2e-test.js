@@ -64,6 +64,7 @@ const scripted = [
     activities: [{
       name: 'Hyoudou Issei', action: 'Về nhà luyện tập Thần Khí', timeRef: 'chiều cùng ngày',
       becameRumor: true, rumorText: 'Nghe nói có người luyện tập gì đó ở khu nhà Hyoudou',
+      trace: 'Sân sau nhà Hyoudou có vệt cháy sém hình bàn tay',
       intent: { action: 'Luyện thành thục Boosted Gear', mode: 'effort', duration: { hours: 20 } }
     }]
   }),
@@ -71,7 +72,8 @@ const scripted = [
   JSON.stringify({
     scene: { location: ['Nhật Bản', 'Kuoh', 'Học viện Kuoh'], presentNames: ['Rias Gremory'] },
     time: { label: 'ba ngày sau', elapsed: { days: 3 } },
-    acknowledgedFacts: ['fact:1'],
+    // fact:2 là tin đồn (fact:1 là dấu vết, sinh trước trong cùng lượt hoạt động ngầm).
+    acknowledgedFacts: ['fact:2'],
     npcs: [
       { name: 'Rias Gremory', tier: 'core', significance: 95, present: true,
         identity: { gender: 'nam', species: 'Thiên sứ', socialRole: 'Chủ tịch hội học sinh' } }
@@ -98,10 +100,16 @@ const scripted = [
   ok('người vắng mặt được đẩy hoạt động ngầm', r1.acted.length === 1);
   ok('lịch hẹn ghi đúng kiểu giờ công',
     D.findNpc(st, 'Hyoudou Issei').pendingIntent.schedule.mode === 'effort');
-  ok('tin đồn sinh ra nhưng CHƯA vào chính văn',
-    st.publicFacts.length === 1 && st.publicFacts[0].acknowledged === false);
+  // Tra theo loại chứ đừng theo chỉ số: thêm một tầng độ lộ là thứ tự trong mảng đổi ngay.
+  const rumorFact = st.publicFacts.find(fact => fact.kind === 'tin đồn');
+  const traceFact = st.publicFacts.find(fact => fact.kind === 'dấu vết');
+  ok('tin đồn sinh ra nhưng CHƯA vào chính văn', rumorFact && rumorFact.acknowledged === false);
+  ok('dấu vết cũng là sự việc hậu trường chưa ai kể', traceFact && traceFact.acknowledged === false);
   ok('sự việc chưa thừa nhận không lọt vào ràng buộc tri thức', !injected.includes('CHƯA biết'));
   ok('ràng buộc nhân dạng có trong khối chèn', injected.includes('Nhân dạng nhân vật'));
+  ok('dấu vết được ghi nhận', st.traceQueue.length === 1);
+  // Người chơi đang ở Học viện Kuoh, dấu vết ở Nhà Hyoudou — khác chỗ thì không được lộ.
+  ok('dấu vết ở nơi khác KHÔNG lọt vào khối chèn', !injected.includes('vệt cháy sém'));
 
   console.log('\n=== LƯỢT 2 (truyện nhảy 3 ngày) ===');
   chat.push({ is_user: true, mes: 'Ba ngày sau' }, { is_user: false, name: 'Rias', mes: 'Ba ngày sau, Rias nhắc lại lời đồn.' });
@@ -113,9 +121,16 @@ const scripted = [
   ok('ô còn trống vẫn điền được', D.findNpc(st, 'Rias Gremory').identity.socialRole === 'Chủ tịch hội học sinh');
   // Lượt này mô hình không nhắc gì tới xưng hô, nên giá trị cũ phải còn nguyên — im lặng không phải là xoá.
   ok('trường không được nhắc thì giữ nguyên', D.findNpc(st, 'Rias Gremory').identity.pronouns === 'cô ấy');
+  // Engine nghe theo chính văn, NHƯNG phải để lại dấu vết trong sổ để người chơi còn thấy mà sửa.
+  const identityConflict = st.conflicts.find(item => item.field === 'gender');
+  ok('nhân dạng đổi thì vào sổ mâu thuẫn',
+    identityConflict && identityConflict.from === 'nữ' && identityConflict.to === 'nam');
+  ok('sổ mâu thuẫn ghi đúng tên nhân vật', identityConflict.npcName === 'Rias Gremory');
   ok('đồng hồ nhảy đúng 3 ngày', D.clockMinutes(st) === 30 + 3 * D.MINUTES_PER_DAY);
   ok('sự việc được báo là đã kể thì thành đã thừa nhận',
-    st.publicFacts[0].acknowledged === true);
+    st.publicFacts.find(fact => fact.kind === 'tin đồn')?.acknowledged === true);
+  ok('sự việc KHÔNG được báo thì vẫn nằm sau màn',
+    st.publicFacts.find(fact => fact.kind === 'dấu vết')?.acknowledged === false);
 
   const issei = D.findNpc(st, 'Hyoudou Issei');
   ok('dự định giờ công vẫn còn (chưa đủ công dù đã 3 ngày)',

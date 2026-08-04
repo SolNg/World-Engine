@@ -209,6 +209,114 @@ const baseSettings = () => config.getSettings(true);
   check('người trong kho không sinh hành động', result.acted.length === 0);
 }
 
+// ===== Sổ mâu thuẫn: ghi lại chỗ chính văn chọi với hồ sơ =====
+// Engine VẪN nghe theo chính văn — sổ không chặn gì cả. Nó chỉ khiến việc trôi hiện ra.
+{
+  const state = data.defaultState();
+  const npc = data.upsertNpc(state, { name: 'Liễu Như Yên', tier: 'core', significance: 70 });
+  npc.identity.gender = 'nữ';
+  npc.location.path = ['Trung Ương Thần Châu', 'Đan Hà Linh Nguyên', 'Bách Thảo Tập'];
+
+  const merged = engine.mergeExtraction(state, {
+    npcs: [{
+      name: 'Liễu Như Yên', tier: 'core', significance: 70, present: true,
+      identity: { gender: 'nam' },
+      location: { path: ['Trung Ương Thần Châu', 'Đại Ung Hoàng Triều', 'Kinh Đô'] }
+    }]
+  }, 30);
+
+  const after = data.findNpc(state, 'Liễu Như Yên');
+  check('chính văn vẫn thắng, hồ sơ đổi theo', after.identity.gender === 'nam');
+  check('vị trí cũng đổi theo', after.location.path[2] === 'Kinh Đô');
+
+  const kinds = state.conflicts.map(item => item.kind);
+  check('ghi mâu thuẫn nhân dạng', kinds.includes(data.CONFLICT_KINDS.IDENTITY));
+  check('ghi mâu thuẫn nhảy vị trí', kinds.includes(data.CONFLICT_KINDS.TELEPORT));
+  check('kết quả gộp có trả về danh sách mâu thuẫn', merged.conflicts.length === 2);
+
+  const identityRow = state.conflicts.find(item => item.kind === data.CONFLICT_KINDS.IDENTITY);
+  check('mâu thuẫn nêu đủ tên, trường, giá trị cũ và mới',
+    identityRow.npcName === 'Liễu Như Yên' && identityRow.field === 'gender'
+    && identityRow.from === 'nữ' && identityRow.to === 'nam');
+
+  // Nhân vật MỚI thì chưa có gì để chọi — điền lần đầu không phải là mâu thuẫn.
+  const before = state.conflicts.length;
+  engine.mergeExtraction(state, {
+    npcs: [{ name: 'A Phù', tier: 'core', significance: 80, identity: { gender: 'nữ' },
+             location: { path: ['Bắc Nguyên'] } }]
+  }, 31);
+  check('nhân vật mới điền lần đầu không tính là mâu thuẫn', state.conflicts.length === before);
+
+  // Đang trên đường thì đổi vị trí là chuyện bình thường, không phải nhảy.
+  const traveller = data.upsertNpc(state, { name: 'Lý Mộ Bạch', tier: 'core' });
+  traveller.location.path = ['Đại Chu', 'Dương Châu'];
+  traveller.location.movingTo = ['Đại Chu', 'Trường An'];
+  const n = state.conflicts.length;
+  engine.mergeExtraction(state, {
+    npcs: [{ name: 'Lý Mộ Bạch', tier: 'core', significance: 50, location: { path: ['Đại Chu', 'Trường An'] } }]
+  }, 32);
+  check('đang đi đường thì đổi vị trí không tính là nhảy', state.conflicts.length === n);
+}
+
+// ===== Dấu vết: tầng giữa tin đồn và bí mật =====
+{
+  const state = data.defaultState();
+  const npc = data.upsertNpc(state, { name: 'Lý Mộ Bạch', tier: 'core', significance: 85 });
+  npc.location.path = ['Đại Chu', 'Giang Nam', 'Dương Châu'];
+
+  const result = engine.applyOffscreen(state, {
+    activities: [{
+      name: 'Lý Mộ Bạch',
+      action: 'Lẻn vào kho lương lúc nửa đêm',
+      becameRumor: false,
+      trace: 'Then cửa kho bị cạy, bùn còn ướt trên bậc thềm'
+    }]
+  }, 40);
+
+  check('sinh dấu vết', result.traces.length === 1 && state.traceQueue.length === 1);
+  check('dấu vết KHÔNG thành tin đồn', state.rumorQueue.length === 0);
+  check('dấu vết ghi đúng nơi xảy ra', state.traceQueue[0].at[2] === 'Dương Châu');
+  check('dấu vết thành sự thật công khai chưa ai kể',
+    state.publicFacts.some(fact => fact.kind === 'dấu vết' && fact.acknowledged === false));
+
+  // Người chơi đứng ĐÚNG chỗ đó thì mới thấy.
+  state.scene.location = ['Đại Chu', 'Giang Nam', 'Dương Châu'];
+  const here = engine.buildInjectionText(state, baseSettings(), {});
+  check('đứng đúng chỗ thì dấu vết được chèn', here.includes('Then cửa kho bị cạy'));
+
+  // Đứng nơi khác thì không — nếu không, ràng buộc lại thành đường tiết lộ chuyện đang giấu.
+  state.scene.location = ['Đại Chu', 'Quan Trung', 'Trường An'];
+  const elsewhere = engine.buildInjectionText(state, baseSettings(), {});
+  check('đứng nơi khác thì KHÔNG lộ dấu vết', !elsewhere.includes('Then cửa kho bị cạy'));
+
+  // Tắt được như mọi khối khác.
+  state.scene.location = ['Đại Chu', 'Giang Nam', 'Dương Châu'];
+  const off = engine.buildInjectionText(state, { ...baseSettings(), injectTrace: false }, {});
+  check('tắt được khối dấu vết', !off.includes('Then cửa kho bị cạy'));
+
+  // Chính văn đã kể ra rồi thì thôi, đừng nhắc lại như thứ chưa ai biết.
+  engine.acknowledgeFacts(state, [state.traceQueue[0].factId]);
+  const done = engine.buildInjectionText(state, baseSettings(), {});
+  check('đã thừa nhận thì rời khối dấu vết', !done.includes('Then cửa kho bị cạy'));
+}
+
+// ===== Vòng nối ngược: Công Cụ Thế Giới đọc được việc NPC ĐÃ LÀM =====
+{
+  const state = data.defaultState();
+  const npc = data.upsertNpc(state, { name: 'Lý Mộ Bạch', tier: 'core', significance: 90 });
+  npc.location.path = ['Đại Chu', 'Quan Trung', 'Trường An'];
+  npc.goals = [{ text: 'Chiêu mộ tử sĩ', progress: 'đang tiến hành' }];
+  npc.pendingIntent = { action: 'Tập kích kho lương' };
+  npc.offscreenLog.push({ layer: 40, action: 'Đốt kho lương của Đại Ung' });
+  data.saveState(state);
+
+  const context = engine.buildWorldEngineContext({});
+  check('gửi tên và vị trí sang Công Cụ Thế Giới', context.includes('Lý Mộ Bạch') && context.includes('Trường An'));
+  check('gửi cả dự định', context.includes('Tập kích kho lương'));
+  // Thiếu vế này thì vĩ mô suy diễn cục diện mà mù trước hệ quả của vi mô.
+  check('gửi cả việc VỪA LÀM', context.includes('Đốt kho lương của Đại Ung'));
+}
+
 // ===== Khối chèn: che vị trí =====
 {
   const state = data.defaultState();

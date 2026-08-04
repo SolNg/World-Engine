@@ -60,6 +60,14 @@ Với nhân vật có dự định đến hạn hoặc lỗi thời, phần "act
 【TIN ĐỒN】
 Hành động nào đủ lộ liễu để lan tới tai người khác thì đánh dấu "becameRumor": true và viết "rumorText" theo giọng tin đồn — không chắc chắn, không đầy đủ, đúng như cách tin tức thật sự lan truyền. Hành động bí mật thì để false.
 
+【DẤU VẾT NHÌN THẤY ĐƯỢC】
+Giữa tin đồn và bí mật còn một tầng nữa: hành động không ai kể lại nhưng ĐỂ LẠI DẤU VẾT mà người tới sau có thể tự nhận ra.
+
+- Cửa sau bị cạy, bùn còn ướt trên bậc thềm, một chỗ ngồi vừa có người rời đi, thiếu mất một thanh kiếm trên giá, mùi thuốc còn vương trong phòng.
+- Điền vào "trace" một câu tả đúng thứ NHÌN THẤY ĐƯỢC, không phải điều suy ra. Viết "bùn ướt trên bậc thềm", đừng viết "có người vừa đi mưa về".
+- Chỉ điền khi hành động thật sự để lại dấu ở nơi người khác có thể tới. Việc làm trong đầu, đi lại nơi hoang vắng, hay chuyện xảy ra ở tận nơi khác thì để trống.
+- Một hành động có thể vừa thành tin đồn vừa để lại dấu vết; hai trường độc lập với nhau.
+
 【TRI THỨC THU ĐƯỢC】
 Nhân vật làm gì đó có thể khiến họ biết thêm điều mới. Ghi vào "knowledgeGained" kèm nguồn: "chứng kiến", "nghe đồn", hoặc "suy đoán".
 
@@ -75,6 +83,7 @@ Chỉ xuất một khối JSON hợp lệ, không kèm giải thích, không kè
       "visibility": "công khai / kín đáo / bí mật",
       "becameRumor": false,
       "rumorText": "nội dung tin đồn nếu becameRumor là true",
+      "trace": "dấu vết nhìn thấy được mà hành động để lại, để trống nếu không để lại gì",
       "move": {
         "to": ["quốc gia", "vùng", "thành", "địa điểm"],
         "duration": { "days": 0, "hours": 0, "minutes": 0 },

@@ -4602,6 +4602,18 @@ window.WORLD_ENGINE_UI = (function() {
         }
       };
     }
+    const npcCopyDiagBtn = document.getElementById('we-npc-copy-diag');
+    if (npcCopyDiagBtn) npcCopyDiagBtn.onclick = async () => {
+      const diag = window.WORLD_ENGINE_DIAG;
+      if (!diag?.copy) { showToast('Module chẩn đoán không khả dụng', true); return; }
+      try {
+        const text = await diag.copy('npc');
+        showToast(`Đã chép ${text.length} ký tự, không kèm nguyên văn truyện`);
+      } catch (error) {
+        showToast('Chép thất bại: ' + (error?.message || error), true);
+      }
+    };
+
     const npcExportDiagBtn = document.getElementById('we-npc-export-diag');
     if (npcExportDiagBtn) npcExportDiagBtn.onclick = () => {
       const diag = window.WORLD_ENGINE_DIAG;
@@ -5453,7 +5465,8 @@ window.WORLD_ENGINE_UI = (function() {
     core: { title: 'Trọng Yếu', poem: 'Người đáng nhớ thì thế gian nhớ' },
     peripheral: { title: 'Ngoại Vi', poem: 'Chưa rõ chí hướng, hãy còn đợi thời' },
     archive: { title: 'Kho Lưu Trữ', poem: 'Người đi rồi, tiếng vẫn còn' },
-    rumors: { title: 'Tin Đồn', poem: 'Lời truyền đi xa hơn chân người' }
+    rumors: { title: 'Tin Đồn', poem: 'Lời truyền đi xa hơn chân người' },
+    conflicts: { title: 'Sổ Mâu Thuẫn', poem: 'Chép lại chỗ lệch, để mắt người còn thấy' }
   };
 
   const npcData = () => window.NPC_ENGINE_DATA;
@@ -5505,8 +5518,10 @@ window.WORLD_ENGINE_UI = (function() {
       </div>
     </div>`;
 
-    const counts = { core: core.length, peripheral: peripheral.length, archive: archive.length, rumors: rumors.length };
-    const rows = ['core', 'peripheral', 'archive', 'rumors'].map((view, index, all) => {
+    const conflicts = Array.isArray(state.conflicts) ? state.conflicts : [];
+    const counts = { core: core.length, peripheral: peripheral.length, archive: archive.length,
+                     rumors: rumors.length, conflicts: conflicts.length };
+    const rows = ['core', 'peripheral', 'archive', 'rumors', 'conflicts'].map((view, index, all) => {
       const meta = NPC_VIEW_META[view];
       const selected = _npcSelectedNavView === view ? ' we-nav-row--selected' : '';
       const topLine = index === 0 ? '<div class="we-nav-line we-nav-line-hidden"></div>' : '<div class="we-nav-line"></div>';
@@ -5819,9 +5834,30 @@ window.WORLD_ENGINE_UI = (function() {
 
     if (view === 'rumors') {
       const rumors = (Array.isArray(state.rumorQueue) ? state.rumorQueue : []).slice().reverse();
-      body = rumors.length
+      const traces = (Array.isArray(state.traceQueue) ? state.traceQueue : []).slice().reverse();
+      const rumorBody = rumors.length
         ? rumors.map(item => `<div class="we-npc-rumor"><span class="we-npc-log-layer">tầng ${item.layer ?? '?'}</span>${h(item.text || '')}</div>`).join('')
         : '<div class="we-empty">Chưa có tin đồn nào</div>';
+      // Dấu vết đứng cùng chỗ với tin đồn: cả hai đều là "chuyện hậu trường rò ra ngoài", chỉ khác
+      // đường rò — một cái qua miệng người, một cái qua vật để lại.
+      const traceBody = traces.length
+        ? `<div class="we-npc-editor-group">Dấu vết tại chỗ</div>`
+          + traces.map(item => `<div class="we-npc-rumor"><span class="we-npc-log-layer">tầng ${item.layer ?? '?'}</span>${
+              h(item.text || '')}${item.at?.length ? ` <em>(${h(npcPath(item.at))})</em>` : ''}</div>`).join('')
+        : '';
+      body = rumorBody + traceBody;
+    } else if (view === 'conflicts') {
+      const conflicts = (Array.isArray(state.conflicts) ? state.conflicts : []).slice().reverse();
+      body = conflicts.length
+        ? `<button class="we-btn we-npc-clear-conflicts" type="button" style="width:100%;margin-bottom:8px;">Xoá sổ</button>`
+          + conflicts.map(item => `<div class="we-npc-conflict">
+              <div class="we-npc-conflict-head"><span class="we-npc-log-layer">tầng ${item.layer ?? '?'}</span>${
+                h(item.kind || 'khác')}${item.npcName ? ' · ' + h(item.npcName) : ''}</div>
+              <div class="we-npc-conflict-diff">${h(item.field || '')}: ${h(item.from || '—')} → <b>${h(item.to || '—')}</b></div>
+              ${item.note ? `<div class="we-npc-conflict-note">${h(item.note)}</div>` : ''}
+            </div>`).join('')
+        : `<div class="we-empty">Chưa ghi nhận mâu thuẫn nào</div>`
+          + `<div class="we-hint" style="margin-top:8px;">Sổ này ghi lại lúc chính văn nói khác với hồ sơ đang lưu — nhân dạng đổi, nhân vật nhảy vị trí không qua đường đi, người chết trở lại, đồng hồ bị kéo lùi. Engine <b>vẫn nghe theo chính văn</b>; sổ chỉ để bạn thấy mà sửa tay nếu thấy sai.</div>`;
     } else {
       const source = view === 'archive'
         ? (Array.isArray(state.archive) ? state.archive : [])
@@ -5911,6 +5947,14 @@ window.WORLD_ENGINE_UI = (function() {
   // Nhật ký cập nhật của Công Cụ Nhân Vật, tách riêng khỏi CHANGELOG của Công Cụ Thế Giới
   // vì hai engine đánh số phiên bản độc lập.
   const NPC_CHANGELOG = [
+    { version: '1.1.0', date: '2026-08-05', items: [
+      'Sổ mâu thuẫn: chỗ nào chính văn nói khác với hồ sơ đang lưu thì ghi lại — nhân dạng đổi, nhân vật nhảy vị trí không qua đường đi, người chết trở lại, đồng hồ bị kéo lùi. Engine vẫn nghe theo chính văn như cũ; sổ không chặn gì cả, nó chỉ khiến việc trôi hiện ra. Từ khi bỏ khoá nhân dạng thì con mắt người chơi là lớp bảo vệ duy nhất còn lại, mà mắt thì cần có cái để nhìn.',
+      'Dấu vết tại chỗ: tầng thứ ba giữa tin đồn và bí mật. Chuyện xảy ra lúc người chơi vắng mặt có thể để lại dấu nhìn thấy được — then cửa bị cạy, bùn còn ướt, thiếu mất một thanh kiếm. Chỉ dấu ở ĐÚNG chỗ người chơi đang đứng mới được chèn, nên nó không tiết lộ chuyện đang giấu ở nơi khác. Trước đây chuyện hậu trường chỉ có hai kết cục — thành lời đồn hoặc biến mất hẳn — nên "không có gì xảy ra" lúc nào cũng nghĩa là thế giới đứng im.',
+      'Công Cụ Thế Giới giờ đọc được việc nhân vật trọng yếu ĐÃ LÀM ở hậu trường, không chỉ vị trí và dự định của họ. Thiếu vế này thì vĩ mô suy diễn cục diện mà mù trước hệ quả của vi mô.',
+      'Thêm nút Chép Chẩn Đoán Để Báo Lỗi: bỏ khoá API và bỏ cả nguyên văn truyện, dán thẳng vào issue được. Nút xuất file cũ vẫn còn nhưng đổi tên thành Đầy Đủ và ghi rõ nó CÓ chứa nguyên văn — trước đây nó im lặng về chuyện đó.',
+      'Thẻ nhân vật hiện đủ mọi trường đang lưu: thêm nhân dạng, điểm tin cậy, quan hệ với nhân vật khác, độ chắc của từng mục tri thức, kiểu hẹn của dự định. Vượt trần hiển thị thì ghi rõ còn bao nhiêu mục thay vì cắt im lặng.',
+      'Ý tưởng sổ mâu thuẫn, phối hợp hai chiều, phân tầng độ lộ và gói chẩn đoán không kèm nguyên văn tham khảo từ world-backstage v0.8–v1.3.0 (h675786161-prog, giấy phép MIT).'
+    ] },
     { version: '1.0.0', date: '2026-08-02', items: [
       'Đồng hồ thế giới thay cho đếm lượt: trạng thái đếm bằng PHÚT truyện, mô hình tự đọc thời gian trôi qua từ chính văn. Một lượt hội thoại không còn là một đơn vị thời gian — nó chỉ là lúc quyết toán.',
       'Bốn kiểu hẹn theo bản chất công việc: trôi tự nhiên (đi đường, chờ đợi), giờ công hiệu lực (rèn đồ, nghiên cứu — chỉ tiến khi nhân vật thực sự ngồi làm), hẹn giờ cố định (cuộc họp, hạn chót), chờ điều kiện (chờ hồi âm, chờ nguyên liệu).',
@@ -6053,6 +6097,8 @@ window.WORLD_ENGINE_UI = (function() {
         'Nhắc AI chính viết đúng giới tính, cách xưng hô, chủng tộc và độ tuổi của nhân vật đang có mặt. Rất ngắn về token mà chặn được loại lỗi người đọc nhận ra ngay.')
       + toggle('we-npc-inject-rumor', 'Tin đồn', settings.injectRumor !== false,
         'Kết quả hoạt động ngầm nào đủ lộ liễu thì lan thành tin đồn và được đưa vào prompt, cho AI có chất liệu để nhân vật bàn tán.')
+      + toggle('we-npc-inject-trace', 'Dấu vết tại chỗ', settings.injectTrace !== false,
+        'Tầng giữa tin đồn và bí mật: chuyện xảy ra lúc người chơi vắng mặt <b>để lại dấu nhìn thấy được</b> — cửa bị cạy, bùn còn ướt, thiếu mất một thanh kiếm. Chỉ những dấu ở <b>đúng chỗ người chơi đang đứng</b> mới được chèn, nên nó không tiết lộ chuyện đang giấu ở nơi khác. Đây là thứ khiến "không có gì xảy ra" thôi nghĩa là thế giới đứng im.')
       + select('we-npc-fog', 'Che vị trí thật', settings.locationFogMode, [
           ['off', 'Tắt — AI biết vị trí thật'],
           ['fog', 'Sương mù — chỉ nói chỗ người chơi tưởng, kèm gợi ý mơ hồ'],
@@ -6140,8 +6186,10 @@ window.WORLD_ENGINE_UI = (function() {
       WE_THEMES.map(theme => [theme.id, theme.name]),
       'Mỗi mặt engine nhớ bộ màu riêng, chuyển mặt là đổi theo — nhờ đó nhìn màu là biết đang ở engine nào.');
 
-    const debugBody = `<button class="we-btn" id="we-npc-export-diag" style="width:100%;margin-bottom:8px;">Xuất Gói Chẩn Đoán</button>`
-      + hint('Xuất toàn bộ trạng thái hiện tại ra file JSON để báo lỗi. Khoá API đã được che trước khi ghi.')
+    const debugBody = `<button class="we-btn" id="we-npc-copy-diag" style="width:100%;margin-bottom:6px;">Chép Chẩn Đoán Để Báo Lỗi</button>`
+      + hint('Chép vào clipboard, đã bỏ khoá API <b>và bỏ nguyên văn truyện</b> — dán thẳng vào issue được. Chỉ còn số đếm, cấu hình và sổ mâu thuẫn.')
+      + `<button class="we-btn" id="we-npc-export-diag" style="width:100%;margin:8px 0;">Xuất Gói Chẩn Đoán Đầy Đủ</button>`
+      + hint('Tải file JSON gồm cả prompt và phản hồi thật. Khoá API đã che, nhưng <b>có chứa nguyên văn truyện</b> — file này để bạn tự xem, cân nhắc trước khi gửi cho người khác.')
       + `<div id="we-npc-debug-render">${renderNpcDebug()}</div>`;
 
     const aboutBody = `<div class="we-npc-about">
@@ -6328,6 +6376,17 @@ window.WORLD_ENGINE_UI = (function() {
         npcData().archiveNpc(state, npc.id, npc.status?.condition, window.WORLD_ENGINE_CORE?.getChatLayer?.());
       });
     });
+    document.querySelectorAll('.we-npc-clear-conflicts').forEach(button => {
+      button.onclick = () => {
+        if (!confirm('Xoá toàn bộ sổ mâu thuẫn? Hồ sơ nhân vật không đổi.')) return;
+        const state = npcData().loadState();
+        npcData().clearConflicts(state);
+        npcData().saveState(state);
+        showToast('Đã xoá sổ mâu thuẫn');
+        refresh();
+      };
+    });
+
     document.querySelectorAll('.we-npc-revive').forEach(button => {
       button.onclick = () => mutate(button.dataset.npcId, (npc, state) => {
         npcData().reviveNpc(state, npc.id);
@@ -6491,6 +6550,7 @@ window.WORLD_ENGINE_UI = (function() {
     bindToggle('we-npc-inject-location', 'injectLocation');
     bindToggle('we-npc-inject-knowledge', 'injectKnowledge');
     bindToggle('we-npc-inject-rumor', 'injectRumor');
+    bindToggle('we-npc-inject-trace', 'injectTrace');
     bindToggle('we-npc-inject-identity', 'injectIdentity');
     bindToggle('we-npc-travel-cache', 'travelCacheEnabled');
     bindToggle('we-npc-link', 'npcLinkEnabled');
@@ -6528,7 +6588,8 @@ window.WORLD_ENGINE_UI = (function() {
       'we-npc-aggressiveness': 'offscreenAggressiveness',
       'we-npc-inject': 'injectIntoPrompt', 'we-npc-time-anchor': 'timeAnchorEnabled',
       'we-npc-inject-location': 'injectLocation', 'we-npc-inject-knowledge': 'injectKnowledge',
-      'we-npc-inject-rumor': 'injectRumor', 'we-npc-inject-identity': 'injectIdentity', 'we-npc-fog': 'locationFogMode',
+      'we-npc-inject-rumor': 'injectRumor', 'we-npc-inject-trace': 'injectTrace',
+      'we-npc-inject-identity': 'injectIdentity', 'we-npc-fog': 'locationFogMode',
       'we-npc-knowledge-scope': 'knowledgeInjectScope', 'we-npc-knowledge-limit': 'knowledgeInjectLimit',
       'we-npc-inject-max-chars': 'injectMaxChars',
       'we-npc-backfill-end': 'backfillEndLayer', 'we-npc-backfill-batch': 'backfillBatchSize',

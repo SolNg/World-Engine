@@ -89,6 +89,21 @@ for (const key of ['Nhân dạng', 'Vị trí', 'Mục tiêu', 'Thế lực', 'V
 check('thẻ nhân vật hiện điểm tin cậy', ui.includes('we-npc-trust'));
 // Cắt bớt danh sách thì phải nói còn bao nhiêu, đừng cắt im lặng.
 check('thẻ nhân vật báo phần bị cắt', ui.includes('we-npc-more') && ui.includes('mở Sửa để xem hết'));
+// ===== Sổ mâu thuẫn có mặt đầy đủ trong giao diện =====
+check('có mục điều hướng sổ mâu thuẫn', ui.includes("conflicts: { title: 'Sổ Mâu Thuẫn'"));
+check('sổ mâu thuẫn nằm trong danh sách điều hướng', /\['core', 'peripheral', 'archive', 'rumors', 'conflicts'\]/.test(ui));
+check('có nhánh dựng nội dung sổ mâu thuẫn', ui.includes("view === 'conflicts'"));
+check('có nút xoá sổ và trình xử lý', ui.includes('we-npc-clear-conflicts') && ui.includes('clearConflicts('));
+check('sổ mâu thuẫn nói rõ engine vẫn nghe theo chính văn', ui.includes('vẫn nghe theo chính văn'));
+
+// Chép chẩn đoán phải nói rõ nó bỏ nguyên văn, còn tải file thì nói rõ nó GIỮ nguyên văn.
+check('có nút chép chẩn đoán', ui.includes('we-npc-copy-diag') && ui.includes("diag.copy('npc')"));
+check('nút chép nói rõ đã bỏ nguyên văn', ui.includes('bỏ nguyên văn truyện'));
+check('nút tải file cảnh báo có chứa nguyên văn', ui.includes('có chứa nguyên văn truyện'));
+
+// Dấu vết: bật tắt được như mọi khối chèn khác.
+check('có công tắc dấu vết', ui.includes('we-npc-inject-trace') && ui.includes("'injectTrace'"));
+
 // Tách vị trí thật khỏi chỗ người chơi tưởng là điểm mấu chốt của tính năng sương mù.
 check('thẻ nhân vật hiển thị chỗ người chơi tưởng', ui.includes('Người chơi tưởng'));
 check('thẻ nhân vật hiển thị nhật ký hoạt động ngầm', ui.includes('Hoạt động ngầm'));
@@ -379,7 +394,8 @@ for (const cls of ['we-hint', 'we-btn-sm', 'we-switch-row']) {
     'we-npc-pin', 'we-npc-tier', 'we-npc-archive', 'we-npc-revive',
     'we-npc-nav-row', 'we-npc-nav-list',
     // Nút của trình soạn: kiểu dáng lấy từ .we-btn, lớp riêng chỉ để gắn sự kiện.
-    'we-npc-edit', 'we-npc-add', 'we-npc-save', 'we-npc-delete', 'we-npc-cancel-edit', 'we-npc-peek'
+    'we-npc-edit', 'we-npc-add', 'we-npc-save', 'we-npc-delete', 'we-npc-cancel-edit', 'we-npc-peek',
+    'we-npc-clear-conflicts'
   ]);
   const used = new Set();
   for (const attribute of ui.match(/class="[^"]*"/g) || []) {

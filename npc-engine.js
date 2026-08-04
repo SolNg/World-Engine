@@ -62,11 +62,37 @@ window.NPC_ENGINE = (function() {
     manual: 'đang ở chế độ thủ công'
   };
 
+  // ================= Sổ mâu thuẫn =================
+  // Trích xuất chọi với thứ đang lưu thì ghi lại rồi VẪN nghe theo chính văn. Đây không phải cơ chế
+  // chặn — nó chỉ khiến việc trôi hiện ra để người chơi còn thấy mà sửa tay. Bỏ khoá nhân dạng rồi
+  // thì con mắt người chơi là lớp bảo vệ duy nhất còn lại, mà mắt thì cần có cái để nhìn.
+  function noteConflicts(state, existing, incoming, patch, layer, result) {
+    const note = entry => result.conflicts.push(data().recordConflict(state, {
+      npcId: existing.id, npcName: existing.name,
+      layer, atMinutes: data().clockMinutes(state), ...entry
+    }));
+
+    // Nhảy vị trí: đang ở một nơi cụ thể, lượt này ở nơi khác, mà không hề có chặng đường nào.
+    // Đây là lớp lỗi khiến nhân vật "dịch chuyển tức thời" qua nửa bản đồ giữa hai lượt.
+    const oldPath = describePath(asArray(existing.location?.path));
+    const newPath = patch.location ? describePath(asArray(patch.location.path)) : '';
+    if (oldPath && newPath && oldPath !== 'chưa rõ' && oldPath !== newPath && !existing.location?.movingTo) {
+      note({ kind: data().CONFLICT_KINDS.TELEPORT, field: 'vị trí', from: oldPath, to: newPath,
+             note: 'không có chặng đường nào giữa hai nơi' });
+    }
+
+    // Người chết trở lại: mô hình quên mất ai đã chết. Nếu chính văn thật sự hồi sinh họ thì đây là
+    // ghi chú thừa, còn nếu không thì nó bắt được đúng lúc hồ sơ bắt đầu sai.
+    if (existing.status?.alive === false && incoming.status && incoming.status.alive !== false) {
+      note({ kind: data().CONFLICT_KINDS.RESURRECT, field: 'còn sống', from: 'đã chết', to: 'còn sống' });
+    }
+  }
+
   // ================= Gộp kết quả trích xuất =================
   // Tách riêng khỏi phần gọi API để kiểm thử được mà không cần mạng.
 
   function mergeExtraction(state, parsed, layer) {
-    const result = { added: [], updated: [], deaths: [], facts: [] };
+    const result = { added: [], updated: [], deaths: [], facts: [], conflicts: [] };
     if (!parsed || typeof parsed !== 'object') return result;
 
     const st = settings();
@@ -146,10 +172,22 @@ window.NPC_ENGINE = (function() {
         };
       }
 
+      // Ghi sổ TRƯỚC khi upsert, vì sau đó giá trị cũ đã bị đè mất.
+      if (existing) noteConflicts(state, existing, incoming, patch, currentLayer, result);
+
       const npc = data().upsertNpc(state, { ...patch, id: existing?.id });
 
       // Nhân dạng bám theo chính văn: có giá trị mới thì ghi đè, bỏ trống thì giữ nguyên cái cũ.
-      data().mergeIdentity(npc, incoming.identity);
+      for (const change of data().mergeIdentity(npc, incoming.identity)) {
+        // Nhân vật mới chưa có gì để chọi; chỉ ô ĐANG CÓ giá trị mà bị đổi mới là mâu thuẫn.
+        if (!change.from) continue;
+        result.conflicts.push(data().recordConflict(state, {
+          kind: data().CONFLICT_KINDS.IDENTITY,
+          npcId: npc.id, npcName: npc.name,
+          field: change.field, from: change.from, to: change.to,
+          layer: currentLayer, atMinutes: data().clockMinutes(state)
+        }));
+      }
 
       // Tri thức là trường cộng dồn: nối thêm và đóng dấu tầng, không ghi đè.
       for (const item of asArray(incoming.knowledge)) {
@@ -246,6 +284,9 @@ window.NPC_ENGINE = (function() {
     for (const rumor of asArray(state.rumorQueue)) {
       if (wanted.has(rumor.factId)) rumor.acknowledged = true;
     }
+    for (const trace of asArray(state.traceQueue)) {
+      if (wanted.has(trace.factId)) trace.acknowledged = true;
+    }
     for (const npc of state.npcs) {
       for (const entry of asArray(npc.offscreenLog)) {
         if (wanted.has(entry.factId)) entry.acknowledged = true;
@@ -257,7 +298,7 @@ window.NPC_ENGINE = (function() {
   // ================= Gộp kết quả hoạt động ngầm =================
 
   function applyOffscreen(state, parsed, layer) {
-    const result = { acted: [], rumors: [], moves: [] };
+    const result = { acted: [], rumors: [], moves: [], traces: [] };
     if (!parsed || typeof parsed !== 'object') return result;
 
     const currentLayer = asLayer(layer);
@@ -342,6 +383,20 @@ window.NPC_ENGINE = (function() {
           layer: currentLayer,
           factId: null
         });
+      }
+
+      // Dấu vết: tầng giữa tin đồn và bí mật. Không ai kể, nhưng người tới sau nhìn thấy được.
+      // Thiếu tầng này thì mọi chuyện hậu trường chỉ có hai kết cục — thành lời đồn hoặc biến mất
+      // hẳn — nên "không có gì xảy ra" lúc nào cũng nghĩa là thế giới đứng im.
+      const trace = clean(activity.trace);
+      if (trace) {
+        const where = asArray(npc.location.path).map(clean).filter(Boolean);
+        const fact = addPublicFact(state, trace, currentLayer, 'dấu vết');
+        state.traceQueue.push({
+          text: trace, layer: currentLayer, sourceId: npc.id, factId: fact.id,
+          at: where, acknowledged: false
+        });
+        result.traces.push(trace);
       }
 
       if (activity.becameRumor === true) {
@@ -474,6 +529,26 @@ window.NPC_ENGINE = (function() {
     return `【Ràng buộc tri thức】\n${lines.join('\n')}\nCác nhân vật trên không được nhắc tới, ám chỉ, hay phản ứng với những điều họ chưa biết.`;
   }
 
+  // Dấu vết chỉ có nghĩa khi người chơi ĐỨNG ĐÚNG CHỖ đó. Một vết bùn ở thành khác thì không ai
+  // nhìn thấy, mà đưa vào prompt lại thành đường tiết lộ chuyện đang giấu — đúng cái lỗi mà tầng
+  // "sự việc hậu trường" sinh ra để tránh. Nên lọc theo độ gần với cảnh hiện tại.
+  function buildTraceBlock(state, st) {
+    const scene = asArray(state.scene?.location).map(clean).filter(Boolean);
+    if (!scene.length) return '';
+
+    const limit = Math.max(1, parseInt(st.knowledgeInjectLimit) || 5);
+    const here = asArray(state.traceQueue)
+      .filter(item => item && !item.acknowledged && clean(item.text))
+      .filter(item => data().proximity(asArray(item.at), scene) === data().PROXIMITY.SAME_SPOT)
+      .sort((a, b) => (b.layer ?? 0) - (a.layer ?? 0))
+      .slice(0, limit);
+    if (!here.length) return '';
+
+    return `【Dấu vết tại chỗ này】\n${here.map(item => '· ' + clean(item.text)).join('\n')}\n`
+      + 'Đây là những thứ nhìn thấy được ở nơi người chơi đang đứng, do chuyện đã xảy ra lúc họ vắng mặt. '
+      + 'Dùng khi hợp cảnh để người chơi TỰ nhận ra, đừng giải thích hộ nguyên nhân.';
+  }
+
   function buildRumorBlock(state, st) {
     const limit = Math.max(1, parseInt(st.knowledgeInjectLimit) || 5);
     const sorted = asArray(state.rumorQueue).sort((a, b) => (b.layer ?? 0) - (a.layer ?? 0)).slice(0, limit);
@@ -508,6 +583,9 @@ window.NPC_ENGINE = (function() {
       buildIdentityBlock(state, st),
       st.injectLocation !== false ? buildLocationBlock(state, st) : '',
       st.injectKnowledge !== false ? buildKnowledgeBlock(state, st) : '',
+      // Dấu vết đứng trên tin đồn: nó gắn với đúng chỗ người chơi đang đứng, nên dùng được ngay,
+      // còn tin đồn thì chỉ là chất liệu chung chung.
+      st.injectTrace !== false ? buildTraceBlock(state, st) : '',
       st.injectRumor !== false ? buildRumorBlock(state, st) : ''
     ].filter(Boolean);
 
@@ -605,11 +683,17 @@ window.NPC_ENGINE = (function() {
         const goal = asArray(npc.goals)[0];
         if (goal?.text) bits.push(`đang: ${clean(goal.text)}`);
         if (npc.pendingIntent?.action) bits.push(`dự định: ${clean(npc.pendingIntent.action)}`);
+        // Việc họ ĐÃ LÀM, không chỉ việc họ định làm. Thiếu vế này thì Công Cụ Thế Giới suy diễn
+        // cục diện mà không biết nhân vật trọng yếu vừa động thủ — vĩ mô mù trước hệ quả của vi mô.
+        const done = asArray(npc.offscreenLog).slice(-1)[0];
+        if (done?.action) bits.push(`vừa làm: ${clean(done.action)}`);
         return '· ' + bits.join(' — ');
       });
 
     if (!lines.length) return '';
-    return `【NHÂN VẬT TRỌNG YẾU VÀ DỰ ĐỊNH CỦA HỌ】\n${lines.join('\n')}`;
+    return `【NHÂN VẬT TRỌNG YẾU VÀ DỰ ĐỊNH CỦA HỌ】\n${lines.join('\n')}\n`
+      + 'Đây là kết quả suy diễn hậu trường của Công Cụ Nhân Vật ở lượt trước. Hãy tính tới nó khi '
+      + 'suy diễn cục diện: việc nhân vật trọng yếu vừa làm có thể tác động tới thế lực và sự kiện.';
   }
 
   // ================= Gọi API =================
@@ -745,7 +829,7 @@ window.NPC_ENGINE = (function() {
         { fallbackMinutes: st.fallbackMinutesPerTurn });
 
       // --- Pha 2: hoạt động ngầm cho NPC trọng yếu đang vắng mặt ---
-      let offscreen = { acted: [], rumors: [], moves: [] };
+      let offscreen = { acted: [], rumors: [], moves: [], traces: [] };
       const absent = state.npcs.filter(npc =>
         npc.tier === 'core' &&
         !npc.status.archived &&
@@ -808,8 +892,11 @@ window.NPC_ENGINE = (function() {
         `${core_} trọng yếu`,
         offscreen.acted.length ? `${offscreen.acted.length} hoạt động ngầm` : '',
         offscreen.rumors.length ? `${offscreen.rumors.length} tin đồn` : '',
+        offscreen.traces.length ? `${offscreen.traces.length} dấu vết` : '',
         acknowledged.length ? `${acknowledged.length} chuyện vào truyện` : '',
-        merged.deaths.length ? `${merged.deaths.length} qua đời` : ''
+        merged.deaths.length ? `${merged.deaths.length} qua đời` : '',
+        // Báo ra ngoài luôn: sổ mâu thuẫn chỉ có tác dụng nếu người chơi biết là có gì mới trong đó.
+        merged.conflicts.length ? `${merged.conflicts.length} mâu thuẫn` : ''
       ].filter(Boolean).join(' · ');
       setStatus('Hoàn tất — ' + summary);
 
@@ -1138,6 +1225,16 @@ window.NPC_ENGINE = (function() {
 
     // Bộ parse theo regex của Công Cụ Thế Giới tất định hơn, nên nó thắng khi có cấu hình.
     if (day !== null && previousDay !== null) {
+      // Đồng hồ không bao giờ được kéo lùi: mọi lịch hẹn đều neo vào nó, lùi một cái là dự định
+      // đã hoàn tất bỗng chưa tới hạn trở lại. Kẹp về 0 rồi ghi sổ, đừng nuốt im lặng.
+      if (day < previousDay) {
+        data().recordConflict(state, {
+          kind: data().CONFLICT_KINDS.CLOCK, field: 'ngày truyện',
+          from: `ngày ${previousDay}`, to: `ngày ${day}`,
+          note: 'giữ nguyên đồng hồ, không kéo lùi',
+          layer: asLayer(state.chatLayer), atMinutes: data().clockMinutes(state)
+        });
+      }
       elapsedMinutes = Math.max(0, day - previousDay) * data().MINUTES_PER_DAY;
       source = 'regex';
     } else if (day !== null) {

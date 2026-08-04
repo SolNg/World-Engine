@@ -302,10 +302,19 @@ window.WORLD_ENGINE_DIAG = (function() {
           offscreenLogCount: npcs.reduce(function (total, npc) { return total + (Array.isArray(npc.offscreenLog) ? npc.offscreenLog.length : 0); }, 0),
           publicFactCount: Array.isArray(state?.publicFacts) ? state.publicFacts.length : 0,
           rumorCount: Array.isArray(state?.rumorQueue) ? state.rumorQueue.length : 0,
+          traceCount: Array.isArray(state?.traceQueue) ? state.traceQueue.length : 0,
           travelRouteCount: Object.keys(state?.travelCache || {}).length,
           sceneLayer: state?.scene?.layer ?? null,
           scenePresentCount: Array.isArray(state?.scene?.presentIds) ? state.scene.presentIds.length : 0
         };
+      }),
+      // Sổ mâu thuẫn là thứ đáng giá nhất trong một báo cáo lỗi: nó nói thẳng engine đã ghi đè cái
+      // gì bằng cái gì, thay vì bắt người đọc đoán từ ảnh chụp màn hình.
+      conflicts: safe(function () {
+        const list = Array.isArray(state?.conflicts) ? state.conflicts : [];
+        const byKind = {};
+        for (const item of list) byKind[item.kind || 'khác'] = (byKind[item.kind || 'khác'] || 0) + 1;
+        return { total: list.length, byKind: byKind, recent: list.slice(-10) };
       }),
       checkpoint: safe(function () {
         const cp = data?.loadCheckpoint?.();
@@ -340,5 +349,33 @@ window.WORLD_ENGINE_DIAG = (function() {
     return content;
   }
 
-  return { collect, download };
+  // Những nhánh mang nguyên văn truyện. Gói tải xuống giữ lại vì đó là file của chính người dùng,
+  // nhưng bản chép vào clipboard thì phải bỏ — nó sinh ra để dán vào issue công khai.
+  const PROSE_PATHS = [
+    ['extraction', 'lastPrompt'],
+    ['extraction', 'lastRawResult'],
+    ['injection', 'text'],
+    ['evolution', 'lastPrompt'],
+    ['evolution', 'lastRawResult']
+  ];
+
+  function redactProse(diag) {
+    for (const [branch, field] of PROSE_PATHS) {
+      const node = diag && diag[branch];
+      if (!node || typeof node !== 'object' || typeof node[field] !== 'string') continue;
+      // Giữ lại độ dài: biết prompt dài 12000 ký tự là manh mối thật, còn nội dung thì không cần.
+      node[field] = `[đã lược bỏ — ${node[field].length} ký tự]`;
+    }
+    return diag;
+  }
+
+  // Chép gói chẩn đoán vào clipboard, ĐÃ bỏ khoá API và bỏ nguyên văn truyện. Dạng này để dán
+  // thẳng vào báo lỗi; ai muốn đủ cả nguyên văn thì dùng nút tải file.
+  async function copy(scope) {
+    const content = JSON.stringify(redactProse(collect(scope)), null, 2);
+    await navigator.clipboard.writeText(content);
+    return content;
+  }
+
+  return { collect, download, copy, redactProse };
 })();

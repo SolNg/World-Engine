@@ -487,6 +487,62 @@ function check(label, condition) {
   check('xoá được điểm lưu', data.loadCheckpoint() === null);
 }
 
+// ===== Sổ mâu thuẫn =====
+// Bỏ khoá nhân dạng rồi thì con mắt người chơi là lớp bảo vệ duy nhất, mà mắt cần có cái để nhìn.
+{
+  const state = data.defaultState();
+  check('trạng thái mới có sổ mâu thuẫn rỗng', Array.isArray(state.conflicts) && state.conflicts.length === 0);
+
+  const record = data.recordConflict(state, {
+    kind: data.CONFLICT_KINDS.IDENTITY, npcName: 'Liễu Như Yên',
+    field: 'gender', from: 'nữ', to: 'nam', layer: 12, atMinutes: 480
+  });
+  check('ghi được mâu thuẫn', state.conflicts.length === 1);
+  check('giữ cả giá trị cũ lẫn mới', record.from === 'nữ' && record.to === 'nam');
+  check('giữ tầng và mốc đồng hồ', record.layer === 12 && record.atMinutes === 480);
+
+  // Ghi vô hạn thì bản lưu phình ra mà chẳng ai đọc tới cuối.
+  for (let i = 0; i < data.CONFLICT_LIMIT + 20; i++) {
+    data.recordConflict(state, { kind: 'khác', field: 'x', from: String(i), to: String(i + 1) });
+  }
+  check('sổ có trần', state.conflicts.length === data.CONFLICT_LIMIT);
+  check('bỏ mục cũ nhất, giữ mục mới nhất',
+    state.conflicts[state.conflicts.length - 1].to === String(data.CONFLICT_LIMIT + 20));
+
+  data.saveState(state);
+  check('sổ sống sót qua lưu/đọc', data.loadState().conflicts.length === data.CONFLICT_LIMIT);
+  // Đọc lại từ bản lưu cũ quá dài cũng phải bị cắt về đúng trần.
+  storage.set('npc_engine_state_chat-test', JSON.stringify({ conflicts: new Array(500).fill({ kind: 'x' }) }));
+  check('bản lưu cũ quá dài bị cắt về trần', data.loadState().conflicts.length === data.CONFLICT_LIMIT);
+
+  const fresh = data.defaultState();
+  data.recordConflict(fresh, { kind: 'khác' });
+  data.clearConflicts(fresh);
+  check('xoá được sổ', fresh.conflicts.length === 0);
+}
+
+// ===== mergeIdentity báo cả giá trị cũ =====
+// Muốn ghi vào sổ mâu thuẫn thì phải biết nó vừa đè lên cái gì.
+{
+  const state = data.defaultState();
+  const npc = data.upsertNpc(state, { name: 'Lý Mộ Bạch', tier: 'core' });
+  const first = data.mergeIdentity(npc, { gender: 'nam' });
+  check('lần điền đầu không có giá trị cũ', first[0].from === '' && first[0].to === 'nam');
+
+  const second = data.mergeIdentity(npc, { gender: 'nữ' });
+  check('lần đổi sau nêu đúng giá trị cũ', second[0].from === 'nam' && second[0].to === 'nữ');
+  check('nêu đúng tên trường', second[0].field === 'gender');
+}
+
+// ===== Hàng chờ dấu vết =====
+{
+  const state = data.defaultState();
+  check('trạng thái mới có hàng chờ dấu vết', Array.isArray(state.traceQueue));
+  state.traceQueue.push({ text: 'Bùn ướt trên bậc thềm', layer: 4, at: ['Đại Chu', 'Dương Châu'], acknowledged: false });
+  data.saveState(state);
+  check('dấu vết sống sót qua lưu/đọc', data.loadState().traceQueue.length === 1);
+}
+
 // ===== Dữ liệu hỏng =====
 {
   storage.set('npc_engine_state_chat-test', '{ không phải JSON');

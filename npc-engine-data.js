@@ -2,7 +2,9 @@
 window.NPC_ENGINE_DATA = (function() {
   const STATE_PREFIX = 'npc_engine_state_';
   const CHECKPOINT_PREFIX = 'npc_engine_checkpoint_';
-  const VERSION = '1.0.0';
+  // Phiên bản khuôn dữ liệu. Không dùng làm cổng di trú — ensureShape tự vá bản lưu cũ, nên dữ
+  // liệu từ 1.0.0 đọc lên vẫn chạy, chỉ là thiếu sổ mâu thuẫn và hàng chờ dấu vết cho tới lượt sau.
+  const VERSION = '1.1.0';
 
   const TIERS = ['core', 'peripheral'];
   const KNOWLEDGE_SOURCES = ['chứng kiến', 'nghe đồn', 'suy đoán'];
@@ -96,11 +98,16 @@ window.NPC_ENGINE_DATA = (function() {
       archive: [],
       travelCache: {},
       rumorQueue: [],
+      // Dấu vết: tầng giữa tin đồn và bí mật — không ai kể, nhưng người tới sau nhìn thấy được.
+      traceQueue: [],
       // Cảnh hiện tại: dùng để biết ai đang có mặt, từ đó chỉ phát ràng buộc tri thức cho đúng người.
       scene: { layer: null, location: [], presentIds: [] },
       // Những chuyện "thiên hạ có thể biết". Ràng buộc tri thức là phép trừ giữa danh sách này và
       // knowledge của từng NPC — không có nó thì không thể nói "nhân vật này CHƯA biết chuyện gì".
       publicFacts: [],
+      // Sổ mâu thuẫn: chỗ nào trích xuất chọi với thứ đang lưu thì ghi lại thay vì ghi đè im lặng.
+      // Engine vẫn nghe theo chính văn — sổ này không chặn gì cả, nó chỉ khiến việc trôi HIỆN RA.
+      conflicts: [],
       lastStoryDay: null,
       // Đồng hồ thế giới: trục thời gian duy nhất, tính bằng phút truyện kể từ đầu chat.
       clock: { minutes: 0 },
@@ -121,7 +128,9 @@ window.NPC_ENGINE_DATA = (function() {
     target.travelCache = (target.travelCache && typeof target.travelCache === 'object' && !Array.isArray(target.travelCache))
       ? target.travelCache : {};
     target.rumorQueue = asArray(target.rumorQueue);
+    target.traceQueue = asArray(target.traceQueue);
     target.publicFacts = asArray(target.publicFacts);
+    target.conflicts = asArray(target.conflicts).slice(-CONFLICT_LIMIT);
     target.lastStoryDay = asLayer(target.lastStoryDay);
     target.clock = { minutes: Math.max(0, parseInt(target.clock?.minutes) || 0) };
     const time = target.storyTime && typeof target.storyTime === 'object' ? target.storyTime : {};
@@ -310,16 +319,58 @@ window.NPC_ENGINE_DATA = (function() {
   // Một điều KHÔNG đổi: giá trị rỗng không xoá được thứ đã có. Prompt dặn mô hình chỉ ghi phần
   // thay đổi, nên lượt nào nó im lặng về nhân dạng thì đó là "không có gì mới", không phải "xoá đi".
   // Đây đúng lớp lỗi từng làm mất điểm nhân vật chính hồi trước.
+  //
+  // Trả về [{ field, from, to }] chứ không chỉ tên trường: bỏ khoá rồi thì thứ duy nhất còn giữ
+  // được người chơi khỏi bị trôi âm thầm là NHÌN THẤY nó trôi, mà muốn ghi vào sổ mâu thuẫn thì
+  // phải biết giá trị cũ là gì.
   function mergeIdentity(npc, incoming) {
     const changed = [];
     if (!npc || !incoming || typeof incoming !== 'object') return changed;
     for (const field of IDENTITY_FIELDS) {
       const value = clean(incoming[field]);
       if (!value || normalized(npc.identity[field]) === normalized(value)) continue;
+      changed.push({ field, from: clean(npc.identity[field]), to: value });
       npc.identity[field] = value;
-      changed.push(field);
     }
     return changed;
+  }
+
+  // ========== Sổ mâu thuẫn ==========
+  // Trích xuất chọi với thứ đang lưu thì ghi lại. Engine KHÔNG chặn — chính văn vẫn thắng, đúng
+  // như đã chốt. Sổ này chỉ để việc trôi hiện ra thay vì lặng lẽ, vì bỏ khoá rồi thì con mắt người
+  // chơi là lớp bảo vệ duy nhất còn lại.
+  const CONFLICT_LIMIT = 60;
+  const CONFLICT_KINDS = Object.freeze({
+    IDENTITY: 'nhân dạng',
+    TELEPORT: 'nhảy vị trí',
+    RESURRECT: 'người chết trở lại',
+    CLOCK: 'thời gian lùi'
+  });
+
+  function recordConflict(state, entry) {
+    if (!state || !entry) return null;
+    if (!Array.isArray(state.conflicts)) state.conflicts = [];
+    const record = {
+      kind: clean(entry.kind) || 'khác',
+      npcId: clean(entry.npcId),
+      npcName: clean(entry.npcName),
+      field: clean(entry.field),
+      from: clean(entry.from),
+      to: clean(entry.to),
+      note: clean(entry.note),
+      layer: asLayer(entry.layer),
+      atMinutes: asLayer(entry.atMinutes)
+    };
+    state.conflicts.push(record);
+    // Sổ đầy thì bỏ mục cũ nhất. Ghi vô hạn thì bản lưu phình ra mà chẳng ai đọc tới cuối.
+    if (state.conflicts.length > CONFLICT_LIMIT) {
+      state.conflicts = state.conflicts.slice(-CONFLICT_LIMIT);
+    }
+    return record;
+  }
+
+  function clearConflicts(state) {
+    if (state) state.conflicts = [];
   }
 
   // Mô tả nhân dạng thành một dòng, dùng cho prompt và cho ràng buộc gửi AI chính.
@@ -632,6 +683,10 @@ window.NPC_ENGINE_DATA = (function() {
     mergeIdentity,
     describeIdentity,
     IDENTITY_FIELDS,
+    recordConflict,
+    clearConflicts,
+    CONFLICT_KINDS,
+    CONFLICT_LIMIT,
     enforceCoreLimit,
     proximity,
     travelKey,
