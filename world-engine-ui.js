@@ -5698,41 +5698,77 @@ window.WORLD_ENGINE_UI = (function() {
     if (inTransit) badges.push(`<span class="we-npc-badge we-npc-badge-move">đi đường · ${location.etaRounds} lượt</span>`);
     if (npc.status?.alive === false) badges.push('<span class="we-npc-badge we-npc-badge-dead">đã chết</span>');
 
+    // Thẻ phải hiện ĐỦ mọi trường đang lưu. Trình soạn nhiều ô hơn thẻ thì người xem không biết
+    // mình đang bỏ sót cái gì — mà cái bỏ sót thường lại là cái engine gửi cho AI chính.
     const axes = [];
-    axes.push(`<div class="we-npc-axis"><span class="we-npc-axis-key">Vị trí</span><span>${h(npcPath(location.path))}${
-      inTransit ? ` → ${h(npcPath(location.movingTo))} (còn ${location.etaRounds} lượt)` : ''}</span></div>`);
+    const axis = (key, value) => axes.push(
+      `<div class="we-npc-axis"><span class="we-npc-axis-key">${h(key)}</span><span>${value}</span></div>`);
+    // Cắt bớt thì phải nói rõ còn bao nhiêu, đừng lặng lẽ giấu.
+    const more = (list, shown) => list.length > shown
+      ? `<div class="we-npc-more">còn ${list.length - shown} mục nữa, mở Sửa để xem hết</div>` : '';
+
+    const identity = npcData().describeIdentity(npc);
+    if (identity) axis('Nhân dạng', h(identity));
+
+    axis('Vị trí', `${h(npcPath(location.path))}${
+      inTransit ? ` → ${h(npcPath(location.movingTo))} (còn ${location.etaRounds} lượt)` : ''}`);
 
     if (location.userBelievesAt && location.userBelievesAt !== npcPath(location.path)) {
-      axes.push(`<div class="we-npc-axis"><span class="we-npc-axis-key">Người chơi tưởng</span><span>${h(location.userBelievesAt)}</span></div>`);
+      axis('Người chơi tưởng', h(location.userBelievesAt));
     }
 
-    const goals = (Array.isArray(npc.goals) ? npc.goals : []).slice(0, 4)
-      .map(goal => `${h(goal.text || '')} <em>(${h(goal.progress || 'đang tiến hành')})</em>`).join('<br>');
-    if (goals) axes.push(`<div class="we-npc-axis"><span class="we-npc-axis-key">Mục tiêu</span><span>${goals}</span></div>`);
+    const goalList = Array.isArray(npc.goals) ? npc.goals : [];
+    if (goalList.length) {
+      axis('Mục tiêu', goalList.slice(0, 6)
+        .map(goal => `${h(goal.text || '')} <em>(${h(goal.progress || 'đang tiến hành')})</em>`).join('<br>')
+        + more(goalList, 6));
+    }
 
     if (npc.faction?.name) {
-      axes.push(`<div class="we-npc-axis"><span class="we-npc-axis-key">Thế lực</span><span>${h(npc.faction.name)}${
-        npc.faction.role ? ' — ' + h(npc.faction.role) : ''}${npc.faction.standing ? ' (' + h(npc.faction.standing) + ')' : ''}</span></div>`);
-    }
-    if (npc.relations?.user?.attitude) {
-      axes.push(`<div class="we-npc-axis"><span class="we-npc-axis-key">Với người chơi</span><span>${h(npc.relations.user.attitude)}${
-        npc.relations.user.lastChangeReason ? ' — ' + h(npc.relations.user.lastChangeReason) : ''}</span></div>`);
+      axis('Thế lực', `${h(npc.faction.name)}${
+        npc.faction.role ? ' — ' + h(npc.faction.role) : ''}${npc.faction.standing ? ' (' + h(npc.faction.standing) + ')' : ''}`);
     }
 
-    const knowledge = (Array.isArray(npc.knowledge) ? npc.knowledge : []).slice(-5)
-      .map(item => `${h(item.fact || '')} <em>(${h(item.source || '')})</em>`).join('<br>');
-    if (knowledge) axes.push(`<div class="we-npc-axis"><span class="we-npc-axis-key">Biết</span><span>${knowledge}</span></div>`);
-
-    if (npc.status?.condition) {
-      axes.push(`<div class="we-npc-axis"><span class="we-npc-axis-key">Trạng thái</span><span>${h(npc.status.condition)}${
-        npc.status.resources ? ' · ' + h(npc.status.resources) : ''}</span></div>`);
+    const user = npc.relations?.user || {};
+    // Tin cậy là số engine thật sự dùng để chấm quan hệ, giấu đi thì thái độ hiện ra thành vô căn cứ.
+    if (user.attitude || Number(user.trust)) {
+      axis('Với người chơi', `${h(user.attitude || 'chưa rõ')}${
+        Number(user.trust) ? ` <span class="we-npc-trust">tin cậy ${Number(user.trust) > 0 ? '+' : ''}${Number(user.trust)}</span>` : ''}${
+        user.lastChangeReason ? '<br>' + h(user.lastChangeReason) : ''}`);
     }
+
+    const peers = Array.isArray(npc.relations?.npcs) ? npc.relations.npcs.filter(item => item && item.name) : [];
+    if (peers.length) {
+      axis('Với nhân vật khác', peers.slice(0, 6)
+        .map(item => `${h(item.name)} <em>(${h(item.type || 'chưa rõ')})</em>${
+          item.attitude ? ' — ' + h(item.attitude) : ''}`).join('<br>')
+        + more(peers, 6));
+    }
+
+    const knowList = Array.isArray(npc.knowledge) ? npc.knowledge : [];
+    if (knowList.length) {
+      // Lấy phần MỚI nhất, nhưng vẫn xếp theo thứ tự thời gian để đọc xuôi.
+      axis('Biết', knowList.slice(-8)
+        .map(item => `${h(item.fact || '')} <em>(${h(item.source || '')}${
+          item.certainty ? ', ' + h(item.certainty) : ''})</em>`).join('<br>')
+        + more(knowList, 8));
+    }
+
+    if (npc.status?.condition || npc.status?.resources) {
+      axis('Trạng thái', `${h(npc.status.condition || 'chưa rõ')}${
+        npc.status.resources ? ' · ' + h(npc.status.resources) : ''}${
+        npc.status.alive === false ? ' · đã chết' : ''}`);
+    }
+
     if (npc.pendingIntent?.action) {
-      axes.push(`<div class="we-npc-axis"><span class="we-npc-axis-key">Dự định</span><span>${h(npc.pendingIntent.action)}</span></div>`);
+      const schedule = npcData().describeSchedule?.(npc.pendingIntent.schedule);
+      axis('Dự định', `${h(npc.pendingIntent.action)}${schedule ? ` <em>(${h(schedule)})</em>` : ''}`);
     }
 
-    const log = (Array.isArray(npc.offscreenLog) ? npc.offscreenLog : []).slice(-6).reverse()
-      .map(entry => `<div class="we-npc-log-row"><span class="we-npc-log-layer">tầng ${entry.layer ?? '?'}</span>${h(entry.action || '')}</div>`).join('');
+    const logList = Array.isArray(npc.offscreenLog) ? npc.offscreenLog : [];
+    const log = logList.slice(-8).reverse()
+      .map(entry => `<div class="we-npc-log-row"><span class="we-npc-log-layer">tầng ${entry.layer ?? '?'}</span>${h(entry.action || '')}</div>`).join('')
+      + more(logList, 8);
 
     const actions = options?.archived
       ? `<button class="we-btn we-btn-sm we-npc-edit" data-npc-id="${h(key)}">Sửa</button>

@@ -79,11 +79,16 @@ for (const view of ['core', 'peripheral', 'archive', 'rumors']) {
   check(`có mục điều hướng ${view}`, new RegExp(`${view}: \\{ title:`).test(ui));
 }
 
-// ===== Thẻ nhân vật hiển thị đủ sáu trục =====
-for (const [label, key] of [['vị trí', 'Vị trí'], ['mục tiêu', 'Mục tiêu'], ['thế lực', 'Thế lực'],
-                            ['quan hệ', 'Với người chơi'], ['tri thức', 'Biết'], ['trạng thái', 'Trạng thái']]) {
-  check(`thẻ nhân vật có trục ${label}`, ui.includes(`>${key}</span>`));
+// ===== Thẻ nhân vật hiển thị đủ mọi trường đang lưu =====
+// Trình soạn có ô nào thì thẻ phải hiện trường đó. Thẻ hiện ít hơn trình soạn thì người xem không
+// biết mình đang bỏ sót gì — mà cái bỏ sót lại chính là thứ engine gửi cho AI chính.
+for (const key of ['Nhân dạng', 'Vị trí', 'Mục tiêu', 'Thế lực', 'Với người chơi',
+                   'Với nhân vật khác', 'Biết', 'Trạng thái', 'Dự định']) {
+  check(`thẻ nhân vật có trục ${key.toLocaleLowerCase()}`, ui.includes(`axis('${key}'`));
 }
+check('thẻ nhân vật hiện điểm tin cậy', ui.includes('we-npc-trust'));
+// Cắt bớt danh sách thì phải nói còn bao nhiêu, đừng cắt im lặng.
+check('thẻ nhân vật báo phần bị cắt', ui.includes('we-npc-more') && ui.includes('mở Sửa để xem hết'));
 // Tách vị trí thật khỏi chỗ người chơi tưởng là điểm mấu chốt của tính năng sương mù.
 check('thẻ nhân vật hiển thị chỗ người chơi tưởng', ui.includes('Người chơi tưởng'));
 check('thẻ nhân vật hiển thị nhật ký hoạt động ngầm', ui.includes('Hoạt động ngầm'));

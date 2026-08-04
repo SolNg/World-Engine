@@ -3816,6 +3816,23 @@
   font-size: 11px;
 }
 .we-npc-axis em { color: var(--we-text3); font-style: normal; }
+/* Điểm tin cậy: số engine dùng để chấm quan hệ, tách khỏi câu thái độ cho dễ liếc. */
+.we-npc-trust {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 0 5px;
+  font-size: 10px;
+  color: var(--we-text3);
+  border: 1px solid var(--we-hairline);
+  border-radius: 4px;
+}
+/* Thẻ chỉ hiện được một phần thì phải nói rõ còn bao nhiêu, đừng cắt im lặng. */
+.we-npc-more {
+  margin-top: 4px;
+  font-size: 10px;
+  font-style: italic;
+  color: var(--we-text3);
+}
 
 /* ---- Nhật ký hoạt động ngầm và tin đồn ---- */
 .we-npc-log { margin-top: 8px; }
