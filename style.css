@@ -3845,6 +3845,24 @@
   line-height: 1.65;
   color: var(--we-text2);
 }
+/* Mỗi chủ đề một dòng, có gạch phân cách mảnh — liếc là ra, không phải đọc cả đoạn. */
+.we-npc-digest-row {
+  padding: 5px 0;
+  border-bottom: 1px solid var(--we-hairline);
+}
+.we-npc-digest-row:last-child { padding-bottom: 0; border-bottom: none; }
+.we-npc-digest-row:first-child { padding-top: 0; }
+/* Nhãn nhạt màu để mắt bám vào nội dung, không bám vào nhãn. */
+.we-npc-digest-key {
+  display: block;
+  margin-bottom: 2px;
+  font-size: 10px;
+  letter-spacing: 0.05em;
+  color: var(--we-text3);
+}
+/* Nhiều người cùng một chủ đề: mỗi người một dòng, thụt vào cho thấy quan hệ với nhãn. */
+.we-npc-digest-item { padding-left: 8px; text-indent: -8px; }
+.we-npc-digest-item + .we-npc-digest-item { margin-top: 2px; }
 
 /* ---- Tuyến hệ quả ---- */
 .we-npc-thread {

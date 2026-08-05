@@ -436,6 +436,29 @@ window.NPC_ENGINE = (function() {
   // Tương ứng với "tóm tắt thế giới" của Công Cụ Thế Giới, nhưng dựng bằng MÃ chứ không gọi API:
   // mọi thứ cần nói đều đã nằm trong trạng thái, gọi thêm một lượt API chỉ để diễn đạt lại là
   // tốn tiền và thêm một chỗ nữa để mô hình bịa.
+  // Trạng thái coi là bình thường: khớp theo TIỀN TỐ chứ không so cả chuỗi. Mô hình hay viết
+  // "khoẻ mạnh, đang khoác áo choàng" — so cả chuỗi thì câu đó rơi vào mục "cần để ý", khiến người
+  // khoẻ mạnh bị báo động cùng người đang hấp hối và mục đó mất sạch ý nghĩa.
+  const CALM_CONDITIONS = ['khoẻ', 'khỏe', 'bình thường', 'ổn', 'không sao', 'lành lặn', 'nguyên vẹn', 'tỉnh táo'];
+
+  function isCalm(condition) {
+    const text = normalized(condition);
+    if (!text) return true;
+    return CALM_CONDITIONS.some(word => text.startsWith(word));
+  }
+
+  // Mô hình hay viết dự định thành cả câu dài. Tóm tắt là để LIẾC, không phải để đọc kỹ.
+  function shorten(text, max) {
+    const value = clean(text);
+    const limit = Math.max(12, parseInt(max) || 60);
+    if (value.length <= limit) return value;
+    const cut = value.slice(0, limit);
+    const space = cut.lastIndexOf(' ');
+    return (space > limit * 0.6 ? cut.slice(0, space) : cut).replace(/[,;:.\s]+$/, '') + '…';
+  }
+
+  // Trả về nhiều DÒNG, mỗi dòng "Nhãn: nội dung". Nối tất cả thành một cục thì không liếc ra được
+  // gì — mà mục đích duy nhất của khối này là liếc một cái biết engine đang thấy gì.
   function buildDigest(state) {
     const npcs = asArray(state?.npcs).filter(npc => !npc.status?.archived);
     if (!npcs.length) return 'Chưa có nhân vật nào được ghi nhận. Engine sẽ tự dựng hồ sơ khi truyện nhắc tới ai đó đáng nhớ.';
@@ -443,47 +466,40 @@ window.NPC_ENGINE = (function() {
     const core = npcs.filter(npc => npc.tier === 'core');
     const scene = asArray(state.scene?.location).map(clean).filter(Boolean);
     const present = new Set(asArray(state.scene?.presentIds));
-    const parts = [];
+    const lines = [];
+    const line = (label, text) => { if (clean(text)) lines.push(`${label}: ${clean(text)}`); };
 
     if (scene.length) {
       const here = core.filter(npc => present.has(npc.id)).map(npc => npc.name).filter(Boolean);
-      parts.push(here.length
-        ? `Tại ${describePath(scene)}: ${here.join(', ')}.`
-        : `Cảnh đang ở ${describePath(scene)}, chưa có nhân vật trọng yếu nào có mặt.`);
+      line('Tại chỗ', here.length
+        ? `${describePath(scene)} — ${here.join(', ')}`
+        : `${describePath(scene)} — chưa có nhân vật trọng yếu nào có mặt`);
     }
 
     const moving = core.filter(npc => npc.location?.movingTo);
-    if (moving.length) {
-      parts.push(`Đang trên đường: ${moving.map(npc =>
-        `${npc.name} → ${describePath(npc.location.movingTo)}`).join('; ')}.`);
-    }
+    line('Đi đường', moving.slice(0, 4).map(npc =>
+      `${npc.name} → ${describePath(npc.location.movingTo)}`).join('; '));
 
     const busy = core.filter(npc => npc.pendingIntent?.action && !present.has(npc.id));
-    if (busy.length) {
-      parts.push(`Đang bận việc riêng: ${busy.slice(0, 4).map(npc =>
-        `${npc.name} (${clean(npc.pendingIntent.action)})`).join('; ')}.`);
-    }
+    line('Việc riêng', busy.slice(0, 4).map(npc =>
+      `${npc.name} — ${shorten(npc.pendingIntent.action, 52)}`).join('; '));
 
-    const hurt = core.filter(npc => {
-      const condition = normalized(npc.status?.condition);
-      return condition && condition !== 'khoẻ' && condition !== 'khỏe' && condition !== 'khoẻ mạnh' && condition !== 'khỏe mạnh';
-    });
-    if (hurt.length) {
-      parts.push(`Cần để ý: ${hurt.slice(0, 4).map(npc => `${npc.name} — ${clean(npc.status.condition)}`).join('; ')}.`);
-    }
+    const hurt = core.filter(npc => !isCalm(npc.status?.condition));
+    line('Cần để ý', hurt.slice(0, 4).map(npc =>
+      `${npc.name} — ${shorten(npc.status.condition, 40)}`).join('; '));
 
     const live = asArray(state.threads).filter(item => item.stage !== 'đã nguội');
-    if (live.length) parts.push(`${live.length} tuyến hệ quả đang treo từ việc người chơi đã làm.`);
+    line('Đang treo', live.length
+      ? `${live.length} tuyến hệ quả từ việc người chơi đã làm`
+      : '');
 
     const fresh = asArray(state.rumorQueue).filter(item => !item.acknowledged).length;
     const traces = asArray(state.traceQueue).filter(item => !item.acknowledged).length;
-    if (fresh || traces) {
-      parts.push(`Sau màn còn ${[fresh ? `${fresh} tin đồn` : '', traces ? `${traces} dấu vết` : '']
-        .filter(Boolean).join(' và ')} chưa vào truyện.`);
-    }
+    line('Sau màn', [fresh ? `${fresh} tin đồn` : '', traces ? `${traces} dấu vết` : '']
+      .filter(Boolean).join(', ') + (fresh || traces ? ' chưa vào truyện' : ''));
 
-    if (!parts.length) parts.push(`${core.length} nhân vật trọng yếu, chưa ai có diễn biến đáng kể.`);
-    return parts.join(' ');
+    if (!lines.length) return `${core.length} nhân vật trọng yếu, chưa ai có diễn biến đáng kể.`;
+    return lines.join('\n');
   }
 
   // ================= Khối chèn vào prompt =================

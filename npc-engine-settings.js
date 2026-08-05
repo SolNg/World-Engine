@@ -1,7 +1,7 @@
 // npc-engine-settings.js — Cấu hình độc lập của Công Cụ Nhân Vật (chỉ dùng chung phần triển khai API/lập lịch, không chia sẻ giá trị cấu hình)
 window.NPC_ENGINE_SETTINGS = (function() {
   const STORAGE_KEY = 'npc_engine_settings';
-  const VERSION = '1.2.0';
+  const VERSION = '1.2.1';
 
   const FOG_MODES = ['off', 'fog', 'strict'];
   const KNOWLEDGE_SCOPES = ['in-scene', 'all', 'none'];

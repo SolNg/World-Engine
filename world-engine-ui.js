@@ -5484,6 +5484,22 @@ window.WORLD_ENGINE_UI = (function() {
     return renderNpcSubView(_npcView);
   }
 
+  // Tóm tắt trả về nhiều dòng dạng "Nhãn: nội dung". Tách nhãn ra cho nhạt màu đi để mắt bám vào
+  // nội dung — đổ cả cục một đoạn thì không liếc ra được gì, mà liếc mới là mục đích của khối này.
+  function renderNpcDigestLines(state) {
+    const text = window.NPC_ENGINE?.buildDigest?.(state) || 'Chưa có gì để tóm tắt.';
+    return text.split('\n').filter(Boolean).map(row => {
+      const at = row.indexOf(': ');
+      // Dòng không có nhãn (trạng thái rỗng, chưa có ai) thì để nguyên cả câu.
+      if (at <= 0) return `<div class="we-npc-digest-row">${h(row)}</div>`;
+      // Nhiều người trong cùng một chủ đề thì mỗi người một dòng con — ba cái tên nối bằng dấu
+      // chấm phẩy vẫn là một cục, mà cục thì không liếc ra được.
+      const items = row.slice(at + 2).split('; ').map(part => part.trim()).filter(Boolean);
+      return `<div class="we-npc-digest-row"><span class="we-npc-digest-key">${h(row.slice(0, at))}</span>${
+        items.map(item => `<div class="we-npc-digest-item">${h(item)}</div>`).join('')}</div>`;
+    }).join('');
+  }
+
   function renderNpcHomeView() {
     const state = npcData()?.loadState?.() || {};
     const npcs = Array.isArray(state.npcs) ? state.npcs : [];
@@ -5546,7 +5562,7 @@ window.WORLD_ENGINE_UI = (function() {
       // đối xứng với tóm tắt thế giới bên Công Cụ Thế Giới — liếc một cái là biết engine đang thấy gì.
       + '<div class="we-npc-digest-box">'
       + '<div class="we-npc-digest-title">Tình Hình Nhân Vật</div>'
-      + '<div class="we-npc-digest">' + h(window.NPC_ENGINE?.buildDigest?.(state) || 'Chưa có gì để tóm tắt.') + '</div>'
+      + '<div class="we-npc-digest">' + renderNpcDigestLines(state) + '</div>'
       + '</div>'
       + '</div>';
   }
@@ -5971,6 +5987,11 @@ window.WORLD_ENGINE_UI = (function() {
   // Nhật ký cập nhật của Công Cụ Nhân Vật, tách riêng khỏi CHANGELOG của Công Cụ Thế Giới
   // vì hai engine đánh số phiên bản độc lập.
   const NPC_CHANGELOG = [
+    { version: '1.2.1', date: '2026-08-05', items: [
+      'Tóm tắt tình hình nhân vật đọc được hơn: mỗi chủ đề một dòng có nhãn riêng, và trong một chủ đề thì mỗi người một dòng con. Trước đây tất cả nối thành một cục, mà mục đích duy nhất của khối này là liếc một cái biết engine đang thấy gì.',
+      'Sửa lỗi: mục "Cần để ý" bắt nhầm người khoẻ. Trước đây nó so nguyên cả chuỗi trạng thái, nên "khoẻ mạnh, đang khoác áo choàng" hay "bình thường" đều bị coi là bất thường — liệt kê chung với người đang hấp hối thì mục đó mất sạch ý nghĩa. Giờ khớp theo tiền tố.',
+      'Dự định dài dòng được cắt ngắn ở ranh giới từ, không đứt giữa chữ.'
+    ] },
     { version: '1.2.0', date: '2026-08-05', items: [
       'Cắt khối theo NHÃN: chỉ cần gõ tên khối — "Sự kiện song song", "Báo cáo vận hành thế giới" — engine tự dựng regex, nhận cả bốn kiểu bọc [Nhãn] 【Nhãn】 〔Nhãn〕 <Nhãn>. Mỗi preset đặt tên khối một kiểu nên bắt người dùng tự viết regex là bắt sai người. Ô regex tay vẫn còn cho những ca lắt léo.',
       'Tuyến hệ quả: việc người chơi làm nay để lại dư âm. Engine mỗi lượt gieo NHIỀU NHẤT MỘT tuyến, và chỉ khi người chơi làm chuyện có sức nặng — đắc tội ai đó, hứa hẹn điều gì, để lộ thân phận, lấy đi thứ có chủ. Mỗi tuyến bắt buộc nêu hành động nào của người chơi đã dẫn tới nó; không nêu được thì bị bỏ, vì đó là tình tiết bịa chứ không phải hệ quả. Trần mặc định 4 tuyến, tuyến ba ngày truyện không ai nhắc thì tự nguội. Gửi cho AI dưới dạng chất liệu, không phải mệnh lệnh.',

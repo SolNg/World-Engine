@@ -118,6 +118,12 @@ check('mô tả trần giải thích lý do để thấp', ui.includes('danh sá
 // ===== Tóm tắt tình hình nhân vật lấp khoảng trống trang chủ =====
 check('trang chủ gọi tóm tắt', ui.includes('buildDigest'));
 check('có khung tóm tắt', ui.includes('we-npc-digest-box') && ui.includes('Tình Hình Nhân Vật'));
+// Tóm tắt phải xuống dòng theo chủ đề, và trong một chủ đề thì mỗi người một dòng con.
+// Đổ tất cả thành một cục thì không liếc ra được gì — mà liếc là mục đích duy nhất của khối này.
+check('tóm tắt tách theo dòng', ui.includes('we-npc-digest-row') && ui.includes("text.split('\\n')"));
+check('mỗi chủ đề có nhãn riêng', ui.includes('we-npc-digest-key'));
+check('nhiều người thì tách mỗi người một dòng con',
+  ui.includes('we-npc-digest-item') && ui.includes("split('; ')"));
 
 // ===== Cắt khối theo nhãn =====
 check('có ô cắt khối theo nhãn', ui.includes('we-npc-filter-tags') && ui.includes("'filterTags'"));

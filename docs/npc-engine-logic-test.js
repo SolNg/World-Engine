@@ -333,8 +333,37 @@ const baseSettings = () => config.getSettings(true);
   check('tóm tắt nêu ai đang đi đường', digest.includes('Trường An'));
   check('tóm tắt nêu việc riêng đang làm', digest.includes('Tìm thầy thuốc'));
   check('tóm tắt nêu người cần để ý', digest.includes('trọng thương'));
-  // Khoẻ mạnh là mặc định, đừng liệt kê ra cho chật.
-  check('người khoẻ không bị đưa vào mục cần để ý', !digest.includes('Lý Mộ Bạch —'));
+
+  // Mỗi chủ đề một DÒNG, có nhãn riêng. Nối thành một cục thì không liếc ra được gì.
+  const rows = digest.split('\n');
+  check('mỗi chủ đề nằm trên một dòng riêng', rows.length >= 4);
+  check('dòng nào cũng có nhãn', rows.every(row => /^[^:]+: /.test(row)));
+  check('nhãn đúng thứ tự đọc', rows[0].startsWith('Tại chỗ: '));
+
+  // ===== Trạng thái bình thường KHÔNG được rơi vào mục cần để ý =====
+  // Mô hình hay viết "khoẻ mạnh, đang khoác áo choàng". So cả chuỗi thì câu đó bị coi là bất
+  // thường, và mục "Cần để ý" liệt kê cả người khoẻ lẫn người hấp hối — tức là mất sạch ý nghĩa.
+  for (const calm of ['khoẻ mạnh', 'khỏe mạnh, đang khoác áo choàng', 'bình thường', 'ổn định', 'tỉnh táo', '']) {
+    const probe = data.defaultState();
+    const npc = data.upsertNpc(probe, { name: 'Người Khoẻ', tier: 'core' });
+    npc.status.condition = calm;
+    check(`"${calm || 'để trống'}" không bị coi là cần để ý`,
+      !engine.buildDigest(probe).includes('Cần để ý'));
+  }
+  for (const bad of ['trọng thương', 'bất tỉnh sau khi đập đầu xuống đường', 'trúng độc']) {
+    const probe = data.defaultState();
+    const npc = data.upsertNpc(probe, { name: 'Người Bệnh', tier: 'core' });
+    npc.status.condition = bad;
+    check(`"${bad}" phải vào mục cần để ý`, engine.buildDigest(probe).includes('Cần để ý'));
+  }
+
+  // Dự định dài dòng phải được cắt ngắn, tóm tắt là để liếc chứ không phải để đọc kỹ.
+  const wordy = data.defaultState();
+  const talker = data.upsertNpc(wordy, { name: 'Kẻ Dài Dòng', tier: 'core' });
+  talker.pendingIntent = { action: 'Đến trường học để tìm Rias và Asato hỏi rõ về những hiện tượng kỳ lạ đang xảy ra với mình' };
+  const shortened = wordy && engine.buildDigest(wordy);
+  check('dự định dài bị cắt ngắn', shortened.includes('…'));
+  check('cắt ở ranh giới từ, không đứt giữa chữ', !/\s…/.test(shortened));
 }
 
 // ===== Sổ mâu thuẫn: ghi lại chỗ chính văn chọi với hồ sơ =====
