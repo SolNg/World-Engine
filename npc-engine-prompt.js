@@ -190,12 +190,41 @@ Không có nhân vật nào đáng lưu thì trả "npcs": [] — đó là kết
     return SYSTEM_PROMPT + '\n\n' + buildUserPrompt(options);
   }
 
+  // ===== Prompt viết tóm tắt tình hình nhân vật =====
+  // Chỉ DIỄN ĐẠT LẠI phần tư liệu đưa vào, tuyệt đối không thêm tình tiết. Đây là chỗ dễ hỏng nhất
+  // của việc cho mô hình viết tóm tắt: nó rất sẵn lòng "làm cho hay" bằng cách bịa thêm, mà tóm tắt
+  // bịa thì tệ hơn không có tóm tắt — người chơi tin vào nó rồi tưởng truyện đã xảy ra như thế.
+  const DIGEST_PROMPT = `Bạn là người chép sử của "Công Cụ Nhân Vật". Nhiệm vụ: đọc bản kê tình hình các nhân vật phụ và viết lại thành một đoạn văn xuôi ngắn.
+
+【QUY TẮC TUYỆT ĐỐI】
+- CHỈ được dùng thông tin có trong bản kê. Không thêm nhân vật, địa danh, sự việc, cảm xúc hay suy đoán nào không có sẵn ở đó.
+- Không phán đoán chuyện sắp tới, không bình luận, không nêu ý nghĩa. Chỉ thuật lại tình hình đang có.
+- Bản kê trống ở mục nào thì bỏ qua mục đó, đừng lấp bằng chữ nghĩa.
+
+【CÁCH VIẾT】
+- Một đoạn liền mạch, 3 đến 5 câu, khoảng 60-110 chữ. Không gạch đầu dòng, không xuống dòng.
+- Giọng thuật sự điềm đạm, như người ngoài quan sát. Nối các ý bằng liên từ cho trôi chảy, đừng liệt kê khô khốc.
+- Nêu tên riêng đúng như bản kê ghi. Vị trí thì gọi tên nơi chốn, không cần chép cả đường dẫn phân cấp.
+- Ưu tiên theo thứ tự: ai đang ở cảnh hiện tại, ai đang bận việc gì ở nơi khác, ai đang có chuyện bất thường, rồi mới tới phần còn treo sau màn.
+
+【ĐỊNH DẠNG XUẤT KẾT QUẢ】
+Chỉ xuất một khối JSON hợp lệ, không kèm giải thích, không kèm dấu bao mã.
+
+{ "digest": "đoạn văn xuôi" }`;
+
+  function buildDigestPrompt(facts) {
+    const body = clean(facts) || 'Chưa có nhân vật nào được ghi nhận.';
+    return `${DIGEST_PROMPT}\n\n【BẢN KÊ TÌNH HÌNH】\n${body}`;
+  }
+
   return {
     SYSTEM_PROMPT,
+    DIGEST_PROMPT,
     describeKnownNpcs,
     describePath,
     buildUserPrompt,
     buildMessages,
-    buildPrompt
+    buildPrompt,
+    buildDigestPrompt
   };
 })();

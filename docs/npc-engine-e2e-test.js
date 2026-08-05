@@ -68,6 +68,8 @@ const scripted = [
       intent: { action: 'Luyện thành thục Boosted Gear', mode: 'effort', duration: { hours: 20 } }
     }]
   }),
+  // Lượt 1 — mô hình viết tóm tắt
+  JSON.stringify({ digest: 'Rias Gremory vẫn ở học viện Kuoh, trong khi Hyoudou Issei đã về nhà luyện tập Thần Khí.' }),
   // Lượt 2 — trích xuất: chính văn tiết lộ nhân dạng khác, và báo đã kể tin đồn
   JSON.stringify({
     scene: { location: ['Nhật Bản', 'Kuoh', 'Học viện Kuoh'], presentNames: ['Rias Gremory'] },
@@ -80,7 +82,9 @@ const scripted = [
     ]
   }),
   // Lượt 2 — hoạt động ngầm
-  JSON.stringify({ activities: [] })
+  JSON.stringify({ activities: [] }),
+  // Lượt 2 — mô hình viết tóm tắt
+  JSON.stringify({ digest: 'Ba ngày sau, Rias Gremory nhắc lại lời đồn quanh khu nhà Hyoudou.' })
 ];
 
 (async () => {
@@ -142,6 +146,11 @@ const scripted = [
   const lastPrompt = responses[responses.length - 1] || responses[responses.length - 2] || '';
   ok('prompt có kèm tư liệu Sổ Tay Thế Giới', responses.some(p => p.includes('Trường An là kinh đô')));
   ok('prompt trích xuất kèm nhân dạng đang lưu', responses.some(p => p.includes('nhân dạng đang lưu')));
+  ok('mô hình viết được tóm tắt', st.digest.text.includes('Rias Gremory nhắc lại lời đồn'));
+  ok('tóm tắt đóng dấu lượt', st.digest.round === 2);
+  ok('giao diện dùng bản mô hình viết', E.getDigest(st).prose === true);
+  // Tóm tắt CHỈ để người chơi đọc. Lọt vào khối chèn là engine đọc lại lời chính nó viết ra.
+  ok('tóm tắt KHÔNG lọt vào khối chèn', !injected.includes('nhắc lại lời đồn quanh khu nhà'));
   ok('prompt kèm danh sách sự việc chờ thừa nhận', responses.some(p => p.includes('SỰ VIỆC HẬU TRƯỜNG CHƯA AI KỂ')));
   ok('bảng điểm chọn nhân vật có ghi lý do',
     (E.getLastSelection() || []).some(item => (item.reasons || []).length > 0));

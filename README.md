@@ -138,6 +138,7 @@ Engine không tự hiểu địa lý. Vị trí lưu dưới dạng đường d�
 
 #### Công cụ đi kèm
 
+- **Tóm tắt tình hình nhân vật** — đoạn văn xuôi ở trang chủ do mô hình viết, giống Tóm Tắt Thế Giới. Prompt chỉ cho nó *diễn đạt lại* bản kê engine đưa vào, cấm thêm nhân vật hay sự việc — tóm tắt bịa thì tệ hơn không có tóm tắt. Tắt được; tắt thì engine tự dựng bản danh sách bằng mã, không tốn token. Đoạn này **không đi vào prompt nào cả**, chỉ để bạn đọc
 - **Cắt khối theo nhãn** — nếu preset của bạn sinh **khối trạng thái kẹp trong chính văn** ("Sự kiện song song", "Báo cáo vận hành thế giới", bảng ETA), gõ tên khối vào đây là engine tự cắt. Những khối đó là bảng do AI chính *bịa ra*, không phải chuyện đã xảy ra — engine đọc vào là dựng hồ sơ theo lời bịa, mà engine cũng chèn trạng thái vào prompt, nên cái nó đọc lại chính là cái nó vừa viết ra. **Đừng cắt** đoạn tự sự kể chuyện xảy ra ở nơi khác (POV khác): đó là chính văn thật
 - **Sổ mâu thuẫn** — ghi lại chỗ chính văn nói khác với hồ sơ đang lưu: nhân dạng đổi, nhân vật nhảy vị trí không qua đường đi, người chết trở lại, đồng hồ bị kéo lùi. Engine **vẫn nghe theo chính văn**, sổ không chặn gì cả — nó chỉ khiến việc trôi hiện ra để bạn còn thấy mà sửa tay
 - **Sửa hồ sơ tay** — chữa mọi trục khi mô hình chấm sai, thêm nhân vật bị bỏ sót, xoá người bị nhận nhầm

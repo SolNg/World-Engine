@@ -3834,11 +3834,23 @@
   border: 1px solid var(--we-hairline);
   border-radius: 10px;
 }
-.we-npc-digest-title {
+.we-npc-digest-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
   margin-bottom: 5px;
+}
+.we-npc-digest-title {
   font-size: 11px;
   letter-spacing: 0.06em;
   color: var(--we-text3);
+}
+/* Bản mô hình viết: văn xuôi liền mạch, cho thở rộng hơn danh sách có nhãn. */
+.we-npc-digest-prose {
+  line-height: 1.8;
+  text-align: justify;
+  padding-left: 9px;
+  border-left: 2px solid var(--we-hairline);
 }
 .we-npc-digest {
   font-size: 12px;

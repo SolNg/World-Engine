@@ -357,6 +357,22 @@ const baseSettings = () => config.getSettings(true);
     check(`"${bad}" phải vào mục cần để ý`, engine.buildDigest(probe).includes('Cần để ý'));
   }
 
+  // ===== Đường lui khi mô hình viết tóm tắt hỏng =====
+  // Tóm tắt là thứ trang trí. Hỏng thì mất mỗi đoạn văn, tuyệt đối không được để trống khung
+  // và càng không được làm sập lượt trích xuất vốn mới là phần có giá trị.
+  {
+    const probe = data.defaultState();
+    data.upsertNpc(probe, { name: 'Lý Mộ Bạch', tier: 'core', significance: 85 });
+
+    check('chưa có bản mô hình viết thì dùng bản dựng bằng mã',
+      engine.getDigest(probe).prose === false && engine.getDigest(probe).text.includes('nhân vật trọng yếu'));
+
+    probe.digest = { text: 'Lý Mộ Bạch một mình ngược dòng lên Trường An.', layer: 5, round: 5 };
+    check('có bản mô hình viết thì dùng nó',
+      engine.getDigest(probe).prose === true && engine.getDigest(probe).text.includes('ngược dòng'));
+
+  }
+
   // Dự định dài dòng phải được cắt ngắn, tóm tắt là để liếc chứ không phải để đọc kỹ.
   const wordy = data.defaultState();
   const talker = data.upsertNpc(wordy, { name: 'Kẻ Dài Dòng', tier: 'core' });
@@ -1116,6 +1132,47 @@ const baseSettings = () => config.getSettings(true);
     check('nhãn đặc biệt không làm hỏng phần còn lại', seen[0]?.includes('Trời đổ mưa'));
 
     config.patchSettings({ filterRegex: '', filterTags: '', worldbookEnabled: true, offscreenEnabled: true });
+  }
+
+  // ===== Mô hình viết tóm tắt: cách ly lỗi và không được bịa =====
+  {
+    const probe = data.defaultState();
+    const npc = data.upsertNpc(probe, { name: 'Lý Mộ Bạch', tier: 'core', significance: 85 });
+    npc.pendingIntent = { action: 'Chiêu mộ tử sĩ' };
+
+    // Tắt thì không tốn một lượt gọi API nào.
+    let called = 0;
+    global.WORLD_ENGINE_API.callApi = async () => { called += 1; return '{}'; };
+    await engine.runDigest(probe, { ...baseSettings(), digestEnabled: false });
+    check('tắt thì không gọi API', called === 0);
+    check('tắt thì không ghi gì vào trạng thái', !probe.digest.text);
+
+    // API hỏng thì mất mỗi đoạn văn, không được ném lỗi ra ngoài.
+    global.WORLD_ENGINE_API.callApi = async () => { throw new Error('mạng hỏng'); };
+    let threw = '';
+    try { await engine.runDigest(probe, { ...baseSettings(), digestEnabled: true }); }
+    catch (error) { threw = String(error?.message || error); }
+    check('API hỏng thì nuốt lỗi, không ném ra ngoài', threw === '');
+    check('API hỏng thì quay về bản dựng bằng mã', engine.getDigest(probe).prose === false);
+
+    // Trả về rỗng cũng không được xoá bản cũ đang có.
+    probe.digest = { text: 'bản cũ còn dùng được', layer: 1, round: 1 };
+    global.WORLD_ENGINE_API.callApi = async () => JSON.stringify({ digest: '   ' });
+    await engine.runDigest(probe, { ...baseSettings(), digestEnabled: true });
+    check('trả rỗng thì giữ bản cũ', engine.getDigest(probe).text === 'bản cũ còn dùng được');
+
+    // Prompt phải chứa bản kê và cấm bịa — đây là chỗ dễ hỏng nhất của việc cho mô hình viết.
+    let seenPrompt = '';
+    global.WORLD_ENGINE_API.callApi = async prompt => {
+      seenPrompt = prompt;
+      return JSON.stringify({ digest: 'Lý Mộ Bạch còn ở Dương Châu.' });
+    };
+    await engine.runDigest(probe, { ...baseSettings(), digestEnabled: true });
+    check('prompt kèm bản kê tình hình', seenPrompt.includes('BẢN KÊ TÌNH HÌNH') && seenPrompt.includes('Lý Mộ Bạch'));
+    check('prompt cấm thêm tình tiết', seenPrompt.includes('Không thêm nhân vật'));
+    check('prompt cấm phán đoán chuyện sắp tới', seenPrompt.includes('Không phán đoán chuyện sắp tới'));
+    check('viết xong thì lưu vào trạng thái', probe.digest.text.includes('Dương Châu'));
+    check('đóng dấu lượt để biết tóm tắt cũ tới đâu', probe.digest.round === probe.round);
   }
 
   // Chốt ở tầng dưới cùng: nơi gọi có sai kiểu thì phải ném lỗi rõ ràng ngay,

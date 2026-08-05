@@ -116,7 +116,14 @@ check('có công tắc và trần tuyến hệ quả',
 check('mô tả trần giải thích lý do để thấp', ui.includes('danh sách việc vặt'));
 
 // ===== Tóm tắt tình hình nhân vật lấp khoảng trống trang chủ =====
-check('trang chủ gọi tóm tắt', ui.includes('buildDigest'));
+check('trang chủ gọi tóm tắt', ui.includes('getDigest'));
+// Bản mô hình viết là văn xuôi, không có nhãn để cắt — giao diện phải phân biệt hai dạng.
+check('phân biệt bản văn xuôi với bản danh sách',
+  ui.includes('digest.prose') && ui.includes('we-npc-digest-prose'));
+check('có nút viết lại tóm tắt',
+  ui.includes('we-npc-digest-redo') && ui.includes('runDigest'));
+check('có công tắc cho mô hình viết tóm tắt',
+  ui.includes("'digestEnabled'") && ui.includes('một lượt gọi API mỗi lượt'));
 check('có khung tóm tắt', ui.includes('we-npc-digest-box') && ui.includes('Tình Hình Nhân Vật'));
 // Tóm tắt phải xuống dòng theo chủ đề, và trong một chủ đề thì mỗi người một dòng con.
 // Đổ tất cả thành một cục thì không liếc ra được gì — mà liếc là mục đích duy nhất của khối này.
@@ -420,7 +427,9 @@ for (const cls of ['we-hint', 'we-btn-sm', 'we-switch-row']) {
     'we-npc-nav-row', 'we-npc-nav-list',
     // Nút của trình soạn: kiểu dáng lấy từ .we-btn, lớp riêng chỉ để gắn sự kiện.
     'we-npc-edit', 'we-npc-add', 'we-npc-save', 'we-npc-delete', 'we-npc-cancel-edit', 'we-npc-peek',
-    'we-npc-clear-conflicts', 'we-npc-thread-cool', 'we-npc-thread-drop'
+    'we-npc-clear-conflicts', 'we-npc-thread-cool', 'we-npc-thread-drop',
+    // Nút biểu tượng: kiểu dáng lấy từ .we-icon-btn, lớp riêng chỉ để gắn sự kiện.
+    'we-npc-digest-redo'
   ]);
   const used = new Set();
   for (const attribute of ui.match(/class="[^"]*"/g) || []) {

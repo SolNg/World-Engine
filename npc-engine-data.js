@@ -166,6 +166,8 @@ window.NPC_ENGINE_DATA = (function() {
       // Tuyến hệ quả: chuyện CÓ THỂ tới do việc người chơi đã làm. Cố ý để trần rất thấp — đẻ nhiều
       // thì thành danh sách việc vặt, mà mỗi tuyến còn chiếm chỗ trong khối chèn.
       threads: [],
+      // Tóm tắt do mô hình viết. Rỗng thì giao diện tự quay về bản dựng bằng mã — không bao giờ để trống.
+      digest: { text: '', layer: null, round: 0 },
       // Cảnh hiện tại: dùng để biết ai đang có mặt, từ đó chỉ phát ràng buộc tri thức cho đúng người.
       scene: { layer: null, location: [], presentIds: [] },
       // Những chuyện "thiên hạ có thể biết". Ràng buộc tri thức là phép trừ giữa danh sách này và
@@ -196,6 +198,8 @@ window.NPC_ENGINE_DATA = (function() {
     target.rumorQueue = asArray(target.rumorQueue);
     target.traceQueue = asArray(target.traceQueue);
     target.threads = asArray(target.threads).map(newThread);
+    const digest = target.digest && typeof target.digest === 'object' ? target.digest : {};
+    target.digest = { text: clean(digest.text), layer: asLayer(digest.layer), round: Math.max(0, parseInt(digest.round) || 0) };
     target.publicFacts = asArray(target.publicFacts);
     target.conflicts = asArray(target.conflicts).slice(-CONFLICT_LIMIT);
     target.lastStoryDay = asLayer(target.lastStoryDay);

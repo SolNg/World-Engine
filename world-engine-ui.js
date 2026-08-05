@@ -5487,7 +5487,10 @@ window.WORLD_ENGINE_UI = (function() {
   // Tóm tắt trả về nhiều dòng dạng "Nhãn: nội dung". Tách nhãn ra cho nhạt màu đi để mắt bám vào
   // nội dung — đổ cả cục một đoạn thì không liếc ra được gì, mà liếc mới là mục đích của khối này.
   function renderNpcDigestLines(state) {
-    const text = window.NPC_ENGINE?.buildDigest?.(state) || 'Chưa có gì để tóm tắt.';
+    const digest = window.NPC_ENGINE?.getDigest?.(state) || { text: '', prose: false };
+    const text = digest.text || 'Chưa có gì để tóm tắt.';
+    // Bản mô hình viết là văn xuôi liền mạch, đừng cắt theo nhãn — không có nhãn nào để cắt.
+    if (digest.prose) return `<div class="we-npc-digest-prose">${h(text)}</div>`;
     return text.split('\n').filter(Boolean).map(row => {
       const at = row.indexOf(': ');
       // Dòng không có nhãn (trạng thái rỗng, chưa có ai) thì để nguyên cả câu.
@@ -5561,7 +5564,10 @@ window.WORLD_ENGINE_UI = (function() {
       // Khoảng trống dưới danh sách điều hướng vốn bỏ không. Tóm tắt tình hình nhân vật đặt vào đây,
       // đối xứng với tóm tắt thế giới bên Công Cụ Thế Giới — liếc một cái là biết engine đang thấy gì.
       + '<div class="we-npc-digest-box">'
-      + '<div class="we-npc-digest-title">Tình Hình Nhân Vật</div>'
+      + '<div class="we-npc-digest-head">'
+      + '<span class="we-npc-digest-title">Tình Hình Nhân Vật</span>'
+      + '<button class="we-icon-btn we-npc-digest-redo" title="Viết lại tóm tắt"><i class="fa-solid fa-rotate"></i></button>'
+      + '</div>'
       + '<div class="we-npc-digest">' + renderNpcDigestLines(state) + '</div>'
       + '</div>'
       + '</div>';
@@ -5987,6 +5993,12 @@ window.WORLD_ENGINE_UI = (function() {
   // Nhật ký cập nhật của Công Cụ Nhân Vật, tách riêng khỏi CHANGELOG của Công Cụ Thế Giới
   // vì hai engine đánh số phiên bản độc lập.
   const NPC_CHANGELOG = [
+    { version: '1.3.0', date: '2026-08-05', items: [
+      'Mô hình viết đoạn Tình Hình Nhân Vật thành văn xuôi, giống Tóm Tắt Thế Giới bên Công Cụ Thế Giới. Chạy thành pha thứ ba sau trích xuất và hoạt động ngầm, tốn thêm một lượt gọi API ngắn mỗi lượt.',
+      'Prompt viết tóm tắt bị siết chặt: chỉ được diễn đạt lại bản kê đưa vào, cấm thêm nhân vật, địa danh hay sự việc, cấm phán đoán chuyện sắp tới. Tóm tắt bịa thì tệ hơn không có tóm tắt — người chơi tin vào nó rồi tưởng truyện đã xảy ra như thế.',
+      'Cách ly lỗi hoàn toàn: API hỏng, trả rỗng, hay tắt tính năng thì khung tự quay về bản danh sách dựng bằng mã, không bao giờ để trống và không làm sập lượt trích xuất. Đoạn tóm tắt KHÔNG đi vào prompt nào cả — lọt vào khối chèn là engine đọc lại lời chính nó viết ra.',
+      'Thêm nút viết lại tóm tắt ở góc khung, dùng khi đoạn văn đã cũ so với truyện hoặc lượt trước API hỏng. Công tắc tắt/bật nằm ở tab Nâng Cao, mục Chèn Vào Prompt.'
+    ] },
     { version: '1.2.1', date: '2026-08-05', items: [
       'Tóm tắt tình hình nhân vật đọc được hơn: mỗi chủ đề một dòng có nhãn riêng, và trong một chủ đề thì mỗi người một dòng con. Trước đây tất cả nối thành một cục, mà mục đích duy nhất của khối này là liếc một cái biết engine đang thấy gì.',
       'Sửa lỗi: mục "Cần để ý" bắt nhầm người khoẻ. Trước đây nó so nguyên cả chuỗi trạng thái, nên "khoẻ mạnh, đang khoác áo choàng" hay "bình thường" đều bị coi là bất thường — liệt kê chung với người đang hấp hối thì mục đó mất sạch ý nghĩa. Giờ khớp theo tiền tố.',
@@ -6153,6 +6165,9 @@ window.WORLD_ENGINE_UI = (function() {
         'Nhắc AI chính viết đúng giới tính, cách xưng hô, chủng tộc và độ tuổi của nhân vật đang có mặt. Rất ngắn về token mà chặn được loại lỗi người đọc nhận ra ngay.')
       + toggle('we-npc-inject-rumor', 'Tin đồn', settings.injectRumor !== false,
         'Kết quả hoạt động ngầm nào đủ lộ liễu thì lan thành tin đồn và được đưa vào prompt, cho AI có chất liệu để nhân vật bàn tán.')
+      + toggle('we-npc-digest', 'Mô hình viết tóm tắt', settings.digestEnabled !== false,
+        'Cho mô hình viết đoạn <b>Tình Hình Nhân Vật</b> ở trang chủ thành văn xuôi, giống Tóm Tắt Thế Giới bên Công Cụ Thế Giới. Tốn thêm <b>một lượt gọi API mỗi lượt</b> (ngắn, khoảng trăm chữ). '
+        + 'Tắt thì engine tự dựng bản danh sách có nhãn bằng mã, không tốn gì. Đoạn tóm tắt <b>không đi vào prompt nào cả</b> — nó chỉ để bạn đọc, nên hỏng cũng không ảnh hưởng hồ sơ.')
       + toggle('we-npc-inject-threads', 'Tuyến hệ quả', settings.injectThreads !== false,
         'Gửi cho AI chính danh sách hệ quả <b>có thể tới</b> từ việc người chơi đã làm, dưới dạng chất liệu chứ không phải mệnh lệnh. Không bắt buộc nổ ra lượt nào.')
       + num('we-npc-thread-limit', 'Trần Tuyến Hệ Quả', settings.threadLimit,
@@ -6448,6 +6463,27 @@ window.WORLD_ENGINE_UI = (function() {
         npcData().archiveNpc(state, npc.id, npc.status?.condition, window.WORLD_ENGINE_CORE?.getChatLayer?.());
       });
     });
+    // Viết lại tóm tắt bằng tay: dùng khi đoạn văn đã cũ so với truyện, hoặc lượt trước API hỏng.
+    document.querySelectorAll('.we-npc-digest-redo').forEach(button => {
+      button.onclick = async () => {
+        if (window.NPC_ENGINE?.isRunning?.()) { showToast('Engine đang bận, thử lại sau', true); return; }
+        button.disabled = true;
+        try {
+          const state = npcData().loadState();
+          const settings = window.NPC_ENGINE_SETTINGS?.getSettings?.(true) || {};
+          const text = await window.NPC_ENGINE?.runDigest?.(state, { ...settings, digestEnabled: true });
+          if (!text) { showToast('Viết tóm tắt thất bại, giữ bản cũ', true); return; }
+          npcData().saveState(state);
+          showToast('Đã viết lại tóm tắt');
+          refresh();
+        } catch (error) {
+          showToast('Viết tóm tắt thất bại: ' + (error?.message || error), true);
+        } finally {
+          button.disabled = false;
+        }
+      };
+    });
+
     // Tuyến hệ quả: người chơi có quyền phủ quyết. Engine gieo, người chơi quyết cái nào sống.
     const mutateThread = (id, change) => {
       const state = npcData().loadState();
@@ -6649,6 +6685,7 @@ window.WORLD_ENGINE_UI = (function() {
     bindToggle('we-npc-inject-knowledge', 'injectKnowledge');
     bindToggle('we-npc-inject-rumor', 'injectRumor');
     bindToggle('we-npc-inject-trace', 'injectTrace');
+    bindToggle('we-npc-digest', 'digestEnabled');
     bindToggle('we-npc-inject-threads', 'injectThreads');
     bindNumber('we-npc-thread-limit', 'threadLimit');
     bindNumber('we-npc-thread-cold', 'threadColdAfterMinutes');
@@ -6690,6 +6727,7 @@ window.WORLD_ENGINE_UI = (function() {
       'we-npc-inject': 'injectIntoPrompt', 'we-npc-time-anchor': 'timeAnchorEnabled',
       'we-npc-inject-location': 'injectLocation', 'we-npc-inject-knowledge': 'injectKnowledge',
       'we-npc-inject-rumor': 'injectRumor', 'we-npc-inject-trace': 'injectTrace',
+      'we-npc-digest': 'digestEnabled',
       'we-npc-inject-threads': 'injectThreads', 'we-npc-thread-limit': 'threadLimit',
       'we-npc-thread-cold': 'threadColdAfterMinutes',
       'we-npc-inject-identity': 'injectIdentity', 'we-npc-fog': 'locationFogMode',

@@ -502,6 +502,35 @@ window.NPC_ENGINE = (function() {
     return lines.join('\n');
   }
 
+  // Thứ giao diện thật sự hiển thị. Có bản mô hình viết thì dùng, không thì quay về bản dựng bằng
+  // mã — lượt nào API hỏng, engine đang tắt, hay người dùng tắt tính năng thì khối này vẫn có chữ.
+  // prose=true báo cho giao diện biết đây là văn xuôi, đừng cắt theo nhãn.
+  function getDigest(state) {
+    const written = clean(state?.digest?.text);
+    if (written) return { text: written, prose: true, round: state.digest.round || 0 };
+    return { text: buildDigest(state), prose: false, round: state?.round || 0 };
+  }
+
+  // Gọi mô hình viết lại bản kê thành văn xuôi. Cách ly lỗi hoàn toàn: đây là thứ trang trí, hỏng
+  // thì thôi, tuyệt đối không được làm sập lượt trích xuất vốn mới là phần có giá trị.
+  async function runDigest(state, st) {
+    if (st.digestEnabled === false) return '';
+    const facts = buildDigest(state);
+    if (!facts) return '';
+    try {
+      // Tóm tắt chỉ dài trăm chữ, đừng để nó ăn ngân sách token của hai pha kia.
+      const parsed = await callModel(window.NPC_ENGINE_PROMPT.buildDigestPrompt(facts),
+        { ...st, maxTokens: Math.min(1200, parseInt(st.maxTokens) || 1200) });
+      const text = clean(parsed?.digest);
+      if (!text) return '';
+      state.digest = { text, layer: asLayer(state.chatLayer), round: state.round || 0 };
+      return text;
+    } catch (error) {
+      console.warn('[Công Cụ Nhân Vật] Viết tóm tắt thất bại, dùng bản dựng bằng mã', error);
+      return '';
+    }
+  }
+
   // ================= Khối chèn vào prompt =================
   // Hàm thuần: (state, settings, ngữ cảnh) → chuỗi. Không đụng DOM, không gọi API — kiểm thử được trọn vẹn.
 
@@ -1003,6 +1032,12 @@ window.NPC_ENGINE = (function() {
         }), st);
         offscreen = applyOffscreen(state, activities, layer);
       }
+
+      // --- Pha 3: viết tóm tắt. Chạy CUỐI CÙNG và cách ly hoàn toàn: nó chỉ để người chơi đọc,
+      // không đi vào prompt nào cả, nên hỏng thì mất mỗi đoạn văn chứ không mất hồ sơ.
+      runningLabel = 'Viết tóm tắt';
+      setStatus('Đang viết tóm tắt tình hình nhân vật...');
+      await runDigest(state, st);
 
       data().saveState(state);
       applyInjection(state);
@@ -1630,6 +1665,8 @@ window.NPC_ENGINE = (function() {
     // Xuất ra để giao diện và kiểm thử dùng lại mà không phải gọi API.
     buildInjectionText,
     buildDigest,
+    getDigest,
+    runDigest,
     mergeExtraction,
     applyOffscreen,
     addPublicFact,
