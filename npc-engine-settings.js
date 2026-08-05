@@ -1,7 +1,7 @@
 // npc-engine-settings.js — Cấu hình độc lập của Công Cụ Nhân Vật (chỉ dùng chung phần triển khai API/lập lịch, không chia sẻ giá trị cấu hình)
 window.NPC_ENGINE_SETTINGS = (function() {
   const STORAGE_KEY = 'npc_engine_settings';
-  const VERSION = '1.1.1';
+  const VERSION = '1.2.0';
 
   const FOG_MODES = ['off', 'fog', 'strict'];
   const KNOWLEDGE_SCOPES = ['in-scene', 'all', 'none'];
@@ -42,6 +42,11 @@ window.NPC_ENGINE_SETTINGS = (function() {
     injectKnowledge: true,
     injectRumor: true,
     injectTrace: true,
+    injectThreads: true,
+    // Trần tuyến hệ quả để thấp có chủ đích: dư âm phải có, nhưng đẻ nhiều thì thành danh sách việc vặt.
+    threadLimit: 4,
+    // Ba ngày truyện không ai nhắc tới thì tuyến coi như nguội.
+    threadColdAfterMinutes: 4320,
     injectIdentity: true,
     locationFogMode: 'fog',
     knowledgeInjectScope: 'in-scene',
@@ -62,6 +67,9 @@ window.NPC_ENGINE_SETTINGS = (function() {
     worldbookEnabled: false,
     worldbookTrigger: false,
     nameBlacklist: '',
+    // Lọc theo NHÃN KHỐI: gõ tên khối, engine tự dựng regex. Mỗi preset đặt tên khối một kiểu nên
+    // bắt người dùng tự viết regex là bắt sai người — nhãn thì ai nhìn màn hình cũng đọc ra được.
+    filterTags: '',
     filterRegex: '',
     tonePrompt: '',
 
@@ -113,6 +121,8 @@ window.NPC_ENGINE_SETTINGS = (function() {
       locationFogMode: pick(merged.locationFogMode, FOG_MODES, DEFAULTS.locationFogMode),
       knowledgeInjectScope: pick(merged.knowledgeInjectScope, KNOWLEDGE_SCOPES, DEFAULTS.knowledgeInjectScope),
       knowledgeInjectLimit: clampInt(merged.knowledgeInjectLimit, 0, 50, DEFAULTS.knowledgeInjectLimit),
+      threadLimit: clampInt(merged.threadLimit, 0, 12, DEFAULTS.threadLimit),
+      threadColdAfterMinutes: clampInt(merged.threadColdAfterMinutes, 0, 129600, DEFAULTS.threadColdAfterMinutes),
       injectMaxChars: clampInt(merged.injectMaxChars, 0, 100000, DEFAULTS.injectMaxChars),
 
       worldScale: pick(merged.worldScale, WORLD_SCALES, DEFAULTS.worldScale),

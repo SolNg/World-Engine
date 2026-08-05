@@ -239,6 +239,104 @@ const baseSettings = () => config.getSettings(true);
     /evolveFilterRegex: raw/.test(source));
 }
 
+// ===== Tuyến hệ quả: đẻ ít, có trần, tự nguội =====
+{
+  const state = data.defaultState();
+  data.upsertNpc(state, { name: 'Lý Mộ Bạch', tier: 'core', significance: 85 });
+
+  // Mỗi lượt nhiều nhất một tuyến: mô hình gửi ba cái thì chỉ nhận cái đầu.
+  const result = engine.applyOffscreen(state, {
+    activities: [],
+    threads: [
+      { text: 'Nhà họ Lý sẽ đòi lại thanh kiếm', cause: 'người chơi lấy kiếm khỏi từ đường', npcName: 'Lý Mộ Bạch' },
+      { text: 'Quan phủ sẽ dò hỏi', cause: 'người chơi gây náo loạn' },
+      { text: 'Tuyến thứ ba', cause: 'x' }
+    ]
+  }, 50);
+  check('mỗi lượt chỉ nhận một tuyến', state.threads.length === 1 && result.threads.length === 1);
+  check('tuyến ghi đủ nội dung và nguyên nhân',
+    state.threads[0].text.includes('đòi lại thanh kiếm') && state.threads[0].cause.includes('lấy kiếm'));
+  check('tuyến mới bắt đầu ở giai đoạn chớm', state.threads[0].stage === 'chớm');
+
+  // Không nêu được hành động nào của người chơi thì đó là tình tiết bịa, không phải hệ quả.
+  engine.applyOffscreen(state, { activities: [], threads: [{ text: 'Sẽ có rắc rối' }] }, 51);
+  check('thiếu nguyên nhân thì bỏ qua', state.threads.length === 1);
+
+  // Trùng nội dung thì coi như nhắc lại tuyến cũ, không đẻ thêm.
+  engine.applyOffscreen(state, {
+    activities: [], threads: [{ text: 'Nhà họ Lý sẽ đòi lại thanh kiếm', cause: 'nhắc lại' }]
+  }, 52);
+  check('trùng nội dung thì không đẻ thêm', state.threads.length === 1);
+
+  // Trần cứng: gieo quá nhiều thì bỏ bớt, không phình vô hạn.
+  for (let i = 0; i < 10; i++) {
+    data.addThread(state, { text: 'tuyến ' + i, cause: 'x', bornMinutes: 0, touchedMinutes: 0 }, 4);
+  }
+  check('trần tuyến được tôn trọng', state.threads.length === 4);
+
+  // Nguội theo thời gian truyện, không theo số lượt.
+  const cooled = data.ageThreads(state, 10000, 4320);
+  check('tuyến lâu không ai nhắc thì tự nguội', cooled.length > 0);
+  check('tuyến nguội bị đánh dấu', state.threads.some(item => item.stage === 'đã nguội'));
+
+  check('tuyến vừa được nhắc thì chưa nguội',
+    data.ageThreads(state, 10000, 4320).length === 0);
+
+  // Vào khối chèn dưới dạng chất liệu, và tuyến nguội thì rời khỏi đó.
+  state.threads[0].stage = 'đang tới';
+  const injected = engine.buildInjectionText(state, baseSettings(), {});
+  check('tuyến còn sống vào được khối chèn', injected.includes('Tuyến hệ quả đang treo'));
+  check('khối chèn nói rõ đây là chất liệu, không bắt buộc', injected.includes('Không bắt buộc phải nổ ra'));
+  for (const thread of state.threads) thread.stage = 'đã nguội';
+  check('tuyến nguội hết thì bỏ luôn khối',
+    !engine.buildInjectionText(state, baseSettings(), {}).includes('Tuyến hệ quả đang treo'));
+}
+
+// ===== Rào chắn nhất quán: trạng thái tụt lại thì phải nói ra =====
+// Chèn chạy lúc bắt đầu sinh, trích xuất chạy sau khi sinh xong. Lượt trước trích xuất hỏng thì
+// trạng thái kẹt ở tầng cũ mà chính văn đã đi tiếp — sai lệch loại này không báo lỗi, chỉ âm thầm
+// làm AI viết sai vị trí và tri thức.
+{
+  const state = data.defaultState();
+  data.upsertNpc(state, { name: 'Lý Mộ Bạch', tier: 'core', significance: 85 });
+
+  const fresh = engine.buildInjectionText(state, baseSettings(), { staleLayer: 0 });
+  check('trạng thái mới thì không cảnh báo gì', !fresh.includes('chưa bắt kịp'));
+
+  const behind = engine.buildInjectionText(state, baseSettings(), { staleLayer: 5 });
+  check('tụt lại thì cảnh báo trong neo thời gian', behind.includes('chốt từ 5 lượt trước'));
+  check('cảnh báo dặn tin chính văn hơn tin ràng buộc', behind.includes('tin chính văn'));
+
+  // Lệch một tầng là chuyện bình thường của nhịp chèn-rồi-mới-trích, đừng kêu inh ỏi.
+  check('lệch một tầng thì im lặng',
+    !engine.buildInjectionText(state, baseSettings(), { staleLayer: 1 }).includes('chưa bắt kịp'));
+}
+
+// ===== Tóm tắt tình hình nhân vật =====
+{
+  const empty = engine.buildDigest(data.defaultState());
+  check('chưa có ai thì nói rõ là chưa có', empty.includes('Chưa có nhân vật nào'));
+
+  const state = data.defaultState();
+  state.scene.location = ['Đại Chu', 'Giang Nam', 'Dương Châu'];
+  const here = data.upsertNpc(state, { name: 'Lý Mộ Bạch', tier: 'core', significance: 90 });
+  here.location.path = ['Đại Chu', 'Giang Nam', 'Dương Châu'];
+  state.scene.presentIds = [here.id];
+
+  const away = data.upsertNpc(state, { name: 'Tô Tiểu Muội', tier: 'core', significance: 70 });
+  away.location.movingTo = ['Đại Chu', 'Quan Trung', 'Trường An'];
+  away.pendingIntent = { action: 'Tìm thầy thuốc' };
+  away.status.condition = 'trọng thương';
+
+  const digest = engine.buildDigest(state);
+  check('tóm tắt nêu ai đang có mặt', digest.includes('Lý Mộ Bạch') && digest.includes('Dương Châu'));
+  check('tóm tắt nêu ai đang đi đường', digest.includes('Trường An'));
+  check('tóm tắt nêu việc riêng đang làm', digest.includes('Tìm thầy thuốc'));
+  check('tóm tắt nêu người cần để ý', digest.includes('trọng thương'));
+  // Khoẻ mạnh là mặc định, đừng liệt kê ra cho chật.
+  check('người khoẻ không bị đưa vào mục cần để ý', !digest.includes('Lý Mộ Bạch —'));
+}
+
 // ===== Sổ mâu thuẫn: ghi lại chỗ chính văn chọi với hồ sơ =====
 // Engine VẪN nghe theo chính văn — sổ không chặn gì cả. Nó chỉ khiến việc trôi hiện ra.
 {
@@ -945,7 +1043,50 @@ const baseSettings = () => config.getSettings(true);
     check('khối preset bị cắt trước khi gửi đi', !seen[0]?.includes('Sự kiện song song'));
     check('nội dung bên trong khối cũng bị cắt', !seen[0]?.includes('đồ ăn vặt'));
 
-    config.patchSettings({ filterRegex: '', worldbookEnabled: true, offscreenEnabled: true });
+    // ===== Cắt theo NHÃN: mỗi preset đặt tên khối một kiểu, bắt người dùng viết regex là bắt sai người =====
+    seen.length = 0;
+    config.patchSettings({
+      filterRegex: '',
+      filterTags: 'Sự kiện song song\nHành động tiềm năng của NPC ở hiệp sau\nBáo cáo vận hành thế giới'
+    });
+
+    await engine.ingestWorldEvolution({
+      layer: 33, worldDigest: '',
+      dialogue: [
+        'Nhân vật: Rias mỉm cười trong phòng câu lạc bộ.',
+        '',
+        '【Báo cáo vận hành thế giới】 Thời gian: Năm 2010 Tháng 4 Ngày 15/17:00',
+        '',
+        '[Hành động tiềm năng của NPC ở hiệp sau]',
+        '- Rias Gremory có thể sẽ giao nhiệm vụ đầu tiên cho Asato.',
+        '',
+        '[Sự kiện song song]',
+        '- Toujou Koneko | Mua thêm đồ ăn vặt | ETA 17:30',
+        '',
+        'Nhân vật: Akeno bước vào, tay cầm tách trà còn bốc khói.'
+      ].join('\n')
+    });
+
+    const p = seen[0] || '';
+    check('cắt được khối bọc bằng ngoặc vuông', !p.includes('Sự kiện song song'));
+    check('cắt được khối bọc bằng ngoặc góc Trung', !p.includes('Báo cáo vận hành thế giới'));
+    check('cắt được khối nhãn dài', !p.includes('Hành động tiềm năng'));
+    check('cắt luôn phần thân bên dưới nhãn', !p.includes('ETA 17:30') && !p.includes('giao nhiệm vụ đầu tiên'));
+    // Điểm mấu chốt: chính văn NẰM GIỮA các khối vẫn phải còn nguyên, cả trước lẫn sau.
+    check('chính văn phía trên khối còn nguyên', p.includes('Rias mỉm cười'));
+    check('chính văn phía dưới khối còn nguyên', p.includes('tách trà còn bốc khói'));
+
+    // Nhãn có ký tự đặc biệt vẫn phải cắt được, không được ném lỗi regex.
+    seen.length = 0;
+    config.patchSettings({ filterTags: 'Trạng thái (chi tiết)' });
+    await engine.ingestWorldEvolution({
+      layer: 34, worldDigest: '',
+      dialogue: 'Nhân vật: Trời đổ mưa.\n\n[Trạng thái (chi tiết)]\n- máu: 80%'
+    });
+    check('nhãn có ngoặc đơn vẫn cắt được', !seen[0]?.includes('máu: 80%'));
+    check('nhãn đặc biệt không làm hỏng phần còn lại', seen[0]?.includes('Trời đổ mưa'));
+
+    config.patchSettings({ filterRegex: '', filterTags: '', worldbookEnabled: true, offscreenEnabled: true });
   }
 
   // Chốt ở tầng dưới cùng: nơi gọi có sai kiểu thì phải ném lỗi rõ ràng ngay,

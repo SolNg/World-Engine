@@ -91,7 +91,8 @@ check('thẻ nhân vật hiện điểm tin cậy', ui.includes('we-npc-trust'))
 check('thẻ nhân vật báo phần bị cắt', ui.includes('we-npc-more') && ui.includes('mở Sửa để xem hết'));
 // ===== Sổ mâu thuẫn có mặt đầy đủ trong giao diện =====
 check('có mục điều hướng sổ mâu thuẫn', ui.includes("conflicts: { title: 'Sổ Mâu Thuẫn'"));
-check('sổ mâu thuẫn nằm trong danh sách điều hướng', /\['core', 'peripheral', 'archive', 'rumors', 'conflicts'\]/.test(ui));
+check('sổ mâu thuẫn nằm trong danh sách điều hướng',
+  /\['core', 'peripheral', 'archive', 'rumors', 'threads', 'conflicts'\]/.test(ui));
 check('có nhánh dựng nội dung sổ mâu thuẫn', ui.includes("view === 'conflicts'"));
 check('có nút xoá sổ và trình xử lý', ui.includes('we-npc-clear-conflicts') && ui.includes('clearConflicts('));
 check('sổ mâu thuẫn nói rõ engine vẫn nghe theo chính văn', ui.includes('vẫn nghe theo chính văn'));
@@ -103,6 +104,24 @@ check('nút tải file cảnh báo có chứa nguyên văn', ui.includes('có ch
 
 // Dấu vết: bật tắt được như mọi khối chèn khác.
 check('có công tắc dấu vết', ui.includes('we-npc-inject-trace') && ui.includes("'injectTrace'"));
+
+// ===== Tuyến hệ quả =====
+check('có mục điều hướng tuyến hệ quả', ui.includes("threads: { title: 'Tuyến Hệ Quả'"));
+check('có nhánh dựng nội dung tuyến hệ quả', ui.includes("view === 'threads'"));
+check('có nút cho nguội và bỏ hẳn',
+  ui.includes('we-npc-thread-cool') && ui.includes('we-npc-thread-drop'));
+check('có công tắc và trần tuyến hệ quả',
+  ui.includes("'injectThreads'") && ui.includes("'threadLimit'") && ui.includes("'threadColdAfterMinutes'"));
+// Mô tả phải nói rõ vì sao trần để thấp, nếu không người dùng sẽ nâng lên rồi ngập việc vặt.
+check('mô tả trần giải thích lý do để thấp', ui.includes('danh sách việc vặt'));
+
+// ===== Tóm tắt tình hình nhân vật lấp khoảng trống trang chủ =====
+check('trang chủ gọi tóm tắt', ui.includes('buildDigest'));
+check('có khung tóm tắt', ui.includes('we-npc-digest-box') && ui.includes('Tình Hình Nhân Vật'));
+
+// ===== Cắt khối theo nhãn =====
+check('có ô cắt khối theo nhãn', ui.includes('we-npc-filter-tags') && ui.includes("'filterTags'"));
+check('mô tả dặn đừng cắt đoạn tự sự POV khác', ui.includes('POV khác'));
 
 // Tách vị trí thật khỏi chỗ người chơi tưởng là điểm mấu chốt của tính năng sương mù.
 check('thẻ nhân vật hiển thị chỗ người chơi tưởng', ui.includes('Người chơi tưởng'));
@@ -395,7 +414,7 @@ for (const cls of ['we-hint', 'we-btn-sm', 'we-switch-row']) {
     'we-npc-nav-row', 'we-npc-nav-list',
     // Nút của trình soạn: kiểu dáng lấy từ .we-btn, lớp riêng chỉ để gắn sự kiện.
     'we-npc-edit', 'we-npc-add', 'we-npc-save', 'we-npc-delete', 'we-npc-cancel-edit', 'we-npc-peek',
-    'we-npc-clear-conflicts'
+    'we-npc-clear-conflicts', 'we-npc-thread-cool', 'we-npc-thread-drop'
   ]);
   const used = new Set();
   for (const attribute of ui.match(/class="[^"]*"/g) || []) {

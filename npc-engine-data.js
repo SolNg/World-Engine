@@ -89,6 +89,69 @@ window.NPC_ENGINE_DATA = (function() {
     };
   }
 
+  // ========== Tuyến hệ quả ==========
+  // Việc người chơi làm phải có dư âm, nhưng dư âm mà đẻ vô tội vạ thì thành danh sách việc vặt và
+  // ngốn hết ngân sách khối chèn. Nên: trần rất thấp, mỗi tuyến phải nêu rõ NGUYÊN NHÂN là hành
+  // động nào của người chơi, và tuyến nào nguội quá lâu thì tự tắt.
+  const THREAD_STAGES = ['chớm', 'đang tới', 'đã nổ', 'đã nguội'];
+
+  function newThread(seed) {
+    const source = seed || {};
+    return {
+      id: clean(source.id),
+      text: clean(source.text),
+      cause: clean(source.cause),
+      stage: THREAD_STAGES.includes(source.stage) ? source.stage : 'chớm',
+      npcName: clean(source.npcName),
+      bornLayer: asLayer(source.bornLayer),
+      bornMinutes: asLayer(source.bornMinutes),
+      touchedMinutes: asLayer(source.touchedMinutes)
+    };
+  }
+
+  function nextThreadId(state) {
+    const used = asArray(state.threads).map(item => parseInt(String(item.id).replace(/\D/g, '')) || 0);
+    return 'thread:' + (Math.max(0, ...used) + 1);
+  }
+
+  function addThread(state, seed, limit) {
+    const text = clean(seed?.text);
+    if (!state || !text) return null;
+    if (!Array.isArray(state.threads)) state.threads = [];
+    // Trùng nội dung thì coi như tuyến cũ được nhắc lại, không đẻ thêm.
+    const existing = state.threads.find(item => normalized(item.text) === normalized(text));
+    if (existing) {
+      existing.touchedMinutes = asLayer(seed.touchedMinutes) ?? existing.touchedMinutes;
+      return existing;
+    }
+    const cap = Math.max(1, parseInt(limit) || 4);
+    const thread = newThread({ ...seed, id: nextThreadId(state) });
+    state.threads.push(thread);
+    // Vượt trần thì bỏ tuyến ĐÃ NGUỘI trước, hết mới bỏ tuyến cũ nhất.
+    while (state.threads.length > cap) {
+      const coldIndex = state.threads.findIndex(item => item.stage === 'đã nguội');
+      state.threads.splice(coldIndex >= 0 ? coldIndex : 0, 1);
+    }
+    return thread;
+  }
+
+  // Tuyến không được nhắc tới suốt một khoảng dài thì nguội rồi tự rụng. Không có bước này thì
+  // danh sách chỉ có phình ra, và tuyến từ hai mươi lượt trước vẫn chiếm chỗ như tuyến mới.
+  function ageThreads(state, nowMinutes, coldAfterMinutes) {
+    const now = Math.max(0, parseInt(nowMinutes) || 0);
+    const limit = Math.max(0, parseInt(coldAfterMinutes) || 0);
+    if (!limit) return [];
+    const cooled = [];
+    for (const thread of asArray(state.threads)) {
+      if (thread.stage === 'đã nổ' || thread.stage === 'đã nguội') continue;
+      const last = asLayer(thread.touchedMinutes) ?? asLayer(thread.bornMinutes) ?? 0;
+      if (now - last < limit) continue;
+      thread.stage = 'đã nguội';
+      cooled.push(thread);
+    }
+    return cooled;
+  }
+
   function defaultState() {
     return {
       version: VERSION,
@@ -100,6 +163,9 @@ window.NPC_ENGINE_DATA = (function() {
       rumorQueue: [],
       // Dấu vết: tầng giữa tin đồn và bí mật — không ai kể, nhưng người tới sau nhìn thấy được.
       traceQueue: [],
+      // Tuyến hệ quả: chuyện CÓ THỂ tới do việc người chơi đã làm. Cố ý để trần rất thấp — đẻ nhiều
+      // thì thành danh sách việc vặt, mà mỗi tuyến còn chiếm chỗ trong khối chèn.
+      threads: [],
       // Cảnh hiện tại: dùng để biết ai đang có mặt, từ đó chỉ phát ràng buộc tri thức cho đúng người.
       scene: { layer: null, location: [], presentIds: [] },
       // Những chuyện "thiên hạ có thể biết". Ràng buộc tri thức là phép trừ giữa danh sách này và
@@ -129,6 +195,7 @@ window.NPC_ENGINE_DATA = (function() {
       ? target.travelCache : {};
     target.rumorQueue = asArray(target.rumorQueue);
     target.traceQueue = asArray(target.traceQueue);
+    target.threads = asArray(target.threads).map(newThread);
     target.publicFacts = asArray(target.publicFacts);
     target.conflicts = asArray(target.conflicts).slice(-CONFLICT_LIMIT);
     target.lastStoryDay = asLayer(target.lastStoryDay);
@@ -683,6 +750,10 @@ window.NPC_ENGINE_DATA = (function() {
     mergeIdentity,
     describeIdentity,
     IDENTITY_FIELDS,
+    newThread,
+    addThread,
+    ageThreads,
+    THREAD_STAGES,
     recordConflict,
     clearConflicts,
     CONFLICT_KINDS,

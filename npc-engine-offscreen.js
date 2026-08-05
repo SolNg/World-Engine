@@ -68,6 +68,15 @@ Giữa tin đồn và bí mật còn một tầng nữa: hành động không ai
 - Chỉ điền khi hành động thật sự để lại dấu ở nơi người khác có thể tới. Việc làm trong đầu, đi lại nơi hoang vắng, hay chuyện xảy ra ở tận nơi khác thì để trống.
 - Một hành động có thể vừa thành tin đồn vừa để lại dấu vết; hai trường độc lập với nhau.
 
+【TUYẾN HỆ QUẢ — ĐẺ ÍT THÔI】
+Việc người chơi đã làm phải có dư âm. "threads" là những chuyện CÓ THỂ tới vì điều họ đã làm — chưa xảy ra, mới chỉ là mầm.
+
+- Mỗi tuyến bắt buộc nêu "cause": việc CỦA NGƯỜI CHƠI đã dẫn tới nó. Không chỉ ra được hành động cụ thể nào của người chơi thì đừng viết tuyến đó — đó là tình tiết bạn tự nghĩ ra, không phải hệ quả.
+- Mỗi lượt NHIỀU NHẤT MỘT tuyến mới, và chỉ khi lượt đó người chơi thật sự làm chuyện có sức nặng: đắc tội ai đó, hứa hẹn điều gì, để lộ thân phận, cứu hoặc hại một người, lấy đi thứ có chủ.
+- Lượt bình thường — trò chuyện, đi lại, ăn uống, luyện tập — thì trả "threads": [] . Đây mới là kết quả THƯỜNG GẶP NHẤT.
+- Viết một câu, cụ thể, nêu rõ ai sẽ mang chuyện đó tới. "Nhà họ Lý sẽ đòi lại thanh kiếm" chứ không phải "sẽ có rắc rối".
+- Thà bỏ sót còn hơn đẻ bừa: danh sách phình ra thì mỗi tuyến đều thành việc vặt, và ngân sách prompt bị chiếm chỗ.
+
 【TRI THỨC THU ĐƯỢC】
 Nhân vật làm gì đó có thể khiến họ biết thêm điều mới. Ghi vào "knowledgeGained" kèm nguồn: "chứng kiến", "nghe đồn", hoặc "suy đoán".
 
@@ -97,6 +106,9 @@ Chỉ xuất một khối JSON hợp lệ, không kèm giải thích, không kè
       },
       "knowledgeGained": [{ "fact": "điều mới biết", "source": "chứng kiến / nghe đồn / suy đoán", "certainty": "chắc chắn / ngờ vực / mơ hồ" }]
     }
+  ],
+  "threads": [
+    { "text": "chuyện có thể tới", "cause": "việc người chơi đã làm dẫn tới nó", "npcName": "ai sẽ mang chuyện đó tới, để trống nếu chưa rõ" }
   ]
 }
 
@@ -219,6 +231,18 @@ Không nhân vật nào có hành động đáng kể thì trả "activities": [
 
     if (clean(opts.sceneSummary)) {
       sections.push(`【CẢNH HIỆN TẠI CỦA NGƯỜI CHƠI】\n${clean(opts.sceneSummary)}`);
+    }
+
+    // Chính văn của lượt này: mô hình cần đọc người chơi VỪA LÀM GÌ mới nêu được hệ quả có căn cứ.
+    if (clean(opts.dialogue)) {
+      sections.push(`【HỘI THOẠI LƯỢT NÀY】\n${clean(opts.dialogue)}`);
+    }
+
+    // Tuyến đã treo sẵn: nêu ra để mô hình khỏi đẻ trùng, và để nó biết cái nào có thể chín tới.
+    const threads = asArray(opts.threads).map(item => clean(item?.text)).filter(Boolean);
+    if (threads.length) {
+      sections.push(`【TUYẾN HỆ QUẢ ĐÃ TREO SẴN】\n${threads.map(text => '· ' + text).join('\n')}`
+        + '\n\nĐừng nêu lại những tuyến này trong "threads". Chỉ thêm tuyến MỚI, và chỉ khi thật sự có.');
     }
 
     const routes = describeTravelCache(opts.travelCache, opts.travelCacheLimit);

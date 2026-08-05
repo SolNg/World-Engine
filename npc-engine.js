@@ -298,7 +298,7 @@ window.NPC_ENGINE = (function() {
   // ================= Gộp kết quả hoạt động ngầm =================
 
   function applyOffscreen(state, parsed, layer) {
-    const result = { acted: [], rumors: [], moves: [], traces: [] };
+    const result = { acted: [], rumors: [], moves: [], traces: [], threads: [] };
     if (!parsed || typeof parsed !== 'object') return result;
 
     const currentLayer = asLayer(layer);
@@ -412,7 +412,78 @@ window.NPC_ENGINE = (function() {
       }
     }
 
+    // Tuyến hệ quả: chuyện CÓ THỂ tới do việc người chơi đã làm. Trần rất thấp và mô hình được dặn
+    // mỗi lượt nhiều nhất một tuyến — dư âm phải có, nhưng đẻ nhiều thì thành danh sách việc vặt.
+    const now = data().clockMinutes(state);
+    const threadLimit = Math.max(0, parseInt(settings().threadLimit) || 0);
+    if (threadLimit) {
+      for (const item of asArray(parsed.threads).slice(0, 1)) {
+        // Không chỉ ra được hành động nào của người chơi thì đó là tình tiết bịa, không phải hệ quả.
+        if (!clean(item?.text) || !clean(item?.cause)) continue;
+        const thread = data().addThread(state, {
+          text: item.text, cause: item.cause, npcName: item.npcName,
+          bornLayer: currentLayer, bornMinutes: now, touchedMinutes: now
+        }, threadLimit);
+        if (thread) result.threads.push(thread.text);
+      }
+      data().ageThreads(state, now, Math.max(0, parseInt(settings().threadColdAfterMinutes) || 0));
+    }
+
     return result;
+  }
+
+  // ================= Tóm tắt tình hình nhân vật =================
+  // Tương ứng với "tóm tắt thế giới" của Công Cụ Thế Giới, nhưng dựng bằng MÃ chứ không gọi API:
+  // mọi thứ cần nói đều đã nằm trong trạng thái, gọi thêm một lượt API chỉ để diễn đạt lại là
+  // tốn tiền và thêm một chỗ nữa để mô hình bịa.
+  function buildDigest(state) {
+    const npcs = asArray(state?.npcs).filter(npc => !npc.status?.archived);
+    if (!npcs.length) return 'Chưa có nhân vật nào được ghi nhận. Engine sẽ tự dựng hồ sơ khi truyện nhắc tới ai đó đáng nhớ.';
+
+    const core = npcs.filter(npc => npc.tier === 'core');
+    const scene = asArray(state.scene?.location).map(clean).filter(Boolean);
+    const present = new Set(asArray(state.scene?.presentIds));
+    const parts = [];
+
+    if (scene.length) {
+      const here = core.filter(npc => present.has(npc.id)).map(npc => npc.name).filter(Boolean);
+      parts.push(here.length
+        ? `Tại ${describePath(scene)}: ${here.join(', ')}.`
+        : `Cảnh đang ở ${describePath(scene)}, chưa có nhân vật trọng yếu nào có mặt.`);
+    }
+
+    const moving = core.filter(npc => npc.location?.movingTo);
+    if (moving.length) {
+      parts.push(`Đang trên đường: ${moving.map(npc =>
+        `${npc.name} → ${describePath(npc.location.movingTo)}`).join('; ')}.`);
+    }
+
+    const busy = core.filter(npc => npc.pendingIntent?.action && !present.has(npc.id));
+    if (busy.length) {
+      parts.push(`Đang bận việc riêng: ${busy.slice(0, 4).map(npc =>
+        `${npc.name} (${clean(npc.pendingIntent.action)})`).join('; ')}.`);
+    }
+
+    const hurt = core.filter(npc => {
+      const condition = normalized(npc.status?.condition);
+      return condition && condition !== 'khoẻ' && condition !== 'khỏe' && condition !== 'khoẻ mạnh' && condition !== 'khỏe mạnh';
+    });
+    if (hurt.length) {
+      parts.push(`Cần để ý: ${hurt.slice(0, 4).map(npc => `${npc.name} — ${clean(npc.status.condition)}`).join('; ')}.`);
+    }
+
+    const live = asArray(state.threads).filter(item => item.stage !== 'đã nguội');
+    if (live.length) parts.push(`${live.length} tuyến hệ quả đang treo từ việc người chơi đã làm.`);
+
+    const fresh = asArray(state.rumorQueue).filter(item => !item.acknowledged).length;
+    const traces = asArray(state.traceQueue).filter(item => !item.acknowledged).length;
+    if (fresh || traces) {
+      parts.push(`Sau màn còn ${[fresh ? `${fresh} tin đồn` : '', traces ? `${traces} dấu vết` : '']
+        .filter(Boolean).join(' và ')} chưa vào truyện.`);
+    }
+
+    if (!parts.length) parts.push(`${core.length} nhân vật trọng yếu, chưa ai có diễn biến đáng kể.`);
+    return parts.join(' ');
   }
 
   // ================= Khối chèn vào prompt =================
@@ -432,6 +503,13 @@ window.NPC_ENGINE = (function() {
 
     let text = `【Neo thời gian】${bits.join(' · ')}`;
     if (recent.length) text += `\nDiễn biến nền gần đây: ${recent.join('; ')}`;
+    // Trạng thái tụt lại phía sau chính văn thì phải NÓI RA. Im lặng là để AI tin rằng ràng buộc
+    // bên dưới mô tả hiện tại, trong khi thật ra nó mô tả vài lượt trước.
+    const stale = Math.max(0, parseInt(context?.staleLayer) || 0);
+    if (stale >= 2) {
+      text += `\n⚠ Trạng thái bên dưới chốt từ ${stale} lượt trước, chưa bắt kịp đoạn vừa rồi.`
+        + ' Chỗ nào chính văn đã nói khác thì tin chính văn, đừng tin phần này.';
+    }
     return text;
   }
 
@@ -549,6 +627,21 @@ window.NPC_ENGINE = (function() {
       + 'Dùng khi hợp cảnh để người chơi TỰ nhận ra, đừng giải thích hộ nguyên nhân.';
   }
 
+  // Tuyến hệ quả gửi cho AI chính dưới dạng CHẤT LIỆU, không phải mệnh lệnh. Ép nó phải nổ ra thì
+  // truyện thành bảng danh sách việc cần làm; để mặc thì việc người chơi làm chẳng bao giờ có dư âm.
+  function buildThreadBlock(state, st) {
+    const live = asArray(state.threads).filter(item => item && item.stage !== 'đã nguội' && clean(item.text));
+    if (!live.length) return '';
+
+    const lines = live.map(item => {
+      const who = clean(item.npcName) ? ` — ${clean(item.npcName)}` : '';
+      return `· ${clean(item.text)}${who} <vì ${clean(item.cause) || 'việc người chơi đã làm'}>`;
+    });
+    return `【Tuyến hệ quả đang treo】\n${lines.join('\n')}\n`
+      + 'Đây là hệ quả CÓ THỂ tới từ việc người chơi đã làm, chưa xảy ra. Dùng khi hợp cảnh để truyện có dư âm. '
+      + 'Không bắt buộc phải nổ ra lượt này, và tuyệt đối đừng liệt kê chúng ra cho người chơi đọc.';
+  }
+
   function buildRumorBlock(state, st) {
     const limit = Math.max(1, parseInt(st.knowledgeInjectLimit) || 5);
     const sorted = asArray(state.rumorQueue).sort((a, b) => (b.layer ?? 0) - (a.layer ?? 0)).slice(0, limit);
@@ -586,6 +679,7 @@ window.NPC_ENGINE = (function() {
       // Dấu vết đứng trên tin đồn: nó gắn với đúng chỗ người chơi đang đứng, nên dùng được ngay,
       // còn tin đồn thì chỉ là chất liệu chung chung.
       st.injectTrace !== false ? buildTraceBlock(state, st) : '',
+      st.injectThreads !== false ? buildThreadBlock(state, st) : '',
       st.injectRumor !== false ? buildRumorBlock(state, st) : ''
     ].filter(Boolean);
 
@@ -656,10 +750,28 @@ window.NPC_ENGINE = (function() {
       return '';
     }
     const state = stateOverride || data().loadState();
-    const content = buildInjectionText(state, st, { storyDay: core()?.getLastStoryDay?.() });
+    const content = buildInjectionText(state, st, {
+      storyDay: core()?.getLastStoryDay?.(),
+      staleLayer: staleLayer(state)
+    });
     const ctx = window.SillyTavern?.getContext?.();
     if (typeof ctx?.setExtensionPrompt === 'function') ctx.setExtensionPrompt(INJECTION_NAME, content, 1, 1);
     return content;
+  }
+
+  // Rào chắn nhất quán: trạng thái được chèn có bắt kịp cuộc trò chuyện chưa?
+  //
+  // Chèn diễn ra ở lúc bắt đầu sinh, còn trích xuất thì chạy sau khi sinh xong. Nếu lượt trước
+  // trích xuất thất bại, bị huỷ, hoặc engine đang tắt lúc đó, thì trạng thái kẹt lại ở một tầng cũ
+  // trong khi chính văn đã đi tiếp — và ràng buộc gửi cho AI mô tả một thế giới đã lỗi thời mà
+  // không nói gì. Sai lệch loại này không báo lỗi, chỉ âm thầm làm AI viết sai vị trí và tri thức.
+  //
+  // Chặn hẳn thì tệ hơn: người chơi mất luôn ràng buộc. Nên báo cho AI biết trạng thái cũ bao nhiêu.
+  function staleLayer(state) {
+    const now = asLayer(core()?.getChatLayer?.());
+    const known = asLayer(state?.chatLayer);
+    if (now === null || known === null) return 0;
+    return Math.max(0, now - known);
   }
 
   // ================= Nối ngược sang Công Cụ Thế Giới =================
@@ -833,7 +945,7 @@ window.NPC_ENGINE = (function() {
         { fallbackMinutes: st.fallbackMinutesPerTurn });
 
       // --- Pha 2: hoạt động ngầm cho NPC trọng yếu đang vắng mặt ---
-      let offscreen = { acted: [], rumors: [], moves: [], traces: [] };
+      let offscreen = { acted: [], rumors: [], moves: [], traces: [], threads: [] };
       const absent = state.npcs.filter(npc =>
         npc.tier === 'core' &&
         !npc.status.archived &&
@@ -868,7 +980,10 @@ window.NPC_ENGINE = (function() {
           dueIntentIds: intents.due,
           aggressiveness: st.offscreenAggressiveness,
           maxActivities: st.offscreenMaxPerRound,
-          storyDay: time.day
+          storyDay: time.day,
+          // Gửi kèm tuyến đang treo để mô hình biết cái gì đã có rồi, khỏi đẻ trùng.
+          threads: asArray(state.threads).filter(item => item.stage !== 'đã nguội'),
+          dialogue
         }), st);
         offscreen = applyOffscreen(state, activities, layer);
       }
@@ -897,6 +1012,7 @@ window.NPC_ENGINE = (function() {
         offscreen.acted.length ? `${offscreen.acted.length} hoạt động ngầm` : '',
         offscreen.rumors.length ? `${offscreen.rumors.length} tin đồn` : '',
         offscreen.traces.length ? `${offscreen.traces.length} dấu vết` : '',
+        offscreen.threads.length ? `${offscreen.threads.length} tuyến hệ quả` : '',
         acknowledged.length ? `${acknowledged.length} chuyện vào truyện` : '',
         merged.deaths.length ? `${merged.deaths.length} qua đời` : '',
         // Báo ra ngoài luôn: sổ mâu thuẫn chỉ có tác dụng nếu người chơi biết là có gì mới trong đó.
@@ -947,8 +1063,33 @@ window.NPC_ENGINE = (function() {
   //
   // Quan trọng với ai dùng preset sinh khối trạng thái kẹp trong chính văn: khối đó do AI chính bịa
   // ra, không phải chuyện đã xảy ra. Không cắt bỏ thì engine đọc nó như sự thật rồi dựng hồ sơ theo.
+  // Cắt khối theo NHÃN. Người dùng chỉ gõ "Sự kiện song song", engine lo phần regex.
+  // Mỗi preset đặt tên khối một kiểu và bọc bằng dấu khác nhau, nên nhận cả bốn kiểu bọc phổ biến.
+  // Khối kết thúc ở dòng trắng, ở nhãn khối kế tiếp, hoặc hết văn bản — đó là cách mọi preset
+  // mình từng thấy đều xuống dòng.
+  const TAG_OPENERS = [['\\[', '\\]'], ['【', '】'], ['〔', '〕'], ['<', '>']];
+
+  function stripTags(text, rawTags) {
+    const tags = String(rawTags || '').split('\n').map(line => line.trim()).filter(Boolean);
+    if (!tags.length) return text;
+    let out = text;
+    for (const tag of tags) {
+      // Nhãn do người dùng gõ nên phải thoát hết ký tự đặc biệt: "Sự kiện (phụ)" là nhãn hợp lệ.
+      const escaped = tag.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      for (const [open, close] of TAG_OPENERS) {
+        const stop = `(?=\\n\\s*\\n|\\n\\s*[\\[【〔<]|$)`;
+        try { out = out.replace(new RegExp(`${open}\\s*${escaped}\\s*${close}[\\s\\S]*?${stop}`, 'g'), ''); }
+        catch (error) { /* nhãn lạ tới mức không dựng nổi regex thì bỏ qua, đừng chặn cả lượt */ }
+      }
+    }
+    return out;
+  }
+
   function filterDialogue(text, st) {
     const raw = clean(st?.filterRegex);
+    const tags = clean(st?.filterTags);
+    // Cắt theo nhãn trước, rồi mới tới regex tay: nhãn xử lý phần lớn, regex lo mấy ca lắt léo.
+    if (tags) text = stripTags(clean(text), tags);
     if (!raw) return clean(text);
     // filterDialogue của core đọc khoá evolveFilterRegex — đó là khoá của Công Cụ Thế Giới, nên
     // phải nhét regex của engine này vào đúng tên khoá đó thay vì truyền cả bộ cài đặt.
@@ -1472,6 +1613,7 @@ window.NPC_ENGINE = (function() {
     buildWorldEngineContext,
     // Xuất ra để giao diện và kiểm thử dùng lại mà không phải gọi API.
     buildInjectionText,
+    buildDigest,
     mergeExtraction,
     applyOffscreen,
     addPublicFact,

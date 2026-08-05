@@ -106,7 +106,19 @@ Engine không kể lể nhật ký vào prompt, chỉ đưa ràng buộc cứng,
 - **Vị trí** — ai đang ở đâu, ai chưa thể có mặt. Ba nấc che vị trí thật: AI biết hết, chỉ biết chỗ người chơi *tưởng* (kèm gợi ý mơ hồ), hoặc mù hoàn toàn
 - **Tri thức** — với nhân vật trong cảnh, liệt kê những gì họ **chưa** biết
 - **Dấu vết tại chỗ** — thứ nhìn thấy được mà chuyện hậu trường để lại ở **đúng nơi người chơi đang đứng**
+- **Tuyến hệ quả** — hệ quả *có thể* tới từ việc người chơi đã làm, dưới dạng chất liệu chứ không phải mệnh lệnh
 - **Tin đồn** — tách rõ chuyện chưa ai kể (chất liệu) với chuyện đã thành sự thật trong truyện
+
+#### Tuyến hệ quả — đẻ ít có chủ đích
+
+Việc người chơi làm phải có dư âm, nhưng dư âm đẻ vô tội vạ thì thành danh sách việc vặt. Nên engine bị siết chặt:
+
+- Mỗi lượt **nhiều nhất một** tuyến mới, và chỉ khi người chơi làm chuyện có sức nặng — đắc tội ai đó, hứa hẹn điều gì, để lộ thân phận, lấy đi thứ có chủ
+- Mỗi tuyến **bắt buộc nêu hành động nào của người chơi** đã dẫn tới nó. Không nêu được thì bị bỏ, vì đó là tình tiết bịa chứ không phải hệ quả
+- Trần mặc định **4 tuyến**; tuyến ba ngày truyện không ai nhắc thì tự nguội và rời khỏi khối chèn
+- Lượt trò chuyện bình thường thì không sinh gì cả, và đó là kết quả đúng
+
+Bạn có quyền phủ quyết: mỗi tuyến có nút *Cho nguội* và *Bỏ hẳn*.
 
 #### Ba tầng độ lộ
 
@@ -126,6 +138,7 @@ Engine không tự hiểu địa lý. Vị trí lưu dưới dạng đường d�
 
 #### Công cụ đi kèm
 
+- **Cắt khối theo nhãn** — nếu preset của bạn sinh **khối trạng thái kẹp trong chính văn** ("Sự kiện song song", "Báo cáo vận hành thế giới", bảng ETA), gõ tên khối vào đây là engine tự cắt. Những khối đó là bảng do AI chính *bịa ra*, không phải chuyện đã xảy ra — engine đọc vào là dựng hồ sơ theo lời bịa, mà engine cũng chèn trạng thái vào prompt, nên cái nó đọc lại chính là cái nó vừa viết ra. **Đừng cắt** đoạn tự sự kể chuyện xảy ra ở nơi khác (POV khác): đó là chính văn thật
 - **Sổ mâu thuẫn** — ghi lại chỗ chính văn nói khác với hồ sơ đang lưu: nhân dạng đổi, nhân vật nhảy vị trí không qua đường đi, người chết trở lại, đồng hồ bị kéo lùi. Engine **vẫn nghe theo chính văn**, sổ không chặn gì cả — nó chỉ khiến việc trôi hiện ra để bạn còn thấy mà sửa tay
 - **Sửa hồ sơ tay** — chữa mọi trục khi mô hình chấm sai, thêm nhân vật bị bỏ sót, xoá người bị nhận nhầm
 - **Điền lại hàng loạt** — quét từ đầu cuộc trò chuyện để dựng hồ sơ cho phần quá khứ, dùng khi mới cài giữa chừng
@@ -194,7 +207,7 @@ Hai engine đánh số **độc lập với nhau**. Xem nhật ký cập nhật 
 ## 🙏 Ghi công
 
 - Dự án gốc **世界引擎 / World Engine** — tác giả **Disnight**, giấy phép MIT.
-- Một số ý tưởng của Công Cụ Nhân Vật — đồng hồ thế giới, bốn kiểu hẹn, theo dõi nhân dạng, tách sự việc hậu trường khỏi sự việc trong truyện đã biết, chọn nhân vật theo mức liên quan, sổ mâu thuẫn, ba tầng độ lộ, phối hợp hai chiều giữa hai engine, gói chẩn đoán không kèm nguyên văn — tham khảo từ [**world-backstage**](https://github.com/h675786161-prog/world-backstage) (v0.8–v1.3.0) của **h675786161-prog**, giấy phép MIT. Phần cài đặt được viết lại theo khuôn dữ liệu của kho này, không chép mã.
+- Một số ý tưởng của Công Cụ Nhân Vật — đồng hồ thế giới, bốn kiểu hẹn, theo dõi nhân dạng, tách sự việc hậu trường khỏi sự việc trong truyện đã biết, chọn nhân vật theo mức liên quan, sổ mâu thuẫn, ba tầng độ lộ, phối hợp hai chiều giữa hai engine, gói chẩn đoán không kèm nguyên văn, cắt khối theo nhãn, rào chắn nhất quán, tuyến hệ quả tự sinh — tham khảo từ [**world-backstage**](https://github.com/h675786161-prog/world-backstage) (v0.8–v1.5.6) của **h675786161-prog**, giấy phép MIT. Phần cài đặt được viết lại theo khuôn dữ liệu của kho này, không chép mã.
 
 ---
 

@@ -3826,6 +3826,60 @@
   border: 1px solid var(--we-hairline);
   border-radius: 4px;
 }
+/* ---- Tóm tắt tình hình nhân vật (khoảng trống dưới danh sách điều hướng) ---- */
+.we-npc-digest-box {
+  margin-top: 14px;
+  padding: 11px 13px;
+  background: var(--we-card);
+  border: 1px solid var(--we-hairline);
+  border-radius: 10px;
+}
+.we-npc-digest-title {
+  margin-bottom: 5px;
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  color: var(--we-text3);
+}
+.we-npc-digest {
+  font-size: 12px;
+  line-height: 1.65;
+  color: var(--we-text2);
+}
+
+/* ---- Tuyến hệ quả ---- */
+.we-npc-thread {
+  padding: 9px 11px;
+  margin-bottom: 6px;
+  font-size: 12px;
+  line-height: 1.55;
+  background: var(--we-card);
+  border: 1px solid var(--we-hairline);
+  border-left: 2px solid var(--we-accent);
+  border-radius: 8px;
+}
+.we-npc-thread.is-cold { border-left-color: var(--we-hairline); opacity: 0.55; }
+.we-npc-thread-head { color: var(--we-text3); font-size: 11px; }
+.we-npc-thread-stage {
+  display: inline-block;
+  margin-right: 6px;
+  padding: 0 5px;
+  border: 1px solid var(--we-hairline);
+  border-radius: 4px;
+}
+.we-npc-thread-text { margin-top: 4px; color: var(--we-text); }
+.we-npc-thread-cause {
+  margin-top: 3px;
+  font-size: 11px;
+  font-style: italic;
+  color: var(--we-text3);
+}
+.we-npc-thread-actions {
+  display: flex;
+  gap: 6px;
+  justify-content: flex-end;
+  margin-top: 7px;
+}
+
 /* ---- Sổ mâu thuẫn ---- */
 .we-npc-conflict {
   padding: 8px 11px;

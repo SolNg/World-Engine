@@ -5466,7 +5466,8 @@ window.WORLD_ENGINE_UI = (function() {
     peripheral: { title: 'Ngoại Vi', poem: 'Chưa rõ chí hướng, hãy còn đợi thời' },
     archive: { title: 'Kho Lưu Trữ', poem: 'Người đi rồi, tiếng vẫn còn' },
     rumors: { title: 'Tin Đồn', poem: 'Lời truyền đi xa hơn chân người' },
-    conflicts: { title: 'Sổ Mâu Thuẫn', poem: 'Chép lại chỗ lệch, để mắt người còn thấy' }
+    conflicts: { title: 'Sổ Mâu Thuẫn', poem: 'Chép lại chỗ lệch, để mắt người còn thấy' },
+    threads: { title: 'Tuyến Hệ Quả', poem: 'Gieo xuống rồi, chờ ngày trổ' }
   };
 
   const npcData = () => window.NPC_ENGINE_DATA;
@@ -5519,9 +5520,10 @@ window.WORLD_ENGINE_UI = (function() {
     </div>`;
 
     const conflicts = Array.isArray(state.conflicts) ? state.conflicts : [];
+    const threads = (Array.isArray(state.threads) ? state.threads : []).filter(item => item.stage !== 'đã nguội');
     const counts = { core: core.length, peripheral: peripheral.length, archive: archive.length,
-                     rumors: rumors.length, conflicts: conflicts.length };
-    const rows = ['core', 'peripheral', 'archive', 'rumors', 'conflicts'].map((view, index, all) => {
+                     rumors: rumors.length, threads: threads.length, conflicts: conflicts.length };
+    const rows = ['core', 'peripheral', 'archive', 'rumors', 'threads', 'conflicts'].map((view, index, all) => {
       const meta = NPC_VIEW_META[view];
       const selected = _npcSelectedNavView === view ? ' we-nav-row--selected' : '';
       const topLine = index === 0 ? '<div class="we-nav-line we-nav-line-hidden"></div>' : '<div class="we-nav-line"></div>';
@@ -5540,6 +5542,12 @@ window.WORLD_ENGINE_UI = (function() {
           `<div class="we-npc-stat"><div class="we-npc-stat-value">${h(stat.value)}</div><div class="we-npc-stat-label">${h(stat.label)}</div></div>`
         ).join('') + '</div>'
       + '<div class="we-nav-list we-npc-nav-list">' + rows + '</div>'
+      // Khoảng trống dưới danh sách điều hướng vốn bỏ không. Tóm tắt tình hình nhân vật đặt vào đây,
+      // đối xứng với tóm tắt thế giới bên Công Cụ Thế Giới — liếc một cái là biết engine đang thấy gì.
+      + '<div class="we-npc-digest-box">'
+      + '<div class="we-npc-digest-title">Tình Hình Nhân Vật</div>'
+      + '<div class="we-npc-digest">' + h(window.NPC_ENGINE?.buildDigest?.(state) || 'Chưa có gì để tóm tắt.') + '</div>'
+      + '</div>'
       + '</div>';
   }
 
@@ -5846,6 +5854,22 @@ window.WORLD_ENGINE_UI = (function() {
               h(item.text || '')}${item.at?.length ? ` <em>(${h(npcPath(item.at))})</em>` : ''}</div>`).join('')
         : '';
       body = rumorBody + traceBody;
+    } else if (view === 'threads') {
+      const threads = (Array.isArray(state.threads) ? state.threads : []).slice().reverse();
+      body = threads.length
+        ? threads.map(item => `<div class="we-npc-thread${item.stage === 'đã nguội' ? ' is-cold' : ''}">
+            <div class="we-npc-thread-head"><span class="we-npc-thread-stage">${h(item.stage || 'chớm')}</span>${
+              item.npcName ? h(item.npcName) : 'chưa rõ ai mang tới'}</div>
+            <div class="we-npc-thread-text">${h(item.text || '')}</div>
+            <div class="we-npc-thread-cause">vì ${h(item.cause || 'việc người chơi đã làm')}</div>
+            <div class="we-npc-thread-actions">
+              <button class="we-btn we-btn-sm we-npc-thread-cool" data-thread-id="${h(item.id)}">${
+                item.stage === 'đã nguội' ? 'Khơi lại' : 'Cho nguội'}</button>
+              <button class="we-btn we-btn-sm we-npc-thread-drop" data-thread-id="${h(item.id)}">Bỏ hẳn</button>
+            </div>
+          </div>`).join('')
+        : `<div class="we-empty">Chưa có tuyến hệ quả nào</div>`
+          + `<div class="we-hint" style="margin-top:8px;">Engine chỉ gieo tuyến khi người chơi làm chuyện có sức nặng — đắc tội ai đó, hứa hẹn điều gì, để lộ thân phận, lấy đi thứ có chủ. Lượt trò chuyện bình thường thì không có gì, và đó là đúng. Trần mặc định là 4 tuyến; tuyến nào ba ngày truyện không ai nhắc tới sẽ tự nguội.</div>`;
     } else if (view === 'conflicts') {
       const conflicts = (Array.isArray(state.conflicts) ? state.conflicts : []).slice().reverse();
       body = conflicts.length
@@ -5947,6 +5971,13 @@ window.WORLD_ENGINE_UI = (function() {
   // Nhật ký cập nhật của Công Cụ Nhân Vật, tách riêng khỏi CHANGELOG của Công Cụ Thế Giới
   // vì hai engine đánh số phiên bản độc lập.
   const NPC_CHANGELOG = [
+    { version: '1.2.0', date: '2026-08-05', items: [
+      'Cắt khối theo NHÃN: chỉ cần gõ tên khối — "Sự kiện song song", "Báo cáo vận hành thế giới" — engine tự dựng regex, nhận cả bốn kiểu bọc [Nhãn] 【Nhãn】 〔Nhãn〕 <Nhãn>. Mỗi preset đặt tên khối một kiểu nên bắt người dùng tự viết regex là bắt sai người. Ô regex tay vẫn còn cho những ca lắt léo.',
+      'Tuyến hệ quả: việc người chơi làm nay để lại dư âm. Engine mỗi lượt gieo NHIỀU NHẤT MỘT tuyến, và chỉ khi người chơi làm chuyện có sức nặng — đắc tội ai đó, hứa hẹn điều gì, để lộ thân phận, lấy đi thứ có chủ. Mỗi tuyến bắt buộc nêu hành động nào của người chơi đã dẫn tới nó; không nêu được thì bị bỏ, vì đó là tình tiết bịa chứ không phải hệ quả. Trần mặc định 4 tuyến, tuyến ba ngày truyện không ai nhắc thì tự nguội. Gửi cho AI dưới dạng chất liệu, không phải mệnh lệnh.',
+      'Tóm tắt tình hình nhân vật ở trang chủ, lấp khoảng trống dưới danh sách điều hướng: ai đang có mặt, ai đang đi đường, ai đang bận việc riêng, ai cần để ý, còn bao nhiêu chuyện sau màn. Dựng bằng mã chứ không gọi API — mọi thứ cần nói đều đã nằm trong trạng thái, gọi thêm một lượt chỉ để diễn đạt lại là tốn tiền và thêm một chỗ nữa để mô hình bịa.',
+      'Rào chắn nhất quán: trạng thái tụt lại phía sau chính văn từ hai lượt trở lên thì khối chèn tự nói ra, và dặn AI tin chính văn hơn tin ràng buộc. Trước đây nó im lặng, khiến AI tin rằng ràng buộc mô tả hiện tại trong khi thật ra mô tả vài lượt trước — sai lệch loại này không báo lỗi, chỉ âm thầm làm AI viết sai vị trí và tri thức.',
+      'Ý tưởng cắt theo nhãn, rào chắn nhất quán và tuyến hệ quả tự sinh tham khảo từ world-backstage v1.3.1, v1.3.2 và v1.5.6 (h675786161-prog, giấy phép MIT).'
+    ] },
     { version: '1.1.1', date: '2026-08-05', items: [
       'Sửa lỗi: ô Regex Lọc Nội Dung trước giờ KHÔNG có tác dụng. Nó có mặt trong giao diện, lưu được, hiện cả trong gói chẩn đoán — nhưng không chỗ nào trong engine đọc tới, nên ai gõ vào đó đều tưởng đã lọc mà thật ra chưa. Giờ nó chạy trên cả ba đường vào: nối từ Công Cụ Thế Giới, lịch chạy riêng, và điền lại hàng loạt.',
       'Ai dùng preset sinh khối trạng thái kẹp trong chính văn — kiểu "Báo cáo vận hành thế giới", "Sự kiện song song", bảng ETA — thì nên đặt regex cắt khối đó. Khối ấy do AI chính bịa ra chứ không phải chuyện đã xảy ra; engine đọc vào là dựng hồ sơ theo lời bịa, mà engine cũng chèn trạng thái nhân vật vào prompt, nên cái nó đọc lại chính là cái nó vừa viết ra.'
@@ -6101,6 +6132,12 @@ window.WORLD_ENGINE_UI = (function() {
         'Nhắc AI chính viết đúng giới tính, cách xưng hô, chủng tộc và độ tuổi của nhân vật đang có mặt. Rất ngắn về token mà chặn được loại lỗi người đọc nhận ra ngay.')
       + toggle('we-npc-inject-rumor', 'Tin đồn', settings.injectRumor !== false,
         'Kết quả hoạt động ngầm nào đủ lộ liễu thì lan thành tin đồn và được đưa vào prompt, cho AI có chất liệu để nhân vật bàn tán.')
+      + toggle('we-npc-inject-threads', 'Tuyến hệ quả', settings.injectThreads !== false,
+        'Gửi cho AI chính danh sách hệ quả <b>có thể tới</b> từ việc người chơi đã làm, dưới dạng chất liệu chứ không phải mệnh lệnh. Không bắt buộc nổ ra lượt nào.')
+      + num('we-npc-thread-limit', 'Trần Tuyến Hệ Quả', settings.threadLimit,
+        'Nhiều nhất bao nhiêu tuyến được treo cùng lúc. Để thấp có chủ đích — engine mỗi lượt chỉ gieo nhiều nhất một tuyến, và chỉ khi người chơi làm chuyện có sức nặng. Đẻ nhiều thì thành danh sách việc vặt, mà mỗi tuyến còn chiếm chỗ trong khối chèn. Để 0 là tắt hẳn.')
+      + num('we-npc-thread-cold', 'Tuyến Nguội Sau (phút truyện)', settings.threadColdAfterMinutes,
+        'Không ai nhắc tới trong ngần này phút truyện thì tuyến tự nguội và rời khỏi khối chèn. Mặc định 4320 = ba ngày truyện. Đếm theo <b>thời gian truyện</b>, không theo số lượt, nên truyện nhảy ba ngày là nguội ngay trong một lượt.')
       + toggle('we-npc-inject-trace', 'Dấu vết tại chỗ', settings.injectTrace !== false,
         'Tầng giữa tin đồn và bí mật: chuyện xảy ra lúc người chơi vắng mặt <b>để lại dấu nhìn thấy được</b> — cửa bị cạy, bùn còn ướt, thiếu mất một thanh kiếm. Chỉ những dấu ở <b>đúng chỗ người chơi đang đứng</b> mới được chèn, nên nó không tiết lộ chuyện đang giấu ở nơi khác. Đây là thứ khiến "không có gì xảy ra" thôi nghĩa là thế giới đứng im.')
       + select('we-npc-fog', 'Che vị trí thật', settings.locationFogMode, [
@@ -6130,12 +6167,18 @@ window.WORLD_ENGINE_UI = (function() {
         'Chèn vào đầu prompt trích xuất. Dùng để chỉnh khẩu vị lọc nhân vật cho hợp thể loại truyện của bạn.')
       + area('we-npc-name-blacklist', 'Danh Sách Tên Không Lưu', settings.nameBlacklist, 'Mỗi dòng một tên',
         'Tên trong danh sách này sẽ không bao giờ được đưa vào hồ sơ. Dùng cho tên người chơi, hoặc những nhân vật bạn không muốn engine theo dõi.')
+      + area('we-npc-filter-tags', 'Cắt Khối Theo Nhãn', settings.filterTags, 'Mỗi dòng một nhãn khối',
+        'Gõ <b>tên khối</b>, engine tự lo phần regex. Nhận cả bốn kiểu bọc: <code>[Nhãn]</code> <code>【Nhãn】</code> <code>〔Nhãn〕</code> <code>&lt;Nhãn&gt;</code>. '
+        + 'Khối cắt tới dòng trắng hoặc nhãn kế tiếp.'
+        + '<br>Dùng khi preset của bạn sinh <b>khối trạng thái kẹp trong chính văn</b> — "Sự kiện song song", "Hành động tiềm năng của NPC ở hiệp sau", "Giao hẹn quan trọng". '
+        + 'Những khối đó là bảng do AI chính <i>bịa ra</i>, không phải chuyện đã xảy ra. Engine đọc vào là dựng hồ sơ theo lời bịa, mà engine cũng chèn trạng thái nhân vật vào prompt, '
+        + 'nên cái nó đọc lại chính là cái nó vừa viết ra — sai lệch tự khuếch đại qua từng lượt.'
+        + '<br><b>Đừng cắt</b> đoạn tự sự kể chuyện xảy ra ở nơi khác (POV khác): đó là chính văn thật, engine cần đọc. Cũng đừng cắt dòng ghi ngày giờ — nó là mốc thời gian tốt nhất engine có.')
       + area('we-npc-filter-regex', 'Regex Lọc Nội Dung', settings.filterRegex, 'Mỗi dòng một biểu thức',
         'Xoá phần khớp mẫu khỏi hội thoại <i>trước khi</i> gửi đi trích xuất. Dùng để bỏ thẻ định dạng, khối suy nghĩ của AI, hoặc chú thích ngoài truyện.'
         + '<br><b>Quan trọng nếu bạn dùng preset sinh khối trạng thái kẹp trong chính văn</b> — kiểu "Báo cáo vận hành thế giới", "Sự kiện song song", bảng ETA. '
-        + 'Khối đó do AI chính <i>bịa ra</i>, không phải chuyện đã xảy ra trong truyện. Không cắt bỏ thì engine đọc nó như sự thật rồi dựng hồ sơ theo, '
-        + 'và vì engine cũng chèn trạng thái nhân vật vào prompt, cái nó đọc lại chính là cái nó vừa viết ra. '
-        + 'Ví dụ: <code>/\\[Sự kiện song song\\][\\s\\S]*?(?=\\n\\n|$)/g</code>');
+        + 'Dùng cho những ca mà cắt theo nhãn không xử lý được — khối không có nhãn, hoặc nằm giữa dòng. '
+        + 'Phần lớn trường hợp thì ô <b>Cắt Khối Theo Nhãn</b> ở trên là đủ và dễ hơn nhiều.');
 
     const retryBody = num('we-npc-api-retries', 'Số Lần Thử Lại Khi API Lỗi', settings.apiAutoRetries,
         'Gọi lại khi API trả lỗi hoặc trả JSON hỏng. Để 1–2 giúp vượt qua lỗi mạng thoáng qua; để 0 thì thất bại là dừng ngay, dễ nhận ra vấn đề hơn khi đang chỉnh cấu hình.')
@@ -6384,6 +6427,31 @@ window.WORLD_ENGINE_UI = (function() {
         npcData().archiveNpc(state, npc.id, npc.status?.condition, window.WORLD_ENGINE_CORE?.getChatLayer?.());
       });
     });
+    // Tuyến hệ quả: người chơi có quyền phủ quyết. Engine gieo, người chơi quyết cái nào sống.
+    const mutateThread = (id, change) => {
+      const state = npcData().loadState();
+      const thread = (state.threads || []).find(item => item.id === id);
+      if (!thread) return;
+      change(thread, state);
+      npcData().saveState(state);
+      refresh();
+    };
+    document.querySelectorAll('.we-npc-thread-cool').forEach(button => {
+      button.onclick = () => mutateThread(button.dataset.threadId, thread => {
+        thread.stage = thread.stage === 'đã nguội' ? 'đang tới' : 'đã nguội';
+        showToast(thread.stage === 'đã nguội' ? 'Đã cho tuyến nguội' : 'Đã khơi lại tuyến');
+      });
+    });
+    document.querySelectorAll('.we-npc-thread-drop').forEach(button => {
+      button.onclick = () => {
+        const state = npcData().loadState();
+        state.threads = (state.threads || []).filter(item => item.id !== button.dataset.threadId);
+        npcData().saveState(state);
+        showToast('Đã bỏ tuyến');
+        refresh();
+      };
+    });
+
     document.querySelectorAll('.we-npc-clear-conflicts').forEach(button => {
       button.onclick = () => {
         if (!confirm('Xoá toàn bộ sổ mâu thuẫn? Hồ sơ nhân vật không đổi.')) return;
@@ -6504,6 +6572,7 @@ window.WORLD_ENGINE_UI = (function() {
     bindNumber('we-npc-api-timeout', 'apiTimeoutMs');
     bindText('we-npc-tone-prompt', 'tonePrompt');
     bindText('we-npc-name-blacklist', 'nameBlacklist');
+    bindText('we-npc-filter-tags', 'filterTags');
     bindText('we-npc-filter-regex', 'filterRegex');
     bindToggle('we-npc-engine-enabled', 'engineEnabled');
     bindToggle('we-npc-first-layer-opening', 'firstLayerIsAiOpening');
@@ -6559,6 +6628,9 @@ window.WORLD_ENGINE_UI = (function() {
     bindToggle('we-npc-inject-knowledge', 'injectKnowledge');
     bindToggle('we-npc-inject-rumor', 'injectRumor');
     bindToggle('we-npc-inject-trace', 'injectTrace');
+    bindToggle('we-npc-inject-threads', 'injectThreads');
+    bindNumber('we-npc-thread-limit', 'threadLimit');
+    bindNumber('we-npc-thread-cold', 'threadColdAfterMinutes');
     bindToggle('we-npc-inject-identity', 'injectIdentity');
     bindToggle('we-npc-travel-cache', 'travelCacheEnabled');
     bindToggle('we-npc-link', 'npcLinkEnabled');
@@ -6597,6 +6669,8 @@ window.WORLD_ENGINE_UI = (function() {
       'we-npc-inject': 'injectIntoPrompt', 'we-npc-time-anchor': 'timeAnchorEnabled',
       'we-npc-inject-location': 'injectLocation', 'we-npc-inject-knowledge': 'injectKnowledge',
       'we-npc-inject-rumor': 'injectRumor', 'we-npc-inject-trace': 'injectTrace',
+      'we-npc-inject-threads': 'injectThreads', 'we-npc-thread-limit': 'threadLimit',
+      'we-npc-thread-cold': 'threadColdAfterMinutes',
       'we-npc-inject-identity': 'injectIdentity', 'we-npc-fog': 'locationFogMode',
       'we-npc-knowledge-scope': 'knowledgeInjectScope', 'we-npc-knowledge-limit': 'knowledgeInjectLimit',
       'we-npc-inject-max-chars': 'injectMaxChars',
@@ -6604,7 +6678,7 @@ window.WORLD_ENGINE_UI = (function() {
       'we-npc-backfill-retries': 'backfillRetries',
       'we-npc-world-scale': 'worldScale', 'we-npc-travel-cache': 'travelCacheEnabled',
       'we-npc-tone-prompt': 'tonePrompt', 'we-npc-name-blacklist': 'nameBlacklist',
-      'we-npc-filter-regex': 'filterRegex',
+      'we-npc-filter-tags': 'filterTags', 'we-npc-filter-regex': 'filterRegex',
       'we-npc-sync-to-chat': 'syncToChat', 'we-npc-auto-backup': 'autoBackup',
       'we-worldbook-trigger': 'worldbookTrigger'
     };
