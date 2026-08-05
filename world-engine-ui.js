@@ -5947,6 +5947,10 @@ window.WORLD_ENGINE_UI = (function() {
   // Nhật ký cập nhật của Công Cụ Nhân Vật, tách riêng khỏi CHANGELOG của Công Cụ Thế Giới
   // vì hai engine đánh số phiên bản độc lập.
   const NPC_CHANGELOG = [
+    { version: '1.1.1', date: '2026-08-05', items: [
+      'Sửa lỗi: ô Regex Lọc Nội Dung trước giờ KHÔNG có tác dụng. Nó có mặt trong giao diện, lưu được, hiện cả trong gói chẩn đoán — nhưng không chỗ nào trong engine đọc tới, nên ai gõ vào đó đều tưởng đã lọc mà thật ra chưa. Giờ nó chạy trên cả ba đường vào: nối từ Công Cụ Thế Giới, lịch chạy riêng, và điền lại hàng loạt.',
+      'Ai dùng preset sinh khối trạng thái kẹp trong chính văn — kiểu "Báo cáo vận hành thế giới", "Sự kiện song song", bảng ETA — thì nên đặt regex cắt khối đó. Khối ấy do AI chính bịa ra chứ không phải chuyện đã xảy ra; engine đọc vào là dựng hồ sơ theo lời bịa, mà engine cũng chèn trạng thái nhân vật vào prompt, nên cái nó đọc lại chính là cái nó vừa viết ra.'
+    ] },
     { version: '1.1.0', date: '2026-08-05', items: [
       'Sổ mâu thuẫn: chỗ nào chính văn nói khác với hồ sơ đang lưu thì ghi lại — nhân dạng đổi, nhân vật nhảy vị trí không qua đường đi, người chết trở lại, đồng hồ bị kéo lùi. Engine vẫn nghe theo chính văn như cũ; sổ không chặn gì cả, nó chỉ khiến việc trôi hiện ra. Từ khi bỏ khoá nhân dạng thì con mắt người chơi là lớp bảo vệ duy nhất còn lại, mà mắt thì cần có cái để nhìn.',
       'Dấu vết tại chỗ: tầng thứ ba giữa tin đồn và bí mật. Chuyện xảy ra lúc người chơi vắng mặt có thể để lại dấu nhìn thấy được — then cửa bị cạy, bùn còn ướt, thiếu mất một thanh kiếm. Chỉ dấu ở ĐÚNG chỗ người chơi đang đứng mới được chèn, nên nó không tiết lộ chuyện đang giấu ở nơi khác. Trước đây chuyện hậu trường chỉ có hai kết cục — thành lời đồn hoặc biến mất hẳn — nên "không có gì xảy ra" lúc nào cũng nghĩa là thế giới đứng im.',
@@ -6127,7 +6131,11 @@ window.WORLD_ENGINE_UI = (function() {
       + area('we-npc-name-blacklist', 'Danh Sách Tên Không Lưu', settings.nameBlacklist, 'Mỗi dòng một tên',
         'Tên trong danh sách này sẽ không bao giờ được đưa vào hồ sơ. Dùng cho tên người chơi, hoặc những nhân vật bạn không muốn engine theo dõi.')
       + area('we-npc-filter-regex', 'Regex Lọc Nội Dung', settings.filterRegex, 'Mỗi dòng một biểu thức',
-        'Xoá phần khớp mẫu khỏi hội thoại <i>trước khi</i> gửi đi trích xuất. Dùng để bỏ thẻ định dạng, khối suy nghĩ của AI, hoặc chú thích ngoài truyện.');
+        'Xoá phần khớp mẫu khỏi hội thoại <i>trước khi</i> gửi đi trích xuất. Dùng để bỏ thẻ định dạng, khối suy nghĩ của AI, hoặc chú thích ngoài truyện.'
+        + '<br><b>Quan trọng nếu bạn dùng preset sinh khối trạng thái kẹp trong chính văn</b> — kiểu "Báo cáo vận hành thế giới", "Sự kiện song song", bảng ETA. '
+        + 'Khối đó do AI chính <i>bịa ra</i>, không phải chuyện đã xảy ra trong truyện. Không cắt bỏ thì engine đọc nó như sự thật rồi dựng hồ sơ theo, '
+        + 'và vì engine cũng chèn trạng thái nhân vật vào prompt, cái nó đọc lại chính là cái nó vừa viết ra. '
+        + 'Ví dụ: <code>/\\[Sự kiện song song\\][\\s\\S]*?(?=\\n\\n|$)/g</code>');
 
     const retryBody = num('we-npc-api-retries', 'Số Lần Thử Lại Khi API Lỗi', settings.apiAutoRetries,
         'Gọi lại khi API trả lỗi hoặc trả JSON hỏng. Để 1–2 giúp vượt qua lỗi mạng thoáng qua; để 0 thì thất bại là dừng ngay, dễ nhận ra vấn đề hơn khi đang chỉnh cấu hình.')

@@ -772,6 +772,10 @@ window.NPC_ENGINE = (function() {
 
     const layer = asLayer(payload?.layer) ?? core()?.getChatLayer?.() ?? null;
     const replace = payload?.replace === true;
+    // Lọc bằng regex RIÊNG của engine này, ngay tại cửa vào. Văn bản tới đây có thể đã qua bộ lọc
+    // của Công Cụ Thế Giới, nhưng đó là bộ lọc khác với cấu hình khác — hai engine đọc cùng một
+    // đoạn chat mà cần cắt bỏ hai thứ khác nhau là chuyện bình thường.
+    const dialogue = filterDialogue(payload?.dialogue, st);
 
     running = true;
     runningLabel = 'Trích xuất nhân vật';
@@ -798,14 +802,14 @@ window.NPC_ENGINE = (function() {
       // Mục kiểu từ khoá chỉ bật khi văn bản quét có nhắc tới, nên hai pha cần hai văn bản quét khác nhau
       // (xem buildWorldbookSection). Cách ly lỗi: lorebook hỏng thì hai pha vẫn phải chạy.
       const worldbook = await buildWorldbookSection(
-        clean(payload?.dialogue) + '\n' + clean(payload?.worldDigest), st
+        dialogue + '\n' + clean(payload?.worldDigest), st
       );
 
       // --- Pha 1: trích xuất nhân vật từ hội thoại ---
       const extraction = await callModel(window.NPC_ENGINE_PROMPT.buildPrompt({
         npcs: state.npcs,
         knownLimit: st.npcCoreLimit * 2,
-        dialogue: clean(payload?.dialogue),
+        dialogue,
         worldDigest: clean(payload?.worldDigest),
         worldbook,
         tonePrompt: st.tonePrompt,
@@ -839,7 +843,7 @@ window.NPC_ENGINE = (function() {
       // Engine chọn sẵn ai được đẩy lượt này, thay vì gửi hết rồi để mô hình quyết.
       const selection = selectOffscreenNpcs(state, absent, {
         limit: st.offscreenMaxPerRound,
-        dialogue: payload?.dialogue,
+        dialogue,
         worldDigest: payload?.worldDigest
       });
       lastSelection = selection.scored;
@@ -937,6 +941,21 @@ window.NPC_ENGINE = (function() {
   }
 
   // Ghép hội thoại gần nhất để trích xuất. Lấy từ cuối chat ngược lên, bỏ tin nhắn rỗng.
+  // Regex lọc nội dung của Công Cụ Nhân Vật. Trước đây ô cấu hình này có mặt trong giao diện, lưu
+  // được, hiện cả trong gói chẩn đoán — nhưng KHÔNG chỗ nào đọc tới, nên người dùng gõ vào đó rồi
+  // tưởng đã lọc mà thật ra chưa. Đây là chỗ nó thật sự có tác dụng.
+  //
+  // Quan trọng với ai dùng preset sinh khối trạng thái kẹp trong chính văn: khối đó do AI chính bịa
+  // ra, không phải chuyện đã xảy ra. Không cắt bỏ thì engine đọc nó như sự thật rồi dựng hồ sơ theo.
+  function filterDialogue(text, st) {
+    const raw = clean(st?.filterRegex);
+    if (!raw) return clean(text);
+    // filterDialogue của core đọc khoá evolveFilterRegex — đó là khoá của Công Cụ Thế Giới, nên
+    // phải nhét regex của engine này vào đúng tên khoá đó thay vì truyền cả bộ cài đặt.
+    try { return clean(core()?.filterDialogue?.(clean(text), { evolveFilterRegex: raw }) ?? text); }
+    catch (error) { console.warn('[Công Cụ Nhân Vật] Regex lọc lỗi, dùng nguyên văn', error); return clean(text); }
+  }
+
   function buildDialogueText(chat, rounds) {
     const wanted = Math.max(1, parseInt(rounds) || 1) * 2;
     return asArray(chat).slice(-wanted)
@@ -1090,7 +1109,9 @@ window.NPC_ENGINE = (function() {
         setBackfillStatus(i + 1, batches.length, `tầng ${from}-${to}`);
 
         const state = data().loadState();
-        const dialogue = formatRange(chat, from, to);
+        // Điền lại cũng phải qua bộ lọc: quét lại quá khứ mà không cắt khối trạng thái của preset
+        // thì hồ sơ dựng lên còn sai nhiều hơn lúc chạy trực tiếp, vì nó nuốt hàng chục lượt một lúc.
+        const dialogue = filterDialogue(formatRange(chat, from, to), st);
         if (!dialogue) continue;
 
         const parsed = await callModel(window.NPC_ENGINE_PROMPT.buildPrompt({

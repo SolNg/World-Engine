@@ -26,7 +26,18 @@ global.WORLD_ENGINE_STORE = {
 global.WORLD_ENGINE_CORE = {
   getChatId: () => 'chat-logic',
   getChatLayer: () => 20,
-  getLastStoryDay: () => 42
+  getLastStoryDay: () => 42,
+  // Sao đúng khế ước của core thật: đọc khoá evolveFilterRegex, mỗi dòng một biểu thức, xoá phần khớp.
+  filterDialogue: (text, settings) => {
+    const raw = (settings && settings.evolveFilterRegex) || '';
+    if (!raw.trim()) return text;
+    let out = text;
+    for (const line of raw.split('\n').map(s => s.trim()).filter(Boolean)) {
+      const m = line.match(/^\/(.*)\/([a-z]*)$/);
+      out = out.replace(m ? new RegExp(m[1], m[2]) : new RegExp(line), '');
+    }
+    return out;
+  }
 };
 global.WORLD_ENGINE_API = { callApi: async () => '{}', parseJSON: raw => JSON.parse(raw) };
 
@@ -207,6 +218,25 @@ const baseSettings = () => config.getSettings(true);
     activities: [{ name: 'Lý Mộ Bạch', action: 'Đứng dậy đi lại' }]
   }, 23);
   check('người trong kho không sinh hành động', result.acted.length === 0);
+}
+
+// ===== Regex lọc nội dung phải THẬT SỰ có tác dụng =====
+// Ô cấu hình này từng có mặt trong giao diện, lưu được, hiện cả trong gói chẩn đoán — mà không chỗ
+// nào đọc tới. Người dùng gõ vào rồi tưởng đã lọc. Đây là chốt chặn duy nhất giữ khối trạng thái do
+// preset bịa ra khỏi hồ sơ nhân vật, nên nó phải chạy trên mọi đường vào.
+{
+  const source = require('fs').readFileSync(require('path').join(__dirname, '..', 'npc-engine.js'), 'utf8');
+  check('có hàm lọc riêng của engine', /function filterDialogue\(text, st\)/.test(source));
+  check('lọc ngay tại cửa vào ingestWorldEvolution',
+    /const dialogue = filterDialogue\(payload\?\.dialogue, st\)/.test(source));
+  check('đường điền lại hàng loạt cũng lọc',
+    /filterDialogue\(formatRange\(chat, from, to\), st\)/.test(source));
+  check('không còn chỗ nào dùng thẳng payload.dialogue chưa lọc',
+    (source.match(/payload\?\.dialogue/g) || []).length === 1);
+  // core.filterDialogue đọc khoá evolveFilterRegex — khoá của Công Cụ Thế Giới. Truyền nhầm cả bộ
+  // cài đặt vào là bộ lọc im lặng không chạy, đúng lớp lỗi vừa sửa.
+  check('nhét regex vào đúng tên khoá mà core đọc',
+    /evolveFilterRegex: raw/.test(source));
 }
 
 // ===== Sổ mâu thuẫn: ghi lại chỗ chính văn chọi với hồ sơ =====
@@ -891,6 +921,31 @@ const baseSettings = () => config.getSettings(true);
     await engine.ingestWorldEvolution({ layer: 31, worldDigest: 'x', dialogue: 'y' });
     check('tắt worldbookEnabled thì không đọc lorebook', scans.length === 0);
     config.patchSettings({ worldbookEnabled: true });
+  }
+
+  // ===== Regex lọc chạy thật trên luồng chính =====
+  // Preset kiểu "Báo cáo vận hành thế giới" kẹp khối trạng thái vào giữa chính văn. Khối đó do AI
+  // chính bịa ra chứ không phải chuyện đã xảy ra — engine đọc vào là dựng hồ sơ theo lời bịa, mà
+  // engine cũng chèn trạng thái vào prompt, nên cái nó đọc lại chính là cái nó vừa viết ra.
+  {
+    const seen = [];
+    global.WORLD_ENGINE_API.callApi = async prompt => { seen.push(prompt); return '{"npcs":[]}'; };
+    config.patchSettings({
+      worldbookEnabled: false, offscreenEnabled: false,
+      filterRegex: '/\\[Sự kiện song song\\][\\s\\S]*?(?=\\n\\n|$)/g'
+    });
+
+    await engine.ingestWorldEvolution({
+      layer: 32, worldDigest: '',
+      dialogue: 'Nhân vật: Rias mỉm cười trong phòng câu lạc bộ.\n\n'
+        + '[Sự kiện song song]\n- Toujou Koneko | Mua thêm đồ ăn vặt | ETA 17:30'
+    });
+
+    check('chính văn thật vẫn tới được prompt', seen[0]?.includes('Rias mỉm cười'));
+    check('khối preset bị cắt trước khi gửi đi', !seen[0]?.includes('Sự kiện song song'));
+    check('nội dung bên trong khối cũng bị cắt', !seen[0]?.includes('đồ ăn vặt'));
+
+    config.patchSettings({ filterRegex: '', worldbookEnabled: true, offscreenEnabled: true });
   }
 
   // Chốt ở tầng dưới cùng: nơi gọi có sai kiểu thì phải ném lỗi rõ ràng ngay,
